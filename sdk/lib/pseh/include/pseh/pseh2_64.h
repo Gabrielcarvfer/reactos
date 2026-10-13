@@ -104,12 +104,18 @@ __asm__(
      * to properly set the handler data when we're done.                            \
      */                                                                             \
 __seh2$$begin_try__:                                                                \
+    /* GCC does not know that the tried code can fault: a compiler barrier          \
+     * keeps it from moving memory accesses out of the tried range, where           \
+     * our handler would not see the exception. */                                  \
+    __asm__ __volatile__("" ::: "memory");                                          \
     {                                                                               \
         __label__ __seh2$$leave_scope__;
 
 #define _SEH2_EXCEPT(...)                                                                       \
 __seh2$$leave_scope__: __MINGW_ATTRIB_UNUSED;                                                   \
     }                                                                                           \
+    /* Keep memory accesses of the tried code inside it (see _SEH2_TRY) */                      \
+    __asm__ __volatile__("" ::: "memory");                                                      \
 __seh2$$end_try__:(void)0;                                                                      \
     /* Call our home-made pragma */                                                             \
     _SEH3$_EMIT_DEFS_AND_PRAGMA(__seh$$except);                                                 \
@@ -159,6 +165,8 @@ __seh2$$end_try__:(void)0;                                                      
 #define _SEH2_FINALLY                                                                       \
 __seh2$$leave_scope__: __MINGW_ATTRIB_UNUSED;                                               \
     }                                                                                       \
+    /* Keep memory accesses of the tried code inside it (see _SEH2_TRY) */                  \
+    __asm__ __volatile__("" ::: "memory");                                                  \
 __seh2$$end_try__:                                                                          \
 __seh2$$begin_except__: __MINGW_ATTRIB_UNUSED;                                              \
     /* Call our home-made pragma */                                                         \
