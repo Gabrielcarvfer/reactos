@@ -79,7 +79,14 @@ __asm__(
         "\t__seh2$$begin_except__" #Line "=%l3\n" /* Called on except */            \
             : /* No output */                                                       \
             : /* No input */                                                        \
-            : /* No clobber */                                                      \
+            /* Clobber every register but rbp/rsp: GCC must keep the live           \
+             * variables in memory here, else it puts code to move them between     \
+             * registers and memory at the labels below. The filter is called by    \
+             * the exception dispatcher, with its rbp: such code ran on a wrong     \
+             * frame (and the except block read stale variables). */               \
+            : "memory", "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9",       \
+              "r10", "r11", "r12", "r13", "r14", "r15", "xmm6", "xmm7", "xmm8",     \
+              "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15"          \
             : __seh2$$begin_try__,                                                  \
               __seh2$$end_try__,                                                    \
               __seh2$$filter__,                                                     \
@@ -122,7 +129,10 @@ __seh2$$end_try__:(void)0;                                                      
     if (0)                                                                                      \
     {                                                                                           \
         __label__ __seh2$$leave_scope__;                                                        \
-        long __MINGW_ATTRIB_UNUSED __seh2$$exception_code__;                                    \
+        /* volatile: the filter funclet sets it and the except block reads it,         \
+         * both reached by jumps GCC does not see: keep it in the frame, not in      \
+         * a register (that held the filter's result, EXCEPTION_EXECUTE_HANDLER) */  \
+        volatile long __MINGW_ATTRIB_UNUSED __seh2$$exception_code__;                           \
         /* Add our handlers to the list */                                                      \
         if (0)                                                                                  \
         {                                                                                       \
