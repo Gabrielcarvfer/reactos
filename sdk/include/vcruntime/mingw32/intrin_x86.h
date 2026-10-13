@@ -79,7 +79,15 @@ __INTRIN_INLINE void* __cdecl memcpy(void* dest, const void* source, size_t num)
 
 /*** Stack frame juggling ***/
 #define _ReturnAddress() (__builtin_return_address(0))
+#ifdef __x86_64__
+/* On x64 the frame pointer may point anywhere in the frame (GCC pushes the
+ * nonvolatile registers before setting it), so it can't be used to find the
+ * return address. The CFA is the stack pointer before the call: the return
+ * address is right below it. */
+#define _AddressOfReturnAddress() ((void *)((void **)__builtin_dwarf_cfa() - 1))
+#else
 #define _AddressOfReturnAddress() (&(((void **)(__builtin_frame_address(0)))[1]))
+#endif
 /* TODO: __getcallerseflags but how??? */
 
 /*** Memory barriers ***/
