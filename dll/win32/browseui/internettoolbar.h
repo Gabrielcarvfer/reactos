@@ -84,6 +84,7 @@ class CInternetToolbar :
 public:
     CComPtr<IUnknown>                       fSite;              // our site
     HWND                                    fMainReBar;         // rebar for top of window
+    HWND                                    fAddressReBar;      // rebar for the address bar, above the view only
     bool                                    fLocked;            // is bar locked to prevent changes?
     CComPtr<IShellMenu>                     fMenuBar;           // the menu rebar
     HWND                                    fMenuBandWindow;
@@ -105,7 +106,8 @@ public:
 public:
     CInternetToolbar();
     virtual ~CInternetToolbar();
-    void AddDockItem(IUnknown *newItem, int bandID, int flags);
+    void AddDockItem(IUnknown *newItem, int bandID, int flags, HWND hwndReBar = NULL);
+    HWND ReBarOfBand(int BandID) { return (BandID == ITBBID_ADDRESSBAND && fAddressReBar) ? fAddressReBar : fMainReBar; }
     HRESULT EnumBands(UINT Index, int *pBandId, IUnknown **ppUnkBand);
     HRESULT QIBand(int BandID, REFIID riid, void **ppv);
     HRESULT ReserveBorderSpace(LONG maxHeight = -1);

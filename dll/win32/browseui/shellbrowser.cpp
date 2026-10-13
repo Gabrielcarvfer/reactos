@@ -1658,6 +1658,18 @@ void CShellBrowser::RepositionBars()
         }
     }
 
+    /* The address bar strip (see CInternetToolbar) goes above the view and the
+     * preview pane only: the folder pane reaches up to the command bar. */
+    HWND hwndAddressStrip = (HWND)::GetPropW(m_hWnd, L"BrowseuiAddressStrip");
+    if (hwndAddressStrip && ::IsWindowVisible(hwndAddressStrip))
+    {
+        HWND hwndReBar = ::GetWindow(hwndAddressStrip, GW_CHILD);
+        INT cy = hwndReBar ? (INT)::SendMessageW(hwndReBar, RB_GETBARHEIGHT, 0, 0) : 0;
+        ::SetWindowPos(hwndAddressStrip, NULL, clientRect.left, clientRect.top,
+                       clientRect.right - clientRect.left, cy, SWP_NOOWNERZORDER | SWP_NOZORDER);
+        clientRect.top += cy;
+    }
+
     if (fPreviewPane && fPreviewPaneVisible)
     {
         // a third of the width, at most 320px (at 96 DPI)

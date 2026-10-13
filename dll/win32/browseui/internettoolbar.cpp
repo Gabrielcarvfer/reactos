@@ -671,9 +671,34 @@ HRESULT STDMETHODCALLTYPE CMenuCallback::CallbackSM(LPSMDATA psmd, UINT uMsg, WP
     return S_FALSE;
 }
 
+/* The address strip forwards what the rebar sends its parent to the toolbar window */
+static LRESULT CALLBACK
+AddressStripProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    switch (uMsg)
+    {
+        case WM_NOTIFY:
+        case WM_COMMAND:
+        case WM_CONTEXTMENU:
+            return ::SendMessageW((HWND)dwRefData, uMsg, wParam, lParam);
+        case WM_SIZE:
+        {
+            HWND hwndReBar = ::GetWindow(hwnd, GW_CHILD);
+            if (hwndReBar)
+                ::SetWindowPos(hwndReBar, NULL, 0, 0, LOWORD(lParam), HIWORD(lParam), SWP_NOZORDER | SWP_NOACTIVATE);
+            break;
+        }
+        case WM_NCDESTROY:
+            ::RemoveWindowSubclass(hwnd, AddressStripProc, uIdSubclass);
+            break;
+    }
+    return ::DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
 CInternetToolbar::CInternetToolbar()
 {
     fMainReBar = NULL;
+    fAddressReBar = NULL;
     fMenuBandWindow = NULL;
     fNavigationWindow = NULL;
     fMenuCallback = new CComObject<CMenuCallback>();
@@ -688,12 +713,12 @@ CInternetToolbar::~CInternetToolbar()
     fMenuCallback->SetSite(NULL);
 }
 
-void CInternetToolbar::AddDockItem(IUnknown *newItem, int bandID, int flags)
+void CInternetToolbar::AddDockItem(IUnknown *newItem, int bandID, int flags, HWND hwndReBar)
 {
     CComPtr<CDockSite> newSite;
 
     newSite = new CComObject<CDockSite>;
-    newSite->Initialize(newItem, this, fMainReBar, bandID, flags);
+    newSite->Initialize(newItem, this, hwndReBar ? hwndReBar : fMainReBar, bandID, flags);
 }
 
 HRESULT CInternetToolbar::EnumBands(UINT Index, int *pBandId, IUnknown **ppUnkBand)
@@ -714,9 +739,15 @@ HRESULT CInternetToolbar::EnumBands(UINT Index, int *pBandId, IUnknown **ppUnkBa
 HRESULT CInternetToolbar::QIBand(int BandID, REFIID riid, void **ppv)
 {
     IUnknown *pUnk; // Not ref. counted
-    int temp = (UINT) SendMessageW(fMainReBar, RB_IDTOINDEX, BandID, 0);
-    if (EnumBands(temp, &temp, &pUnk) == S_OK)
-        return pUnk->QueryInterface(riid, ppv);
+    HWND hwndReBar = ReBarOfBand(BandID);
+    int temp = (UINT) SendMessageW(hwndReBar, RB_IDTOINDEX, BandID, 0);
+    REBARBANDINFOW rbbi = { sizeof(rbbi), RBBIM_LPARAM };
+    if (temp >= 0 && ::SendMessageW(hwndReBar, RB_GETBANDINFOW, temp, (LPARAM)&rbbi) && rbbi.lParam)
+    {
+        pUnk = ((CDockSite*)(rbbi.lParam))->GetContainedBand(); // Not ref. counted
+        if (pUnk)
+            return pUnk->QueryInterface(riid, ppv);
+    }
     *ppv = NULL;
     return E_NOINTERFACE;
 }
@@ -819,22 +850,28 @@ void CInternetToolbar::RefreshLockedToolbarState()
     REBARBANDINFOW                          rebarBandInfo;
     int                                     bandCount;
     CDockSite                               *dockSite;
+    HWND                                    reBars[] = { fMainReBar, fAddressReBar };
 
     rebarBandInfo.cbSize = sizeof(rebarBandInfo);
     rebarBandInfo.fMask = RBBIM_STYLE | RBBIM_LPARAM;
-    bandCount = (int)SendMessage(fMainReBar, RB_GETBANDCOUNT, 0, 0);
-    for (INT x  = 0; x < bandCount; x++)
+    for (HWND hwndReBar : reBars)
     {
-        SendMessage(fMainReBar, RB_GETBANDINFOW, x, (LPARAM)&rebarBandInfo);
-        dockSite = reinterpret_cast<CDockSite *>(rebarBandInfo.lParam);
-        if (dockSite != NULL)
+        if (!hwndReBar)
+            continue;
+        bandCount = (int)SendMessage(hwndReBar, RB_GETBANDCOUNT, 0, 0);
+        for (INT x  = 0; x < bandCount; x++)
         {
-            rebarBandInfo.fStyle &= ~(RBBS_NOGRIPPER | RBBS_GRIPPERALWAYS);
-            if ((dockSite->fFlags & CDockSite::ITF_NOGRIPPER) || pSettings->fLocked)
-                rebarBandInfo.fStyle |= RBBS_NOGRIPPER;
-            if ((dockSite->fFlags & CDockSite::ITF_GRIPPERALWAYS) && !pSettings->fLocked)
-                rebarBandInfo.fStyle |= RBBS_GRIPPERALWAYS;
-            SendMessage(fMainReBar, RB_SETBANDINFOW, x, (LPARAM)&rebarBandInfo);
+            SendMessage(hwndReBar, RB_GETBANDINFOW, x, (LPARAM)&rebarBandInfo);
+            dockSite = reinterpret_cast<CDockSite *>(rebarBandInfo.lParam);
+            if (dockSite != NULL)
+            {
+                rebarBandInfo.fStyle &= ~(RBBS_NOGRIPPER | RBBS_GRIPPERALWAYS);
+                if ((dockSite->fFlags & CDockSite::ITF_NOGRIPPER) || pSettings->fLocked)
+                    rebarBandInfo.fStyle |= RBBS_NOGRIPPER;
+                if ((dockSite->fFlags & CDockSite::ITF_GRIPPERALWAYS) && !pSettings->fLocked)
+                    rebarBandInfo.fStyle |= RBBS_GRIPPERALWAYS;
+                SendMessage(hwndReBar, RB_SETBANDINFOW, x, (LPARAM)&rebarBandInfo);
+            }
         }
     }
     ReserveBorderSpace(0);
@@ -1176,7 +1213,7 @@ HRESULT STDMETHODCALLTYPE CInternetToolbar::InitNew()
         return hResult;
     // Windows 7/11 layout: the address bar sits on the same row as the
     // back/forward/up buttons, without an "Address" label
-    AddDockItem(navigationBar, ITBBID_ADDRESSBAND, CDockSite::ITF_NOTITLE | CDockSite::ITF_GRIPPERALWAYS);
+    AddDockItem(navigationBar, ITBBID_ADDRESSBAND, CDockSite::ITF_NOTITLE | CDockSite::ITF_GRIPPERALWAYS, fAddressReBar);
     fNavigationBar.Attach(navigationBar.Detach());
     hResult = IUnknown_GetWindow(fNavigationBar, &fNavigationWindow);
 
@@ -1185,19 +1222,21 @@ HRESULT STDMETHODCALLTYPE CInternetToolbar::InitNew()
 
 HRESULT CInternetToolbar::IsBandVisible(int BandID)
 {
-    int index = (int)SendMessage(fMainReBar, RB_IDTOINDEX, BandID, 0);
+    HWND hwndReBar = ReBarOfBand(BandID);
+    int index = (int)SendMessage(hwndReBar, RB_IDTOINDEX, BandID, 0);
 
     REBARBANDINFOW bandInfo = {sizeof(REBARBANDINFOW), RBBIM_STYLE};
-    SendMessage(fMainReBar, RB_GETBANDINFOW, index, (LPARAM)&bandInfo);
+    SendMessage(hwndReBar, RB_GETBANDINFOW, index, (LPARAM)&bandInfo);
 
     return (bandInfo.fStyle & RBBS_HIDDEN) ? S_FALSE : S_OK;
 }
 
 HRESULT CInternetToolbar::SetBandVisibility(int BandID, int Show)
 {
-    int index = (int)SendMessage(fMainReBar, RB_IDTOINDEX, BandID, 0);
+    HWND hwndReBar = ReBarOfBand(BandID);
+    int index = (int)SendMessage(hwndReBar, RB_IDTOINDEX, BandID, 0);
     REBARBANDINFOW bandInfo = {sizeof(REBARBANDINFOW), RBBIM_STYLE | RBBIM_CHILD};
-    if (!SendMessage(fMainReBar, RB_GETBANDINFOW, index, (LPARAM)&bandInfo))
+    if (!SendMessage(hwndReBar, RB_GETBANDINFOW, index, (LPARAM)&bandInfo))
         return E_FAIL;
 
     if (Show < 0)
@@ -1209,7 +1248,12 @@ HRESULT CInternetToolbar::SetBandVisibility(int BandID, int Show)
 
     bandInfo.fMask &= ~RBBIM_CHILD;
     ::ShowWindow(bandInfo.hwndChild, (bandInfo.fStyle & RBBS_HIDDEN) ? SW_HIDE : SW_SHOW); // CORE-17236
-    SendMessage(fMainReBar, RB_SETBANDINFOW, index, (LPARAM)&bandInfo);
+    SendMessage(hwndReBar, RB_SETBANDINFOW, index, (LPARAM)&bandInfo);
+    if (hwndReBar == fAddressReBar)
+    {
+        /* The address strip is laid out by the browser, above the view */
+        ::ShowWindow(::GetParent(fAddressReBar), (bandInfo.fStyle & RBBS_HIDDEN) ? SW_HIDE : SW_SHOW);
+    }
 
     ReserveBorderSpace(0);
     SetDirty();
@@ -1467,6 +1511,13 @@ HRESULT STDMETHODCALLTYPE CInternetToolbar::SetSite(IUnknown *pUnkSite)
     {
         hResult = AtlUnadvise(fSite, DIID_DWebBrowserEvents, fAdviseCookie);
         ::DestroyWindow(fMainReBar);
+        if (fAddressReBar)
+        {
+            HWND hwndStrip = ::GetParent(fAddressReBar);
+            ::RemovePropW(::GetParent(hwndStrip), L"BrowseuiAddressStrip");
+            ::DestroyWindow(hwndStrip);
+            fAddressReBar = NULL;
+        }
         DestroyWindow();
         fSite.Release();
     }
@@ -1499,6 +1550,23 @@ HRESULT STDMETHODCALLTYPE CInternetToolbar::SetSite(IUnknown *pUnkSite)
                             0, 0, 700, 60, dockContainer, NULL, _AtlBaseModule.GetModuleInstance(), NULL);
         if (fMainReBar == NULL)
             return E_FAIL;
+
+        /* The address bar gets its own strip, which the browser puts above the
+         * view only, so the folder pane can go up to the command bar (like
+         * Windows 11). Its notifications go to us like the main rebar's. */
+        HWND hwndStrip = SHCreateWorkerWindowW(0, ownerWindow, 0,
+            WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN, NULL, 0);
+        if (hwndStrip)
+        {
+            ::SetWindowSubclass(hwndStrip, AddressStripProc, 0, (DWORD_PTR)m_hWnd);
+            fAddressReBar = CreateWindowEx(exStyle, REBARCLASSNAMEW, NULL, style & ~WS_BORDER,
+                                           0, 0, 700, 30, hwndStrip, NULL,
+                                           _AtlBaseModule.GetModuleInstance(), NULL);
+            if (fAddressReBar)
+                ::SetPropW(ownerWindow, L"BrowseuiAddressStrip", hwndStrip);
+            else
+                ::DestroyWindow(hwndStrip);
+        }
 
         // take advice to watch events
         hResult = IUnknown_QueryService(pUnkSite, SID_SShellBrowser, IID_PPV_ARG(IBrowserService, &browserService));
