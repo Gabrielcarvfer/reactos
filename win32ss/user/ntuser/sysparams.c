@@ -1051,8 +1051,10 @@ SpiSetDpi(UINT uiNewDpi, FLONG fl)
                                  (LPARAM)L"WindowMetrics", SMTO_NORMAL, 100, &ulResult);
         co_IntSendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETICONMETRICS,
                                  (LPARAM)L"WindowMetrics", SMTO_NORMAL, 100, &ulResult);
-        SpiSendDpiChanged(uiOldDpi, uiNewDpi);
     }
+
+    /* Like the DPI change itself, not tied to SPIF_SENDCHANGE (which is about WM_SETTINGCHANGE) */
+    SpiSendDpiChanged(uiOldDpi, uiNewDpi);
 
     return (UINT_PTR)KEY_METRIC;
 }
