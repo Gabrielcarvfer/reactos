@@ -159,9 +159,22 @@ AdvGeneralPageProc(HWND hwndDlg,
                 INT iSel = (INT)SendMessage(hFontSize, CB_GETCURSEL, 0, 0);
                 if (iSel != CB_ERR)
                 {
-                    UINT uDpi = (UINT)SendMessage(hFontSize, CB_GETITEMDATA, iSel, 0);
-                    SystemParametersInfoW(SPI_SETLOGICALDPIOVERRIDE, uDpi, NULL,
-                                          SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+                    static const UINT Scales[] = { 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500 };
+                    UINT uDpi = (UINT)SendMessage(hFontSize, CB_GETITEMDATA, iSel, 0), i;
+                    INT iMinStep = 0;
+
+                    /* The SPI takes a step in Scales[] relative to the recommended scale,
+                     * and GET gives the step of 100% */
+                    SystemParametersInfoW(SPI_GETLOGICALDPIOVERRIDE, 0, &iMinStep, 0);
+                    for (i = 0; i < _countof(Scales); i++)
+                    {
+                        if (Scales[i] * 96 / 100 == uDpi)
+                        {
+                            SystemParametersInfoW(SPI_SETLOGICALDPIOVERRIDE, (UINT)(iMinStep + (INT)i), NULL,
+                                                  SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+                            break;
+                        }
+                    }
                 }
                 SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, PSNRET_NOERROR);
                 Ret = TRUE;

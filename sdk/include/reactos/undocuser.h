@@ -16,8 +16,14 @@ extern "C" {
 
 /* Undocumented SystemParametersInfo actions */
 #ifndef SPI_GETLOGICALDPIOVERRIDE
-#define SPI_GETLOGICALDPIOVERRIDE 0x009E /* ReactOS: pvParam = PUINT, receives the system DPI */
-#define SPI_SETLOGICALDPIOVERRIDE 0x009F /* ReactOS: uiParam = new system DPI (96..480), applied live */
+/* The display scale, as steps relative to the recommended scale in the list
+ * 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500 (%), like Windows:
+ * GET: pvParam = PINT, receives the step of 100% (minus the recommended index);
+ * SET: uiParam = (INT) step of the new scale, applied at once.
+ * Behavior as used on Windows by https://github.com/imniko/SetDPI and
+ * https://github.com/lihas/windows-DPI-scaling-sample (TrySetDpi.cpp). */
+#define SPI_GETLOGICALDPIOVERRIDE 0x009E
+#define SPI_SETLOGICALDPIOVERRIDE 0x009F
 #endif
 
 /* Non SDK Styles */

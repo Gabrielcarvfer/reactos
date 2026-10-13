@@ -25,6 +25,10 @@ BOOL g_bWindowSnapEnabled = TRUE;
  * values are pixels at 96 DPI. Fonts are stored in pixels at "AppliedDPI".
  */
 static UINT gusSystemDpi = 0;
+
+/* Display scales offered by SPI_SETLOGICALDPIOVERRIDE (percent, same list as Windows) */
+static const USHORT gausDpiScales[] = { 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500 };
+#define DPI_SCALE_RECOMMENDED 0   /* index of the recommended scale (100%) */
 #define dpi UserGetSystemDpi()
 #define KEY_DPI L"\\Registry\\Machine\\System\\CurrentControlSet\\Hardware Profiles\\Current\\Software\\Fonts"
 #define REG2METRIC(reg) (reg > 0 ? EngMulDiv(reg, dpi, 96) : ((-(reg) * dpi + 720) / 1440))
@@ -1196,14 +1200,34 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
         case SPI_SETDRAGFULLWINDOWS:
             return SpiSetInt(&gspv.bDragFullWindows, uiParam, KEY_DESKTOP, VAL_DRAG, fl);
 
+        /*
+         * Like Windows, the display scale is given as a step relative to the
+         * recommended scale, in the list of gausDpiScales. GET returns the step of
+         * the smallest scale (100%) relative to the recommended one, i.e. minus the
+         * index of the recommended scale (always 0 here: ReactOS recommends 100%);
+         * SET takes the step of the wanted scale.
+         * These undocumented semantics are those observed on Windows 10/11 by public
+         * tools that change the scale this way: the "SetDPI" utility
+         * (https://github.com/imniko/SetDPI) and the sample it is based on,
+         * https://github.com/lihas/windows-DPI-scaling-sample
+         * (Console_Using_SystemParametersInfo_Api/TrySetDpi.cpp).
+         */
         case SPI_GETLOGICALDPIOVERRIDE:
         {
-            UINT uiDpi = dpi;
-            return SpiGet(pvParam, &uiDpi, sizeof(UINT), fl);
+            INT iMinStep = -DPI_SCALE_RECOMMENDED;
+            return SpiGet(pvParam, &iMinStep, sizeof(INT), fl);
         }
 
         case SPI_SETLOGICALDPIOVERRIDE:
-            return SpiSetDpi(uiParam, fl);
+        {
+            INT iScale = DPI_SCALE_RECOMMENDED + (INT)uiParam;
+            if (iScale < 0 || iScale >= (INT)ARRAYSIZE(gausDpiScales))
+            {
+                EngSetLastError(ERROR_INVALID_PARAMETER);
+                return 0;
+            }
+            return SpiSetDpi(gausDpiScales[iScale] * 96 / 100, fl);
+        }
 
         case SPI_GETNONCLIENTMETRICS:
         {

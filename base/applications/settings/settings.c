@@ -276,7 +276,12 @@ ShowScaleMenu(VOID)
     POINT pt;
     INT Cmd;
 
-    SystemParametersInfoW(SPI_GETLOGICALDPIOVERRIDE, 0, &uCurrent, 0);
+    INT iMinStep = 0;
+    HDC hdc = GetDC(NULL);
+    uCurrent = GetDeviceCaps(hdc, LOGPIXELSY);
+    ReleaseDC(NULL, hdc);
+    /* SPI scale steps are relative to the recommended scale: GET gives the step of 100% */
+    SystemParametersInfoW(SPI_GETLOGICALDPIOVERRIDE, 0, &iMinStep, 0);
     for (i = 0; i < _countof(Dpis); i++)
     {
         WCHAR szItem[64];
@@ -304,7 +309,8 @@ ShowScaleMenu(VOID)
     DestroyMenu(hMenu);
 
     if (Cmd > 0 && Dpis[Cmd - 1] != uCurrent)
-        SystemParametersInfoW(SPI_SETLOGICALDPIOVERRIDE, Dpis[Cmd - 1], NULL, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        SystemParametersInfoW(SPI_SETLOGICALDPIOVERRIDE, (UINT)(iMinStep + Cmd - 1), NULL,
+                              SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
 }
 
 static VOID
