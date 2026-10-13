@@ -6,11 +6,23 @@
  */
 
 #include "precomp.h"
+#include <versionhelpers.h>
 
 static HWND hWnd1, hWnd2;
 
 static BOOL g_bReadyForDisplayChange = FALSE;
 static HANDLE g_hSemDisplayChange;
+
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+#ifndef SPI_GETLOGICALDPIOVERRIDE
+#define SPI_GETLOGICALDPIOVERRIDE 0x009E
+#define SPI_SETLOGICALDPIOVERRIDE 0x009F
+#endif
+static UINT g_DpiChangedCount;
+static WPARAM g_DpiChangedWParam;
+static RECT g_DpiChangedRect;
 
 /* FIXME: test for HWND_TOP, etc...*/
 static int get_iwnd(HWND hWnd)
@@ -268,6 +280,126 @@ static void Test_GradientCaptions(void)
     CloseHandle(g_hSemDisplayChange);
 }
 
+static UINT GetScreenDpi(void)
+{
+    HDC hdc = GetDC(NULL);
+    UINT Dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    ReleaseDC(NULL, hdc);
+    return Dpi;
+}
+
+/*
+ * SPI_GETLOGICALDPIOVERRIDE / SPI_SETLOGICALDPIOVERRIDE (undocumented): the
+ * display scale as steps relative to the recommended scale, in the list
+ * 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500 (%).
+ * GET gives the step of 100% (minus the recommended index), SET takes a step.
+ * On Windows, most applications only see a new scale after signing out again;
+ * ReactOS applies it at once and sends WM_DPICHANGED to top-level windows.
+ */
+static LRESULT CALLBACK DpiTestProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (message == WM_DPICHANGED)
+    {
+        g_DpiChangedCount++;
+        g_DpiChangedWParam = wParam;
+        if (lParam)
+            g_DpiChangedRect = *(RECT *)lParam;
+        return 0;
+    }
+    return DefWindowProcW(hWnd, message, wParam, lParam);
+}
+
+static void Test_LogicalDpiOverride(void)
+{
+    HWND hWndDpi;
+    static const UINT Scales[] = { 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500 };
+    INT iMinStep = 1, iMinStep2 = 1, iCurrent = -1, iOther;
+    UINT OldDpi, NewDpi, i;
+    RECT rcWindow;
+    BOOL ret;
+    MSG msg;
+
+    ret = SystemParametersInfoW(SPI_GETLOGICALDPIOVERRIDE, 0, &iMinStep, 0);
+    if (!ret)
+    {
+        skip("SPI_GETLOGICALDPIOVERRIDE is not supported\n");
+        return;
+    }
+    ok(iMinStep <= 0 && iMinStep > -(INT)_countof(Scales), "GET returned step %d\n", iMinStep);
+
+    /* Find the current scale in the list */
+    OldDpi = GetScreenDpi();
+    for (i = 0; i < _countof(Scales); i++)
+    {
+        if (Scales[i] * 96 / 100 == OldDpi)
+            iCurrent = (INT)i;
+    }
+    if (iCurrent < 0)
+    {
+        skip("The current DPI %u is not one of the scales\n", OldDpi);
+        return;
+    }
+
+    /* One step up (or down at the top of the list) */
+    iOther = (iCurrent + 1 < (INT)_countof(Scales)) ? iCurrent + 1 : iCurrent - 1;
+    g_DpiChangedCount = 0;
+    SetRectEmpty(&g_DpiChangedRect);
+    /* WM_DPICHANGED goes to visible top-level windows */
+    RegisterSimpleClass(DpiTestProc, L"dpitest");
+    hWndDpi = CreateWindowW(L"dpitest", L"dpitest", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                            40, 40, 300, 200, NULL, NULL, 0, NULL);
+    ok(hWndDpi != NULL, "CreateWindowW failed\n");
+    GetWindowRect(hWndDpi, &rcWindow);
+    ret = SystemParametersInfoW(SPI_SETLOGICALDPIOVERRIDE, (UINT)(iMinStep + iOther), NULL, 0);
+    ok(ret, "SET step %d failed (error %lu)\n", iMinStep + iOther, GetLastError());
+
+    /* GET still gives the step of 100% */
+    ret = SystemParametersInfoW(SPI_GETLOGICALDPIOVERRIDE, 0, &iMinStep2, 0);
+    ok(ret, "GET failed\n");
+    ok(iMinStep2 == iMinStep, "GET returned %d after SET, expected %d\n", iMinStep2, iMinStep);
+
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+        DispatchMessageW(&msg);
+
+    NewDpi = GetScreenDpi();
+    if (NewDpi == OldDpi)
+    {
+        /* Windows: the new scale is used after signing out */
+        skip("The system DPI did not change at once\n");
+    }
+    else
+    {
+        ok(NewDpi == Scales[iOther] * 96 / 100, "DPI is %u, expected %u\n", NewDpi, Scales[iOther] * 96 / 100);
+        ok(g_DpiChangedCount >= 1, "WM_DPICHANGED was not received\n");
+        ok(LOWORD(g_DpiChangedWParam) == NewDpi && HIWORD(g_DpiChangedWParam) == NewDpi,
+           "WM_DPICHANGED wParam is 0x%Ix, expected both words %u\n", g_DpiChangedWParam, NewDpi);
+        /* The suggested rect keeps the top-left corner and scales the size */
+        ok(g_DpiChangedRect.left == rcWindow.left && g_DpiChangedRect.top == rcWindow.top,
+           "Suggested rect moved to %ld,%ld\n", g_DpiChangedRect.left, g_DpiChangedRect.top);
+        ok(g_DpiChangedRect.right - g_DpiChangedRect.left ==
+           MulDiv(rcWindow.right - rcWindow.left, NewDpi, OldDpi),
+           "Suggested width %ld, expected %d\n", g_DpiChangedRect.right - g_DpiChangedRect.left,
+           MulDiv(rcWindow.right - rcWindow.left, NewDpi, OldDpi));
+    }
+
+    /* A step outside of the list is refused (ReactOS; not verified on Windows) */
+    if (IsReactOS())
+    {
+        ret = SystemParametersInfoW(SPI_SETLOGICALDPIOVERRIDE, (UINT)(iMinStep + (INT)_countof(Scales)), NULL, 0);
+        ok(!ret, "SET with an out of range step succeeded\n");
+    }
+
+    /* Back to the original scale */
+    ret = SystemParametersInfoW(SPI_SETLOGICALDPIOVERRIDE, (UINT)(iMinStep + iCurrent), NULL, 0);
+    ok(ret, "Restoring the scale failed\n");
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+        DispatchMessageW(&msg);
+    if (NewDpi != OldDpi)
+        ok(GetScreenDpi() == OldDpi, "DPI is %u after restoring, expected %u\n", GetScreenDpi(), OldDpi);
+    DestroyWindow(hWndDpi);
+    UnregisterClassW(L"dpitest", 0);
+}
+
 START_TEST(SystemParametersInfo)
 {
     RegisterSimpleClass(SysParamsTestProc, L"sysparamstest");
@@ -280,6 +412,7 @@ START_TEST(SystemParametersInfo)
     Test_NonClientMetrics();
     Test_MouseSpeed();
     Test_GradientCaptions();
+    Test_LogicalDpiOverride();
 
     DestroyWindow(hWnd1);
     DestroyWindow(hWnd2);

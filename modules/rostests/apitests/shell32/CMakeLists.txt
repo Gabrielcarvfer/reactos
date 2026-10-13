@@ -48,6 +48,7 @@ list(APPEND SOURCE
     She.cpp
     #ShellExec_RunDLL.cpp # Broke on Windows
     #ShellExecCmdLine.cpp # Broke on Windows
+    ShellExecCmdLineAppPaths.cpp
     ShellExecuteEx.cpp
     #ShellExecuteW.cpp # Broke on Windows
     ShellFolder.cpp

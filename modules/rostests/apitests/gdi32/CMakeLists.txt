@@ -7,6 +7,7 @@ list(APPEND SOURCE
     AddFontResourceEx.c
     BeginPath.c
     CombineRgn.c
+    ClearTypeText.c
     CombineTransform.c
     CreateBitmap.c
     CreateBitmapIndirect.c

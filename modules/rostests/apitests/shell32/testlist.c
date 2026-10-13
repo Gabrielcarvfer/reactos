@@ -46,6 +46,7 @@ extern void func_SHEvaluateSystemCommandTemplate(void);
 extern void func_She(void);
 extern void func_ShellExec_RunDLL(void);
 extern void func_ShellExecCmdLine(void);
+extern void func_ShellExecCmdLineAppPaths(void);
 extern void func_ShellExecuteEx(void);
 extern void func_ShellExecuteW(void);
 extern void func_ShellFolder(void);
@@ -112,6 +113,7 @@ const struct test winetest_testlist[] =
     { "She", func_She },
     //{ "ShellExec_RunDLL", func_ShellExec_RunDLL }, Broke on Windows
     //{ "ShellExecCmdLine", func_ShellExecCmdLine }, Broke on Windows
+    { "ShellExecCmdLineAppPaths", func_ShellExecCmdLineAppPaths },
     { "ShellExecuteEx", func_ShellExecuteEx }, // Mostly broken on Windows, only simple tests enabled
     //{ "ShellExecuteW", func_ShellExecuteW }, Broke on Windows
     { "ShellFolder", func_ShellFolder },
