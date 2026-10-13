@@ -2761,6 +2761,79 @@ DEFINE_TEST(test_PSEH3_bug2)
     return (status == STATUS_ACCESS_VIOLATION);
 }
 
+/* Catches a fault, then raises another exception: like MmProbeAndLockPages,
+ * which turns a failed probe into ExRaiseStatus */
+static DECLSPEC_NOINLINE void
+raise_after_catch(void)
+{
+    unsigned long status = 0;
+    _SEH2_TRY
+    {
+        *(volatile int*)0x12345678 = 0x12345678;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    RaiseException(status == STATUS_ACCESS_VIOLATION ? 0xE0000001 : 0xE0000002, 0, 0, NULL);
+}
+
+/*
+ * The shape that crashed x64 ReactOS (kernel MiDoMappedCopy): a non volatile
+ * local changed in the tried code, kept in a register by GCC, and an exception
+ * raised by a callee. GCC put code to move such locals between registers and
+ * memory at the filter label, which runs with the dispatcher's frame pointer;
+ * and the except block got a stale exception code.
+ */
+DEFINE_TEST(test_x64_filter_frame)
+{
+    int failed_in_probe = 0;
+    int iterations;
+    unsigned long code = 0;
+
+    for (iterations = 0; iterations < 3; iterations++)
+    {
+        _SEH2_TRY
+        {
+            failed_in_probe = 1;
+            no_op();
+            failed_in_probe = 0;
+            if (iterations == 2)
+                raise_after_catch();
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            code = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    return (code == 0xE0000001) && (failed_in_probe == 0) && (iterations == 3);
+}
+
+/* The filter reads a local changed in the tried code: it must see the new value */
+DEFINE_TEST(test_x64_filter_reads_local)
+{
+    int state = 0;
+    int handled = 0;
+
+    _SEH2_TRY
+    {
+        state = 1;
+        no_op();
+        state = 2;
+        raise_after_catch();
+    }
+    _SEH2_EXCEPT((state == 2) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+    {
+        handled = (_SEH2_GetExceptionCode() == 0xE0000001);
+    }
+    _SEH2_END;
+
+    return handled && (state == 2);
+}
+
 #define USE_TEST_NAME_(NAME_) # NAME_
 #define USE_TEST_NAME(NAME_) USE_TEST_NAME_(NAME_)
 #define USE_TEST(NAME_) { USE_TEST_NAME(NAME_), NAME_ }
@@ -3158,6 +3231,8 @@ START_TEST(pseh)
 		USE_TEST(test_nested_exception),
 		USE_TEST(test_PSEH3_bug),
 		USE_TEST(test_PSEH3_bug2),
+		USE_TEST(test_x64_filter_frame),
+		USE_TEST(test_x64_filter_reads_local),
 	};
 
 	size_t i;

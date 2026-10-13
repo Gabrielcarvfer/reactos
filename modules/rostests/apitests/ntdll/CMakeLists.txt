@@ -71,6 +71,7 @@ list(APPEND SOURCE
     NtOpenProcessToken.c
     NtOpenThreadToken.c
     NtProtectVirtualMemory.c
+    NtReadVirtualMemory.c
     NtQueryInformationFile.c
     NtQueryInformationProcess.c
     NtQueryInformationThread.c
