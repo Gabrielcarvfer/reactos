@@ -1255,12 +1255,12 @@ LdrShutdownThread(VOID)
 
     /* Check for Fiber data */
 #if (NTDDI_VERSION < NTDDI_LONGHORN)
-    if (!Teb->HasFiberData)
+    if (Teb->HasFiberData)
 #else
-    if (!Teb->DbgHasFiberData)
+    if (Teb->DbgHasFiberData)
 #endif
     {
-        /* Free Fiber data*/
+        /* Free Fiber data (without fiber data, the field holds NtTib.Version) */
         RtlFreeHeap(RtlGetProcessHeap(), 0, Teb->NtTib.FiberData);
         Teb->NtTib.FiberData = NULL;
     }
