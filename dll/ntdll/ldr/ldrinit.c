@@ -1412,6 +1412,32 @@ LdrShutdownThread(VOID)
     }
 #endif
 
+    /* Run the FLS callbacks first (mimic BaseRundownFls): like on Windows,
+     * they come before the DLL notifications and before the TLS is freed,
+     * which they may still use (the C++ runtime's thread_local destructors) */
+    if (Teb->FlsData)
+    {
+        ULONG n, FlsHighIndex;
+        PRTL_FLS_DATA pFlsData = Teb->FlsData;
+        PFLS_CALLBACK_FUNCTION lpCallback;
+        PVOID Data;
+
+        RtlAcquirePebLock();
+        FlsHighIndex = NtCurrentPeb()->FlsHighIndex;
+        RtlReleasePebLock();
+
+        for (n = 1; n <= FlsHighIndex; ++n)
+        {
+            lpCallback = NtCurrentPeb()->FlsCallback[n];
+            Data = pFlsData->Data[n];
+            if (lpCallback && Data)
+            {
+                pFlsData->Data[n] = NULL;
+                lpCallback(Data);
+            }
+        }
+    }
+
     /* Get the Ldr Lock */
     RtlEnterCriticalSection(&LdrpLoaderLock);
 
@@ -1524,31 +1550,14 @@ LdrShutdownThread(VOID)
         RtlFreeHeap(RtlGetProcessHeap(), 0, Teb->TlsExpansionSlots);
     }
 
-    /* Check for FLS Data */
+    /* Free the FLS data (its callbacks already ran) */
     if (Teb->FlsData)
     {
-        /* Mimic BaseRundownFls */
-        ULONG n, FlsHighIndex;
-        PRTL_FLS_DATA pFlsData;
-        PFLS_CALLBACK_FUNCTION lpCallback;
-
-        pFlsData = Teb->FlsData;
-
         RtlAcquirePebLock();
-        FlsHighIndex = NtCurrentPeb()->FlsHighIndex;
-        RemoveEntryList(&pFlsData->ListEntry);
+        RemoveEntryList(&((PRTL_FLS_DATA)Teb->FlsData)->ListEntry);
         RtlReleasePebLock();
 
-        for (n = 1; n <= FlsHighIndex; ++n)
-        {
-            lpCallback = NtCurrentPeb()->FlsCallback[n];
-            if (lpCallback && pFlsData->Data[n])
-            {
-                lpCallback(pFlsData->Data[n]);
-            }
-        }
-
-        RtlFreeHeap(RtlGetProcessHeap(), 0, pFlsData);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Teb->FlsData);
         Teb->FlsData = NULL;
     }
 
