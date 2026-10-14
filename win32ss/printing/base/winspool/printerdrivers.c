@@ -1041,3 +1041,70 @@ UploadPrinterDriverPackageW(PCWSTR pszServer, PCWSTR pszInfPath, PCWSTR pszEnvir
         *pszDestInfPath = UNICODE_NULL;
     return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
 }
+
+/*
+ * DeletePrinterDriverPackageW (Vista): remove a driver package from the driver
+ * store. There is no driver store, so nothing is left to remove (RustDesk's
+ * setup imports this, to clean up before installing its printer).
+ */
+HRESULT WINAPI
+DeletePrinterDriverPackageW(PCWSTR pszServer, PCWSTR pszInfPath, PCWSTR pszEnvironment)
+{
+    FIXME("DeletePrinterDriverPackageW(%S, %S, %S): no driver store\n", pszServer, pszInfPath, pszEnvironment);
+    return S_OK;
+}
+
+HRESULT WINAPI
+DeletePrinterDriverPackageA(PCSTR pszServer, PCSTR pszInfPath, PCSTR pszEnvironment)
+{
+    FIXME("DeletePrinterDriverPackageA(%s, %s, %s): no driver store\n", pszServer, pszInfPath, pszEnvironment);
+    return S_OK;
+}
+
+/*
+ * GetCorePrinterDriversW (Vista): the core drivers of the driver store
+ * (none here).
+ */
+HRESULT WINAPI
+GetCorePrinterDriversW(PCWSTR pszServer, PCWSTR pszEnvironment, PCWSTR pszzCoreDriverDependencies,
+                       DWORD cCorePrinterDrivers, PVOID pCorePrinterDrivers)
+{
+    FIXME("GetCorePrinterDriversW(%S, %S, %p, %lu, %p): no driver store\n",
+          pszServer, pszEnvironment, pszzCoreDriverDependencies, cCorePrinterDrivers, pCorePrinterDrivers);
+    return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+}
+
+HRESULT WINAPI
+GetCorePrinterDriversA(PCSTR pszServer, PCSTR pszEnvironment, PCSTR pszzCoreDriverDependencies,
+                       DWORD cCorePrinterDrivers, PVOID pCorePrinterDrivers)
+{
+    FIXME("GetCorePrinterDriversA(%s, %s, %p, %lu, %p): no driver store\n",
+          pszServer, pszEnvironment, pszzCoreDriverDependencies, cCorePrinterDrivers, pCorePrinterDrivers);
+    return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+}
+
+/*
+ * GetPrinterDriverPackagePathW (Vista): where a package of the driver store
+ * is (none here).
+ */
+HRESULT WINAPI
+GetPrinterDriverPackagePathW(PCWSTR pszServer, PCWSTR pszEnvironment, PCWSTR pszLanguage, PCWSTR pszPackageID,
+                             PWSTR pszDriverPackageCab, DWORD cchDriverPackageCab, LPDWORD pcchRequiredSize)
+{
+    FIXME("GetPrinterDriverPackagePathW(%S, %S, %S, %S): no driver store\n",
+          pszServer, pszEnvironment, pszLanguage, pszPackageID);
+    if (pszDriverPackageCab && cchDriverPackageCab) *pszDriverPackageCab = UNICODE_NULL;
+    if (pcchRequiredSize) *pcchRequiredSize = 0;
+    return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+}
+
+HRESULT WINAPI
+GetPrinterDriverPackagePathA(PCSTR pszServer, PCSTR pszEnvironment, PCSTR pszLanguage, PCSTR pszPackageID,
+                             PSTR pszDriverPackageCab, DWORD cchDriverPackageCab, LPDWORD pcchRequiredSize)
+{
+    FIXME("GetPrinterDriverPackagePathA(%s, %s, %s, %s): no driver store\n",
+          pszServer, pszEnvironment, pszLanguage, pszPackageID);
+    if (pszDriverPackageCab && cchDriverPackageCab) *pszDriverPackageCab = '\0';
+    if (pcchRequiredSize) *pcchRequiredSize = 0;
+    return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+}
