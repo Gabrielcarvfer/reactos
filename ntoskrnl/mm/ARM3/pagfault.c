@@ -35,6 +35,13 @@ BOOLEAN UserPdeFault = FALSE;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+#ifdef _WIN64
+#define MiSetUserStackLimit(Teb, Limit) \
+    (Teb32 ? (void)(Teb32->NtTib.StackLimit = PtrToUlong(Limit)) : (void)((Teb)->NtTib.StackLimit = (Limit)))
+#else
+#define MiSetUserStackLimit(Teb, Limit) ((void)((Teb)->NtTib.StackLimit = (Limit)))
+#endif
+
 static
 NTSTATUS
 NTAPI
@@ -43,9 +50,12 @@ MiCheckForUserStackOverflow(IN PVOID Address,
 {
     PETHREAD CurrentThread = PsGetCurrentThread();
     PTEB Teb = CurrentThread->Tcb.Teb;
-    PVOID StackBase, DeallocationStack, NextStackAddress;
+    PVOID StackBase, DeallocationStack, StackLimit, NextStackAddress;
     SIZE_T GuaranteedSize;
     NTSTATUS Status;
+#ifdef _WIN64
+    PTEB32 Teb32 = NULL;
+#endif
 
     /* Do we own the address space lock? */
     if (CurrentThread->AddressSpaceOwner == 1)
@@ -66,8 +76,22 @@ MiCheckForUserStackOverflow(IN PVOID Address,
 
     /* Read the current settings */
     StackBase = Teb->NtTib.StackBase;
+    StackLimit = Teb->NtTib.StackLimit;
     DeallocationStack = Teb->DeallocationStack;
     GuaranteedSize = Teb->GuaranteedStackBytes;
+#ifdef _WIN64
+    /* The 32-bit code of a WoW64 process runs on another stack, which its
+       32-bit TEB describes: it grows in the same way */
+    if (((Address >= StackBase) || (Address < DeallocationStack)) &&
+        PsGetCurrentProcess()->Wow64Process)
+    {
+        Teb32 = PS_GET_TEB32_FROM_TEB(Teb);
+        StackBase = ULongToPtr(Teb32->NtTib.StackBase);
+        StackLimit = ULongToPtr(Teb32->NtTib.StackLimit);
+        DeallocationStack = ULongToPtr(Teb32->DeallocationStack);
+        GuaranteedSize = Teb32->GuaranteedStackBytes;
+    }
+#endif
     DPRINT("Handling guard page fault with Stacks Addresses 0x%p and 0x%p, guarantee: %lx\n",
             StackBase, DeallocationStack, GuaranteedSize);
 
@@ -78,6 +102,9 @@ MiCheckForUserStackOverflow(IN PVOID Address,
      * x64 keeps 8 KB of guard pages, and code relies on it: it probes its
      * stack every 8 KB (e.g. the dav1d AV1 decoder in web browsers). */
     GuaranteedSize = MI_USER_STACK_GUARD_SIZE;
+#ifdef _WIN64
+    if (Teb32) GuaranteedSize = PAGE_SIZE;   /* (x86 keeps one guard page) */
+#endif
 
     /* Does this faulting stack address actually exist in the stack? */
     if ((Address >= StackBase) || (Address < DeallocationStack))
@@ -110,7 +137,7 @@ MiCheckForUserStackOverflow(IN PVOID Address,
         if (NT_SUCCESS(Status))
         {
             /* Success! */
-            Teb->NtTib.StackLimit = NextStackAddress;
+            MiSetUserStackLimit(Teb, NextStackAddress);
 
         }
         else
@@ -126,17 +153,17 @@ MiCheckForUserStackOverflow(IN PVOID Address,
 
     /* The rest of the guard region above the faulting page, if the access
      * skipped it, becomes normal stack too */
-    if ((ULONG_PTR)PAGE_ALIGN(Address) + PAGE_SIZE < (ULONG_PTR)Teb->NtTib.StackLimit)
+    if ((ULONG_PTR)PAGE_ALIGN(Address) + PAGE_SIZE < (ULONG_PTR)StackLimit)
     {
         PVOID Base = (PVOID)((ULONG_PTR)PAGE_ALIGN(Address) + PAGE_SIZE);
-        SIZE_T Size = (ULONG_PTR)Teb->NtTib.StackLimit - (ULONG_PTR)Base;
+        SIZE_T Size = (ULONG_PTR)StackLimit - (ULONG_PTR)Base;
         ULONG OldProtect;
 
         ZwProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, PAGE_READWRITE, &OldProtect);
     }
 
     /* Update the stack limit */
-    Teb->NtTib.StackLimit = (PVOID)((ULONG_PTR)NextStackAddress + GuaranteedSize);
+    MiSetUserStackLimit(Teb, (PVOID)((ULONG_PTR)NextStackAddress + GuaranteedSize));
 
 
     /* Now move the guard page to the next page */
