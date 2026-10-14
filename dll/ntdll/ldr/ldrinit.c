@@ -647,6 +647,158 @@ Exit:
     DPRINT("LdrpInitializeThread() done\n");
 }
 
+/*
+ * Implicit TLS (__declspec(thread)) of a DLL loaded after the process started,
+ * which Windows supports since Vista (chrome.dll needs it): give the DLL a TLS
+ * index, and every thread of the process a TLS block for it. Threads created
+ * later get it from LdrpAllocateTls. Called with the loader lock held.
+ */
+static
+PVOID
+LdrpCreateTlsBlock(IN PLDRP_TLS_DATA TlsData)
+{
+    SIZE_T DataSize = TlsData->TlsDirectory.EndAddressOfRawData -
+                      TlsData->TlsDirectory.StartAddressOfRawData;
+    PVOID Block = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY,
+                                  DataSize + TlsData->TlsDirectory.SizeOfZeroFill);
+    if (Block)
+        RtlCopyMemory(Block, (PVOID)TlsData->TlsDirectory.StartAddressOfRawData, DataSize);
+    return Block;
+}
+
+static
+NTSTATUS
+LdrpAddTlsToThread(IN PTEB Teb, IN PLDRP_TLS_DATA TlsData, IN ULONG Index)
+{
+    PVOID *OldVector = Teb->ThreadLocalStoragePointer;
+    PVOID *NewVector;
+
+    NewVector = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, (Index + 1) * sizeof(PVOID));
+    if (!NewVector)
+        return STATUS_NO_MEMORY;
+    if (OldVector)
+        RtlCopyMemory(NewVector, OldVector, Index * sizeof(PVOID));
+    NewVector[Index] = LdrpCreateTlsBlock(TlsData);
+    if (!NewVector[Index])
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, NewVector);
+        return STATUS_NO_MEMORY;
+    }
+
+    /* The thread may be using its vector right now: switch atomically, and do
+     * not free the old one (a few bytes per thread and DLL load) */
+    InterlockedExchangePointer((PVOID*)&Teb->ThreadLocalStoragePointer, NewVector);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+LdrpAddDynamicTls(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    PIMAGE_TLS_DIRECTORY TlsDirectory;
+    PLDRP_TLS_DATA TlsData;
+    PSYSTEM_PROCESS_INFORMATION ProcessInfo, Info;
+    ULONG Size, Index, i;
+    SIZE_T BufferSize = 64 * 1024;
+    NTSTATUS Status;
+
+    TlsDirectory = RtlImageDirectoryEntryToData(LdrEntry->DllBase, TRUE, IMAGE_DIRECTORY_ENTRY_TLS, &Size);
+    if (!TlsDirectory)
+        return STATUS_SUCCESS;
+
+    TlsData = RtlAllocateHeap(RtlGetProcessHeap(), 0, sizeof(LDRP_TLS_DATA));
+    if (!TlsData)
+        return STATUS_NO_MEMORY;
+    Index = LdrpNumberOfTlsEntries;
+    TlsData->TlsDirectory = *TlsDirectory;
+    TlsData->TlsDirectory.Characteristics = Index;
+
+    /* Every thread of the process gets a block, this one included */
+    for (;;)
+    {
+        ProcessInfo = RtlAllocateHeap(RtlGetProcessHeap(), 0, BufferSize);
+        if (!ProcessInfo)
+        {
+            RtlFreeHeap(RtlGetProcessHeap(), 0, TlsData);
+            return STATUS_NO_MEMORY;
+        }
+        Status = NtQuerySystemInformation(SystemProcessInformation, ProcessInfo, (ULONG)BufferSize, NULL);
+        if (Status != STATUS_INFO_LENGTH_MISMATCH)
+            break;
+        RtlFreeHeap(RtlGetProcessHeap(), 0, ProcessInfo);
+        BufferSize *= 2;
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, ProcessInfo);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, TlsData);
+        return Status;
+    }
+
+    for (Info = ProcessInfo; ; Info = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)Info + Info->NextEntryOffset))
+    {
+        if (Info->UniqueProcessId == NtCurrentTeb()->ClientId.UniqueProcess)
+        {
+            PSYSTEM_THREAD_INFORMATION Threads = (PSYSTEM_THREAD_INFORMATION)(Info + 1);
+            for (i = 0; i < Info->NumberOfThreads; i++)
+            {
+                OBJECT_ATTRIBUTES ObjectAttributes;
+                THREAD_BASIC_INFORMATION ThreadInfo;
+                HANDLE Thread;
+
+                if (Threads[i].ClientId.UniqueThread == NtCurrentTeb()->ClientId.UniqueThread)
+                {
+                    Status = LdrpAddTlsToThread(NtCurrentTeb(), TlsData, Index);
+                    if (!NT_SUCCESS(Status))
+                        break;
+                    continue;
+                }
+
+                InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+                if (!NT_SUCCESS(NtOpenThread(&Thread, THREAD_QUERY_INFORMATION, &ObjectAttributes,
+                                             &Threads[i].ClientId)))
+                {
+                    continue; /* It exited meanwhile */
+                }
+                Status = NtQueryInformationThread(Thread, ThreadBasicInformation,
+                                                  &ThreadInfo, sizeof(ThreadInfo), NULL);
+                NtClose(Thread);
+                if (NT_SUCCESS(Status) && ThreadInfo.TebBaseAddress)
+                {
+                    Status = LdrpAddTlsToThread(ThreadInfo.TebBaseAddress, TlsData, Index);
+                    if (!NT_SUCCESS(Status))
+                        break;
+                }
+                Status = STATUS_SUCCESS;
+            }
+            break;
+        }
+        if (!Info->NextEntryOffset)
+            break;
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, ProcessInfo);
+    if (!NT_SUCCESS(Status))
+    {
+        /* The blocks already given out stay unused */
+        RtlFreeHeap(RtlGetProcessHeap(), 0, TlsData);
+        return Status;
+    }
+
+    /* Publish the index; the DLL can't be unloaded any more (like at startup) */
+    InsertTailList(&LdrpTlsList, &TlsData->TlsLinks);
+    *(PLONG)TlsData->TlsDirectory.AddressOfIndex = Index;
+    LdrpNumberOfTlsEntries++;
+    LdrEntry->LoadCount = -1;
+    LdrEntry->TlsIndex = -1;
+
+    if (ShowSnaps)
+    {
+        DPRINT1("LDR: Dynamic Tls Found in %wZ at %p, index %lu\n",
+                &LdrEntry->BaseDllName, TlsDirectory, Index);
+    }
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
@@ -789,6 +941,18 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
         /* Move to next entry */
         i++;
 
+        /* A DLL loaded after process startup: set up its implicit TLS */
+        if (!LdrpInLdrInit && !LdrEntry->TlsIndex)
+        {
+            Status = LdrpAddDynamicTls(LdrEntry);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT1("LDR: Failed to set up the TLS of %wZ, Status=0x%08lx\n",
+                        &LdrEntry->BaseDllName, Status);
+                goto Quickie;
+            }
+        }
+
         /* Get its entrypoint */
         EntryPoint = LdrEntry->EntryPoint;
 
@@ -841,8 +1005,8 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
 
             _SEH2_TRY
             {
-                /* Check if it has TLS */
-                if (LdrEntry->TlsIndex && Context)
+                /* Check if it has TLS (DLLs loaded later too) */
+                if (LdrEntry->TlsIndex && (Context || !LdrpInLdrInit))
                 {
                     /* Call TLS */
                     LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_ATTACH);
@@ -1365,12 +1529,13 @@ LdrpAllocateTls(VOID)
         TlsData = CONTAINING_RECORD(NextEntry, LDRP_TLS_DATA, TlsLinks);
         NextEntry = NextEntry->Flink;
 
-        /* Allocate this vector */
+        /* Allocate this vector: the initialized data and the zero filled part */
         TlsDataSize = TlsData->TlsDirectory.EndAddressOfRawData -
                       TlsData->TlsDirectory.StartAddressOfRawData;
         TlsVector[TlsData->TlsDirectory.Characteristics] = RtlAllocateHeap(RtlGetProcessHeap(),
-                                                                           0,
-                                                                           TlsDataSize);
+                                                                           HEAP_ZERO_MEMORY,
+                                                                           TlsDataSize +
+                                                                           TlsData->TlsDirectory.SizeOfZeroFill);
         if (!TlsVector[TlsData->TlsDirectory.Characteristics])
         {
             /* Out of memory */
