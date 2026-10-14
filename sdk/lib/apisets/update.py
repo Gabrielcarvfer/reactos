@@ -14,7 +14,6 @@ import json
 REDIRECT_HOSTS = {
     'kernelbase.dll': 'kernel32.dll',
     'kernel.appcore.dll': 'kernel32.dll',
-    'combase.dll': 'ole32.dll',
     'ucrtbase.dll': 'msvcrt.dll',
     'shcore.dll': 'shell32.dll',
     'winmmbase.dll': 'winmm.dll',
