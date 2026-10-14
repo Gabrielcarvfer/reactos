@@ -1801,6 +1801,16 @@ MiBuildPagedPool(VOID)
     }
 #endif // _M_IX86
 
+#ifdef _M_AMD64
+    //
+    // On x64 the paged pool has a 128 GB range: size it with the memory (half
+    // of it, at most 4 GB) instead of keeping the 32 MB minimum, which modern
+    // programs (fonts, bitmaps, registry) use up quickly
+    //
+    MmSizeOfPagedPoolInBytes = min((SIZE_T)MmNumberOfPhysicalPages * PAGE_SIZE / 2,
+                                   (SIZE_T)4 * 1024 * _1MB);
+#endif
+
     //
     // Get the size in pages and make sure paged pool is at least 32MB.
     //
