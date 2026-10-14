@@ -11,6 +11,7 @@
 @ stdcall AllocateAndGetUdpExTableFromStack(ptr long long long long)
 @ stdcall AllocateAndGetUdpTableFromStack(ptr long long long)
 @ stdcall CancelIPChangeNotify(ptr)
+@ stdcall -version=0x600+ CancelMibChangeNotify2(ptr)
 @ stub CancelSecurityHealthChangeNotify
 @ stdcall -stub -version=0x600+ ConvertGuidToStringA(ptr ptr long)
 @ stdcall -stub -version=0x600+ ConvertGuidToStringW(ptr ptr long)
@@ -139,7 +140,10 @@
 @ stdcall NhpAllocateAndGetInterfaceInfoFromStack(ptr ptr long ptr long)
 @ stub NhpGetInterfaceIndexFromStack
 @ stdcall NotifyAddrChange(ptr ptr)
+@ stdcall -version=0x600+ NotifyIpInterfaceChange(long ptr ptr long ptr)
 @ stdcall NotifyRouteChange(ptr ptr)
+@ stdcall -version=0x600+ NotifyRouteChange2(long ptr ptr long ptr)
+@ stdcall -version=0x600+ NotifyUnicastIpAddressChange(long ptr ptr long ptr)
 @ stub NotifyRouteChangeEx
 @ stub NotifySecurityHealthChange
 @ stdcall _PfAddFiltersToInterface@24()

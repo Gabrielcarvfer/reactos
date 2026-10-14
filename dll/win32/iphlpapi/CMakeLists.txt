@@ -15,6 +15,7 @@ list(APPEND SOURCE
     ipstats_reactos.c
     iphlpapi_reactos.c
     iphlpapi_main.c
+    notify.c
     media.c
     registry.c
     resinfo_reactos.c
