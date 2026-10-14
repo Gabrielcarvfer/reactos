@@ -1146,6 +1146,17 @@ LdrpApplyFileNameRedirection(
     NTSTATUS Status = STATUS_SUCCESS;
 
     DWORD ApisetVersion = LdrpApisetVersion();
+
+    /* The Universal CRT (api-ms-win-crt-*) is there for every program, also
+       one without a manifest: Windows 7 and 8 have these names as real DLLs
+       (the UCRT update), and programs built with Visual C++ 2015 or later
+       import them */
+    if (!ApisetVersion && OriginalName->Length > 15 * sizeof(WCHAR) &&
+        !_wcsnicmp(OriginalName->Buffer, L"api-ms-win-crt-", 15))
+    {
+        ApisetVersion = APISET_WIN10;
+    }
+
     if (ApisetVersion)
     {
         Status = ApiSetResolveToHost(ApisetVersion, OriginalName, RedirectedDll, &ApisetName);
@@ -1334,3 +1345,25 @@ RtlGetTickCount(VOID)
 }
 
 /* EOF */
+
+/*
+ * The performance counter and its frequency (Windows 7). Windows reads them
+ * from shared memory when it can; the system call gives the same values.
+ */
+BOOLEAN
+NTAPI
+RtlQueryPerformanceCounter(
+    _Out_ PLARGE_INTEGER PerformanceCounter)
+{
+    return NT_SUCCESS(NtQueryPerformanceCounter(PerformanceCounter, NULL));
+}
+
+BOOLEAN
+NTAPI
+RtlQueryPerformanceFrequency(
+    _Out_ PLARGE_INTEGER PerformanceFrequency)
+{
+    LARGE_INTEGER Counter;
+
+    return NT_SUCCESS(NtQueryPerformanceCounter(&Counter, PerformanceFrequency));
+}
