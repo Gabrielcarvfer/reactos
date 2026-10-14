@@ -5171,6 +5171,33 @@ typedef BOOL (WINAPI *ExportPublicKeyInfoExFunc)(HCRYPTPROV_OR_NCRYPT_KEY_HANDLE
  DWORD dwKeySpec, DWORD dwCertEncodingType, LPSTR pszPublicKeyObjId,
  DWORD dwFlags, void *pvAuxInfo, PCERT_PUBLIC_KEY_INFO pInfo, DWORD *pcbInfo);
 
+#ifdef __REACTOS__
+/* A CNG (bcrypt) key: ReactOS's bcrypt cannot export one yet. The function
+ * exists for the programs that import it (LibreOffice's xmlsec). */
+/* RFC 3161 time stamps: not supported yet (LibreOffice imports it) */
+BOOL WINAPI CryptVerifyTimeStampSignature(const BYTE *pbTSContentInfo, DWORD cbTSContentInfo,
+ const BYTE *pbData, DWORD cbData, HCERTSTORE hAdditionalStore, void **ppTsContext,
+ PCCERT_CONTEXT *ppTsSigner, HCERTSTORE *phStore)
+{
+    FIXME("(%p, %ld, %p, %ld, %p): not supported\n", pbTSContentInfo, cbTSContentInfo,
+     pbData, cbData, hAdditionalStore);
+    if (ppTsContext) *ppTsContext = NULL;
+    if (ppTsSigner) *ppTsSigner = NULL;
+    if (phStore) *phStore = NULL;
+    SetLastError(NTE_NOT_SUPPORTED);
+    return FALSE;
+}
+
+BOOL WINAPI CryptExportPublicKeyInfoFromBCryptKeyHandle(void *hBCryptKey, DWORD dwCertEncodingType,
+ LPSTR pszPublicKeyObjId, DWORD dwFlags, void *pvAuxInfo, PCERT_PUBLIC_KEY_INFO pInfo, DWORD *pcbInfo)
+{
+    FIXME("(%p, %ld, %s, %08lx, %p, %p, %p): not supported\n", hBCryptKey, dwCertEncodingType,
+     debugstr_a(pszPublicKeyObjId), dwFlags, pvAuxInfo, pInfo, pcbInfo);
+    SetLastError(NTE_NOT_SUPPORTED);
+    return FALSE;
+}
+#endif
+
 BOOL WINAPI CryptExportPublicKeyInfoEx(HCRYPTPROV_OR_NCRYPT_KEY_HANDLE hCryptProv, DWORD dwKeySpec,
  DWORD dwCertEncodingType, LPSTR pszPublicKeyObjId, DWORD dwFlags,
  void *pvAuxInfo, PCERT_PUBLIC_KEY_INFO pInfo, DWORD *pcbInfo)
