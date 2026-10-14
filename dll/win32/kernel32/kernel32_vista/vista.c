@@ -615,9 +615,9 @@ GetFileMUIPath(
 }
 
 /*
- * @unimplemented
+ * Windows 7+. No process has UI languages of its own (see
+ * SetProcessPreferredUILanguages): an empty list.
  */
-#if 0 // This is Windows 7+
 BOOL
 WINAPI
 GetProcessPreferredUILanguages(
@@ -626,11 +626,29 @@ GetProcessPreferredUILanguages(
     PZZWSTR pwszLanguagesBuffer,
     PULONG pcchLanguagesBuffer)
 {
-    DPRINT1("%x %p %p %p\n", dwFlags, pulNumLanguages, pwszLanguagesBuffer, pcchLanguagesBuffer);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    if (!pulNumLanguages || !pcchLanguagesBuffer ||
+        (dwFlags & ~(MUI_LANGUAGE_ID | MUI_LANGUAGE_NAME | MUI_UI_FALLBACK)) ||
+        ((dwFlags & MUI_LANGUAGE_ID) && (dwFlags & MUI_LANGUAGE_NAME)) ||
+        (*pcchLanguagesBuffer && !pwszLanguagesBuffer))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    *pulNumLanguages = 0;
+    if (pwszLanguagesBuffer)
+    {
+        if (*pcchLanguagesBuffer < 2)
+        {
+            *pcchLanguagesBuffer = 2;
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return FALSE;
+        }
+        pwszLanguagesBuffer[0] = pwszLanguagesBuffer[1] = UNICODE_NULL;
+    }
+    *pcchLanguagesBuffer = 2;
+    return TRUE;
 }
-#endif
 
 /*
 * @unimplemented
@@ -711,9 +729,9 @@ GetUserPreferredUILanguages(
 }
 
 /*
- * @unimplemented
+ * Windows 7+. ReactOS has no UI languages per process: the list is
+ * checked and counted, then the process keeps the user's languages.
  */
-#if 0 // Tis is Windows 7+
 BOOL
 WINAPI
 SetProcessPreferredUILanguages(
@@ -721,11 +739,23 @@ SetProcessPreferredUILanguages(
     PCZZWSTR pwszLanguagesBuffer,
     PULONG pulNumLanguages)
 {
-    DPRINT1("%x %p %p\n", dwFlags, pwszLanguagesBuffer, pulNumLanguages);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    PCWSTR Language;
+    ULONG Count = 0;
+
+    if ((dwFlags & ~(MUI_LANGUAGE_ID | MUI_LANGUAGE_NAME)) ||
+        ((dwFlags & MUI_LANGUAGE_ID) && (dwFlags & MUI_LANGUAGE_NAME)))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    /* (No list: back to the user's languages) */
+    for (Language = pwszLanguagesBuffer; Language && *Language; Language += wcslen(Language) + 1)
+        Count++;
+    if (pulNumLanguages) *pulNumLanguages = Count;
+    DPRINT("%x: %lu languages, ignored\n", dwFlags, Count);
+    return TRUE;
 }
-#endif
 
 /*
  * @unimplemented
