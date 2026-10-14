@@ -3,7 +3,7 @@
 @ stdcall -version=0x600+ AddClipboardFormatListener(ptr)
 @ stdcall AdjustWindowRect(ptr long long)
 @ stdcall AdjustWindowRectEx(ptr long long long)
-@ stdcall -version=0x601+ AdjustWindowRectExForDpi(ptr long long long long)
+@ stdcall -version=0xA00+ AdjustWindowRectExForDpi(ptr long long long long)
 @ stdcall AlignRects(ptr long long long)
 @ stdcall AllowForegroundActivation()
 @ stdcall AllowSetForegroundWindow(long)
@@ -11,7 +11,7 @@
 @ stdcall AnyPopup()
 @ stdcall AppendMenuA(long long long ptr)
 @ stdcall AppendMenuW(long long long ptr)
-@ stdcall -version=0x601+ AreDpiAwarenessContextsEqual(long long)
+@ stdcall -version=0xA00+ AreDpiAwarenessContextsEqual(long long)
 @ stdcall ArrangeIconicWindows(long)
 @ stdcall AttachThreadInput(long long long) NtUserAttachThreadInput
 @ stdcall BeginDeferWindowPos(long)
@@ -206,7 +206,7 @@
 @ stdcall EditWndProc(long long long long) EditWndProcA
 @ stdcall EmptyClipboard() NtUserEmptyClipboard
 @ stdcall EnableMenuItem(long long long)
-@ stdcall -version=0x601+ EnableNonClientDpiScaling(ptr)
+@ stdcall -version=0xA00+ EnableNonClientDpiScaling(ptr)
 @ stdcall EnableScrollBar(long long long)
 @ stdcall EnableWindow(long long)
 @ stdcall EndDeferWindowPos(long)
@@ -256,7 +256,7 @@
 @ stdcall GetAppCompatFlags(long)
 @ stdcall GetAppCompatFlags2(long)
 @ stdcall GetAsyncKeyState(long)
-@ stdcall -version=0x601+ GetAwarenessFromDpiAwarenessContext(long)
+@ stdcall -version=0xA00+ GetAwarenessFromDpiAwarenessContext(long)
 @ stdcall GetCapture()
 @ stdcall GetCaretBlinkTime() NtUserGetCaretBlinkTime
 @ stdcall GetCaretPos(ptr) NtUserGetCaretPos
@@ -298,8 +298,8 @@
 @ stdcall GetDlgItemTextW(long long ptr long)
 @ stdcall GetDoubleClickTime() NtUserGetDoubleClickTime
 @ stdcall -version=0x601+ GetDpiForMonitorInternal(ptr long ptr ptr)
-@ stdcall -version=0x601+ GetDpiForSystem()
-@ stdcall -version=0x601+ GetDpiForWindow(ptr)
+@ stdcall -version=0xA00+ GetDpiForSystem()
+@ stdcall -version=0xA00+ GetDpiForWindow(ptr)
 @ stdcall GetFocus()
 @ stdcall GetForegroundWindow() NtUserGetForegroundWindow
 @ stdcall GetGUIThreadInfo(long ptr) NtUserGetGUIThreadInfo
@@ -358,7 +358,7 @@
 @ stdcall -version=0x602+ GetPointerType(long ptr)
 @ stdcall GetPriorityClipboardFormat(ptr long) NtUserGetPriorityClipboardFormat
 @ stdcall GetProcessDefaultLayout(ptr)
-@ stdcall -version=0x601+ GetProcessDpiAwarenessInternal(long ptr)
+@ stdcall -version=0xA00+ GetProcessDpiAwarenessInternal(long ptr)
 @ stdcall GetProcessWindowStation() NtUserGetProcessWindowStation
 @ stdcall GetProgmanWindow ()
 @ stdcall GetPropA(long str)
@@ -382,12 +382,12 @@
 @ stdcall GetSysColorBrush(long)
 @ stdcall GetSystemMenu(long long) ; NtUserGetSystemMenu
 @ stdcall GetSystemMetrics(long)
-@ stdcall -version=0x601+ GetSystemMetricsForDpi(long long)
+@ stdcall -version=0xA00+ GetSystemMetricsForDpi(long long)
 @ stdcall GetTabbedTextExtentA(long str long long ptr)
 @ stdcall GetTabbedTextExtentW(long wstr long long ptr)
 @ stdcall GetTaskmanWindow ()
 @ stdcall GetThreadDesktop(long)
-@ stdcall -version=0x601+ GetThreadDpiAwarenessContext()
+@ stdcall -version=0xA00+ GetThreadDpiAwarenessContext()
 @ stdcall GetTitleBarInfo(long ptr) NtUserGetTitleBarInfo
 @ stdcall GetTopWindow(long)
 @ stdcall -version=0x601+ GetTouchInputInfo(long long ptr long)
@@ -396,7 +396,7 @@
 @ stdcall GetUserObjectInformationA(long long ptr long ptr)
 @ stdcall GetUserObjectInformationW(long long ptr long ptr) NtUserGetObjectInformation
 @ stdcall GetUserObjectSecurity (long ptr ptr long ptr)
-@ stdcall -version=0x601+ GetWindowDpiAwarenessContext(ptr)
+@ stdcall -version=0xA00+ GetWindowDpiAwarenessContext(ptr)
 @ stdcall GetWinStationInfo(ptr)
 @ stdcall GetWindow(long long)
 @ stdcall GetWindowContextHelpId(long)
@@ -470,7 +470,7 @@
 @ stdcall IsSETEnabled()
 @ stdcall IsServerSideWindow(long)
 @ stdcall -version=0x601+ IsTouchWindow(long ptr)
-@ stdcall -version=0x601+ IsValidDpiAwarenessContext(long)
+@ stdcall -version=0xA00+ IsValidDpiAwarenessContext(long)
 @ stdcall IsWinEventHookInstalled(long)
 @ stdcall IsWindow(long)
 @ stdcall IsWindowEnabled(long)
@@ -678,8 +678,8 @@
 @ stdcall SetParent(long long) NtUserSetParent
 @ stdcall -version=0x600+ SetProcessDPIAware()
 @ stdcall SetProcessDefaultLayout(long)
-@ stdcall -version=0x601+ SetProcessDpiAwarenessContext(long)
-@ stdcall -version=0x601+ SetProcessDpiAwarenessInternal(long)
+@ stdcall -version=0xA00+ SetProcessDpiAwarenessContext(long)
+@ stdcall -version=0xA00+ SetProcessDpiAwarenessInternal(long)
 @ stdcall SetProcessWindowStation(long) NtUserSetProcessWindowStation
 @ stdcall SetProgmanWindow (long)
 @ stdcall SetPropA(long str long)
@@ -699,7 +699,7 @@
 @ stdcall SetSystemTimer(long long long ptr) NtUserSetSystemTimer
 @ stdcall SetTaskmanWindow (long)
 @ stdcall SetThreadDesktop(long) NtUserSetThreadDesktop
-@ stdcall -version=0x601+ SetThreadDpiAwarenessContext(long)
+@ stdcall -version=0xA00+ SetThreadDpiAwarenessContext(long)
 @ stdcall SetTimer(long long long ptr) NtUserSetTimer
 @ stdcall SetUserObjectInformationA(long long ptr long) NtUserSetObjectInformation
 @ stdcall SetUserObjectInformationW(long long ptr long) NtUserSetObjectInformation
@@ -738,7 +738,7 @@
 @ stdcall SwitchDesktop(long) NtUserSwitchDesktop
 @ stdcall SwitchToThisWindow(long long)
 @ stdcall SystemParametersInfoA(long long ptr long)
-@ stdcall -version=0x601+ SystemParametersInfoForDpi(long long ptr long long)
+@ stdcall -version=0xA00+ SystemParametersInfoForDpi(long long ptr long long)
 @ stdcall SystemParametersInfoW(long long ptr long)
 @ stdcall TabbedTextOutA(long long long str long long ptr long)
 @ stdcall TabbedTextOutW(long long long wstr long long ptr long)
