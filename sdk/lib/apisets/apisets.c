@@ -28,6 +28,24 @@ WORD ExtensionSize = sizeof(L".dll") - sizeof(WCHAR);
 //    );
 
 
+/* The name of an API set without its last version number ("-1") */
+static
+BOOLEAN
+ApiSetBaseName(
+    _In_ PCUNICODE_STRING Name,
+    _Out_ PUNICODE_STRING Base)
+{
+    USHORT Count = Name->Length / sizeof(WCHAR);
+
+    while (Count && Name->Buffer[Count - 1] != L'-')
+        Count--;
+    if (Count < 2)
+        return FALSE;
+    Base->Buffer = Name->Buffer;
+    Base->Length = Base->MaximumLength = (Count - 1) * sizeof(WCHAR);
+    return TRUE;
+}
+
 NTSTATUS
 ApiSetResolveToHost(
     _In_ DWORD ApisetVersion,
@@ -75,8 +93,9 @@ ApiSetResolveToHost(
                 // Return a static string (does not have to be freed)
                 *Resolved = TRUE;
                 *Output = g_Apisets[Index].Target;
+                return STATUS_SUCCESS;
             }
-            return STATUS_SUCCESS;
+            break;
         }
         else if (result < 0)
         {
@@ -87,6 +106,30 @@ ApiSetResolveToHost(
             LBnd = Index + 1;
         }
     }
+
+    // Windows resolves an API set by its name without the last version number:
+    // a program asking for api-ms-win-core-synch-l1-2-0 runs on Windows 10,
+    // whose schema has api-ms-win-core-synch-l1-2-1
+    {
+        UNICODE_STRING Base, EntryBase;
+        LONG Index;
+
+        if (ApiSetBaseName(&Tmp, &Base))
+        {
+            for (Index = 0; Index < g_ApisetsCount; Index++)
+            {
+                if ((g_Apisets[Index].dwOsVersions & ApisetVersion) &&
+                    ApiSetBaseName(&g_Apisets[Index].Name, &EntryBase) &&
+                    RtlEqualUnicodeString(&Base, &EntryBase, TRUE))
+                {
+                    *Resolved = TRUE;
+                    *Output = g_Apisets[Index].Target;
+                    return STATUS_SUCCESS;
+                }
+            }
+        }
+    }
+
     *Resolved = FALSE;
     return STATUS_SUCCESS;
 }
