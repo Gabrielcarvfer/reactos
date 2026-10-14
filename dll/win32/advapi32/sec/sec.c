@@ -428,8 +428,84 @@ ConvertToAutoInheritPrivateObjectSecurity(IN PSECURITY_DESCRIPTOR ParentDescript
 }
 
 
+/* The SID a trustee names, for the owner and group of BuildSecurityDescriptorW.
+ * Returns a SID to free with LocalFree in *pFreeSid when one was allocated. */
+static DWORD
+BuildSdpGetTrusteeSid(IN PTRUSTEE_W Trustee,
+                      OUT PSID *pSid,
+                      OUT PSID *pFreeSid)
+{
+    *pSid = *pFreeSid = NULL;
+
+    switch (Trustee->TrusteeForm)
+    {
+        case TRUSTEE_IS_SID:
+            *pSid = (PSID)Trustee->ptstrName;
+            return ERROR_SUCCESS;
+
+        case TRUSTEE_IS_NAME:
+        {
+            if (!wcscmp(Trustee->ptstrName, L"CURRENT_USER"))
+            {
+                HANDLE Token;
+                BYTE Buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+                PTOKEN_USER User = (PTOKEN_USER)Buffer;
+                DWORD Length;
+
+                if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &Token) &&
+                    !OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &Token))
+                {
+                    return GetLastError();
+                }
+                if (!GetTokenInformation(Token, TokenUser, Buffer, sizeof(Buffer), &Length))
+                {
+                    DWORD Error = GetLastError();
+                    CloseHandle(Token);
+                    return Error;
+                }
+                CloseHandle(Token);
+                Length = GetLengthSid(User->User.Sid);
+                *pFreeSid = LocalAlloc(LMEM_FIXED, Length);
+                if (!*pFreeSid)
+                    return ERROR_NOT_ENOUGH_MEMORY;
+                CopySid(Length, *pFreeSid, User->User.Sid);
+            }
+            else
+            {
+                DWORD SidSize = 0, DomainSize = 0;
+                SID_NAME_USE Use;
+                WCHAR Domain[MAX_PATH];
+
+                LookupAccountNameW(NULL, Trustee->ptstrName, NULL, &SidSize, NULL, &DomainSize, &Use);
+                if (!SidSize)
+                    return GetLastError();
+                *pFreeSid = LocalAlloc(LMEM_FIXED, SidSize);
+                if (!*pFreeSid)
+                    return ERROR_NOT_ENOUGH_MEMORY;
+                DomainSize = ARRAYSIZE(Domain);
+                if (!LookupAccountNameW(NULL, Trustee->ptstrName, *pFreeSid, &SidSize, Domain, &DomainSize, &Use))
+                {
+                    DWORD Error = GetLastError();
+                    LocalFree(*pFreeSid);
+                    *pFreeSid = NULL;
+                    return Error;
+                }
+            }
+            *pSid = *pFreeSid;
+            return ERROR_SUCCESS;
+        }
+
+        default:
+            return ERROR_INVALID_PARAMETER;
+    }
+}
+
 /*
- * @unimplemented
+ * @implemented
+ *
+ * Makes a new self-relative security descriptor (to free with LocalFree): the
+ * old one (if any) with the given owner and group, and the access and audit
+ * entries merged into its DACL and SACL (like SetEntriesInAcl).
  */
 DWORD
 WINAPI
@@ -443,8 +519,92 @@ BuildSecurityDescriptorW(IN PTRUSTEE_W pOwner  OPTIONAL,
                          OUT PULONG pSizeNewSD,
                          OUT PSECURITY_DESCRIPTOR* pNewSD)
 {
-    UNIMPLEMENTED;
-    return FALSE;
+    SECURITY_DESCRIPTOR Sd;
+    PSID Owner = NULL, Group = NULL, FreeOwner = NULL, FreeGroup = NULL;
+    PACL Dacl = NULL, Sacl = NULL, NewDacl = NULL, NewSacl = NULL;
+    BOOL DaclPresent = FALSE, SaclPresent = FALSE, Defaulted;
+    SECURITY_DESCRIPTOR_CONTROL Control = 0;
+    DWORD Revision, Size = 0, Error = ERROR_SUCCESS;
+    PSECURITY_DESCRIPTOR NewSd = NULL;
+
+    if (!pSizeNewSD || !pNewSD)
+        return ERROR_INVALID_PARAMETER;
+    *pNewSD = NULL;
+    *pSizeNewSD = 0;
+
+    /* Start from the old descriptor */
+    if (pOldSD)
+    {
+        if (!IsValidSecurityDescriptor(pOldSD) ||
+            !GetSecurityDescriptorControl(pOldSD, &Control, &Revision) ||
+            !GetSecurityDescriptorOwner(pOldSD, &Owner, &Defaulted) ||
+            !GetSecurityDescriptorGroup(pOldSD, &Group, &Defaulted) ||
+            !GetSecurityDescriptorDacl(pOldSD, &DaclPresent, &Dacl, &Defaulted) ||
+            !GetSecurityDescriptorSacl(pOldSD, &SaclPresent, &Sacl, &Defaulted))
+        {
+            return ERROR_INVALID_SECURITY_DESCR;
+        }
+    }
+
+    if (pOwner && (Error = BuildSdpGetTrusteeSid(pOwner, &Owner, &FreeOwner)) != ERROR_SUCCESS)
+        goto Cleanup;
+    if (pGroup && (Error = BuildSdpGetTrusteeSid(pGroup, &Group, &FreeGroup)) != ERROR_SUCCESS)
+        goto Cleanup;
+
+    if (cCountOfAccessEntries)
+    {
+        Error = SetEntriesInAclW(cCountOfAccessEntries, pListOfAccessEntries, Dacl, &NewDacl);
+        if (Error != ERROR_SUCCESS)
+            goto Cleanup;
+        Dacl = NewDacl;
+        DaclPresent = TRUE;
+    }
+    if (cCountOfAuditEntries)
+    {
+        Error = SetEntriesInAclW(cCountOfAuditEntries, pListOfAuditEntries, Sacl, &NewSacl);
+        if (Error != ERROR_SUCCESS)
+            goto Cleanup;
+        Sacl = NewSacl;
+        SaclPresent = TRUE;
+    }
+
+    if (!InitializeSecurityDescriptor(&Sd, SECURITY_DESCRIPTOR_REVISION) ||
+        (Owner && !SetSecurityDescriptorOwner(&Sd, Owner, FALSE)) ||
+        (Group && !SetSecurityDescriptorGroup(&Sd, Group, FALSE)) ||
+        (DaclPresent && !SetSecurityDescriptorDacl(&Sd, TRUE, Dacl, FALSE)) ||
+        (SaclPresent && !SetSecurityDescriptorSacl(&Sd, TRUE, Sacl, FALSE)))
+    {
+        Error = GetLastError();
+        goto Cleanup;
+    }
+    /* Keep the inheritance flags of the old descriptor */
+    SetSecurityDescriptorControl(&Sd, Control & (SE_DACL_PROTECTED | SE_SACL_PROTECTED |
+                                                  SE_DACL_AUTO_INHERITED | SE_SACL_AUTO_INHERITED),
+                                 Control & (SE_DACL_PROTECTED | SE_SACL_PROTECTED |
+                                            SE_DACL_AUTO_INHERITED | SE_SACL_AUTO_INHERITED));
+
+    MakeSelfRelativeSD(&Sd, NULL, &Size);
+    NewSd = LocalAlloc(LMEM_FIXED, Size);
+    if (!NewSd)
+    {
+        Error = ERROR_NOT_ENOUGH_MEMORY;
+        goto Cleanup;
+    }
+    if (!MakeSelfRelativeSD(&Sd, NewSd, &Size))
+    {
+        Error = GetLastError();
+        LocalFree(NewSd);
+        goto Cleanup;
+    }
+    *pNewSD = NewSd;
+    *pSizeNewSD = Size;
+
+Cleanup:
+    if (NewDacl) LocalFree(NewDacl);
+    if (NewSacl) LocalFree(NewSacl);
+    if (FreeOwner) LocalFree(FreeOwner);
+    if (FreeGroup) LocalFree(FreeGroup);
+    return Error;
 }
 
 
@@ -464,7 +624,8 @@ BuildSecurityDescriptorA(IN PTRUSTEE_A pOwner  OPTIONAL,
                          OUT PSECURITY_DESCRIPTOR* pNewSD)
 {
     UNIMPLEMENTED;
-    return FALSE;
+    /* An error code: FALSE would mean ERROR_SUCCESS */
+    return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
 /* EOF */
