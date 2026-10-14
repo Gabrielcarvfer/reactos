@@ -57,8 +57,9 @@ if(WOW64_I386_BUILD_DIR)
         message(FATAL_ERROR "WOW64_I386_BUILD_DIR: no boot/bootdata/packages/reactos.dff (build its bootcd first)")
     endif()
     # The files of the i386 build to take, by their CD directory:
-    # system32 (2) goes to SysWOW64, and the 32-bit side-by-side assemblies
-    # (winsxs\x86_*, and their x86_* manifests) to the same place as there
+    # system32 (2) goes to SysWOW64 (and its wbem folder to SysWOW64\wbem),
+    # and the 32-bit side-by-side assemblies (winsxs\x86_*, and their x86_*
+    # manifests) to the same place as there
     set(_wow64_dff ${WOW64_I386_BUILD_DIR}/boot/bootdata/packages/reactos.dff)
     # (Read again when it changes: a new 32-bit DLL must reach SysWOW64)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_wow64_dff})
@@ -78,6 +79,9 @@ if(WOW64_I386_BUILD_DIR)
         get_filename_component(_name ${_file} NAME)
         if(CMAKE_MATCH_2 STREQUAL "2")
             set(_dest reactos/SysWOW64)
+        elseif(_dir STREQUAL "system32\\wbem")
+            # (WMI: system32\wbem of a 32-bit program is SysWOW64\wbem)
+            set(_dest reactos/SysWOW64/wbem)
         elseif(_dir MATCHES "^winsxs\\\\x86_" OR (_dir STREQUAL "winsxs\\manifests" AND _name MATCHES "^x86_"))
             string(REPLACE "\\" "/" _dest "reactos/${_dir}")
         else()
