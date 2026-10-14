@@ -677,6 +677,39 @@ GetPackageFamilyName(HANDLE hProcess,
     return APPMODEL_ERROR_NO_PACKAGE;
 }
 
+/* No package is installed: no family has any (Edge's updater asks) */
+LONG
+WINAPI
+GetPackagesByPackageFamily(PCWSTR packageFamilyName,
+                           UINT32 *count,
+                           PWSTR *packageFullNames,
+                           UINT32 *bufferLength,
+                           WCHAR *buffer)
+{
+    if (!packageFamilyName || !count || !bufferLength)
+        return ERROR_INVALID_PARAMETER;
+    *count = 0;
+    *bufferLength = 0;
+    return ERROR_SUCCESS;
+}
+
+LONG
+WINAPI
+FindPackagesByPackageFamily(PCWSTR packageFamilyName,
+                            UINT32 packageFilters,
+                            UINT32 *count,
+                            PWSTR *packageFullNames,
+                            UINT32 *bufferLength,
+                            WCHAR *buffer,
+                            UINT32 *packageProperties)
+{
+    if (!packageFamilyName || !count || !bufferLength)
+        return ERROR_INVALID_PARAMETER;
+    *count = 0;
+    *bufferLength = 0;
+    return ERROR_SUCCESS;
+}
+
 LONG
 WINAPI
 PackageIdFromFullName(PCWSTR packageFullName,

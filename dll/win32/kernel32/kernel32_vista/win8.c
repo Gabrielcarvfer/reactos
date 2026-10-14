@@ -2,8 +2,9 @@
  * PROJECT:     ReactOS Win32 Base API
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:     Windows 7 and 8 kernel32 functions used by modern applications:
- *              thread error mode and information, memory offering, process
- *              snapshots (Qt 6, VS Code, Python 3.13, GLib)
+ *              CreateFile2, stack limits, thread error mode and information,
+ *              memory offering, process snapshots (Qt 6, VS Code, Python 3.13,
+ *              GLib, Chrome, the Visual C++ runtime)
  */
 
 #include <k32_vista.h>
@@ -72,6 +73,62 @@ SetThreadErrorMode(
     }
     if (lpOldMode) *lpOldMode = OldMode;
     return TRUE;
+}
+
+/* FILES AND STACK (Windows 8) **********************************************/
+
+typedef struct _K32_CREATEFILE2_EXTENDED_PARAMETERS
+{
+    DWORD dwSize;
+    DWORD dwFileAttributes;
+    DWORD dwFileFlags;
+    DWORD dwSecurityQosFlags;
+    LPSECURITY_ATTRIBUTES lpSecurityAttributes;
+    HANDLE hTemplateFile;
+} K32_CREATEFILE2_EXTENDED_PARAMETERS;
+
+/* CreateFileW, with the attributes, flags and the rest in one structure
+ * (the Visual C++ runtime of Windows 8 and later uses it) */
+HANDLE
+WINAPI
+CreateFile2(
+    _In_ LPCWSTR lpFileName,
+    _In_ DWORD dwDesiredAccess,
+    _In_ DWORD dwShareMode,
+    _In_ DWORD dwCreationDisposition,
+    _In_opt_ K32_CREATEFILE2_EXTENDED_PARAMETERS *pCreateExParams)
+{
+    DWORD FlagsAndAttributes = 0;
+    LPSECURITY_ATTRIBUTES SecurityAttributes = NULL;
+    HANDLE Template = NULL;
+
+    if (pCreateExParams)
+    {
+        if (pCreateExParams->dwSize != sizeof(*pCreateExParams))
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return INVALID_HANDLE_VALUE;
+        }
+        FlagsAndAttributes = pCreateExParams->dwFileAttributes | pCreateExParams->dwFileFlags |
+                             pCreateExParams->dwSecurityQosFlags;
+        SecurityAttributes = pCreateExParams->lpSecurityAttributes;
+        Template = pCreateExParams->hTemplateFile;
+    }
+    return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, SecurityAttributes,
+                       dwCreationDisposition, FlagsAndAttributes, Template);
+}
+
+/* The whole stack of the thread, committed or not (Chrome's setup asks) */
+VOID
+WINAPI
+GetCurrentThreadStackLimits(
+    _Out_ PULONG_PTR LowLimit,
+    _Out_ PULONG_PTR HighLimit)
+{
+    PTEB Teb = NtCurrentTeb();
+
+    *LowLimit = (ULONG_PTR)Teb->DeallocationStack;
+    *HighLimit = (ULONG_PTR)Teb->NtTib.StackBase;
 }
 
 /* THREAD INFORMATION (Windows 8) *******************************************/
