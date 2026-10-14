@@ -403,7 +403,13 @@ DC_vCleanup(PVOID ObjectBody)
        pdc->dclevel.flPath = 0;
     }
     if (pdc->dclevel.pSurface)
+    {
+        /* The bitmap is not selected in this DC anymore: it can go in another
+           one (and a new DC that gets this handle again does not find it) */
+        InterlockedCompareExchangePointer((PVOID*)&pdc->dclevel.pSurface->hdc,
+                                          NULL, pdc->BaseObject.hHmgr);
         SURFACE_ShareUnlockSurface(pdc->dclevel.pSurface);
+    }
 
     if (pdc->ppdev)
         PDEVOBJ_vRelease(pdc->ppdev);
