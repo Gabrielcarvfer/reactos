@@ -1012,3 +1012,16 @@ Cleanup:
     SetLastError(dwErrorCode);
     return (dwErrorCode == ERROR_SUCCESS);
 }
+
+/*
+ * InstallPrinterDriverFromPackageW (Vista): install a driver from the driver
+ * store. ReactOS has no driver store; installers that add a printer go on
+ * without it (RustDesk's setup imports this).
+ */
+HRESULT WINAPI
+InstallPrinterDriverFromPackageW(PCWSTR pszServer, PCWSTR pszInfPath, PCWSTR pszDriverName, PCWSTR pszEnvironment, DWORD dwFlags)
+{
+    FIXME("InstallPrinterDriverFromPackageW(%S, %S, %S, %S, %lu): no driver store\n",
+          pszServer, pszInfPath, pszDriverName, pszEnvironment, dwFlags);
+    return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+}
