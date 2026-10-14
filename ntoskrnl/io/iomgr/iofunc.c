@@ -3940,10 +3940,13 @@ NtWriteFile(IN HANDLE FileHandle,
             return Status;
         }
 
-        /* Check if we don't have a byte offset available */
-        if (!(ByteOffset) ||
-            ((CapturedByteOffset.u.LowPart == FILE_USE_FILE_POINTER_POSITION) &&
-             (CapturedByteOffset.u.HighPart == -1)))
+        /* Check if we don't have a byte offset available (an append-only
+         * handle always writes at the end of the file, set above) */
+        if ((!(ByteOffset) ||
+             ((CapturedByteOffset.u.LowPart == FILE_USE_FILE_POINTER_POSITION) &&
+              (CapturedByteOffset.u.HighPart == -1))) &&
+            !((CapturedByteOffset.u.LowPart == FILE_WRITE_TO_END_OF_FILE) &&
+              (CapturedByteOffset.u.HighPart == -1)))
         {
             /* Use the Current Byte Offset instead */
             CapturedByteOffset = FileObject->CurrentByteOffset;
