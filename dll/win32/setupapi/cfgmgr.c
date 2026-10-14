@@ -3464,6 +3464,34 @@ CM_Get_DevNode_Registry_PropertyA(
 
 
 /***********************************************************************
+ * CM_Get_DevNode_PropertyW [SETUPAPI.@]
+ *
+ * Unified device properties (DEVPROPKEY, Vista) are not stored yet: report
+ * that the device has no such property.
+ */
+CONFIGRET
+WINAPI
+CM_Get_DevNode_PropertyW(
+    _In_ DEVINST dnDevInst,
+    _In_ const DEVPROPKEY *PropertyKey,
+    _Out_ DEVPROPTYPE *PropertyType,
+    _Out_writes_bytes_opt_(*PropertyBufferSize) PBYTE PropertyBuffer,
+    _Inout_ PULONG PropertyBufferSize,
+    _In_ ULONG ulFlags)
+{
+    TRACE("CM_Get_DevNode_PropertyW(%lx %p %p %p %p %lx)\n",
+          dnDevInst, PropertyKey, PropertyType, PropertyBuffer, PropertyBufferSize, ulFlags);
+
+    if (!PropertyKey || !PropertyType || !PropertyBufferSize)
+        return CR_INVALID_POINTER;
+    if (ulFlags != 0)
+        return CR_INVALID_FLAG;
+
+    return CR_NO_SUCH_VALUE;
+}
+
+
+/***********************************************************************
  * CM_Get_DevNode_Registry_PropertyW [SETUPAPI.@]
  */
 CONFIGRET
