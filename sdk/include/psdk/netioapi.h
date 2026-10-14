@@ -81,7 +81,72 @@ typedef struct _MIB_IF_TABLE2
 NETIOAPI_API GetIfEntry2(IN OUT PMIB_IF_ROW2 Row);
 NETIOAPI_API GetIfTable2(OUT PMIB_IF_TABLE2 *Table);
 
+#include <nldef.h>
+
+typedef struct _IP_ADDRESS_PREFIX {
+    SOCKADDR_INET Prefix;
+    UINT8 PrefixLength;
+} IP_ADDRESS_PREFIX, *PIP_ADDRESS_PREFIX;
+
+typedef struct _MIB_UNICASTIPADDRESS_ROW {
+    SOCKADDR_INET Address;
+    NET_LUID InterfaceLuid;
+    NET_IFINDEX InterfaceIndex;
+    NL_PREFIX_ORIGIN PrefixOrigin;
+    NL_SUFFIX_ORIGIN SuffixOrigin;
+    ULONG ValidLifetime;
+    ULONG PreferredLifetime;
+    UINT8 OnLinkPrefixLength;
+    BOOLEAN SkipAsSource;
+    NL_DAD_STATE DadState;
+    SCOPE_ID ScopeId;
+    LARGE_INTEGER CreationTimeStamp;
+} MIB_UNICASTIPADDRESS_ROW, *PMIB_UNICASTIPADDRESS_ROW;
+
+typedef struct _MIB_UNICASTIPADDRESS_TABLE {
+    ULONG NumEntries;
+    MIB_UNICASTIPADDRESS_ROW Table[1];
+} MIB_UNICASTIPADDRESS_TABLE, *PMIB_UNICASTIPADDRESS_TABLE;
+
+typedef struct _MIB_IPFORWARD_ROW2 {
+    NET_LUID InterfaceLuid;
+    NET_IFINDEX InterfaceIndex;
+    IP_ADDRESS_PREFIX DestinationPrefix;
+    SOCKADDR_INET NextHop;
+    UCHAR SitePrefixLength;
+    ULONG ValidLifetime;
+    ULONG PreferredLifetime;
+    ULONG Metric;
+    NL_ROUTE_PROTOCOL Protocol;
+    BOOLEAN Loopback;
+    BOOLEAN AutoconfigureAddress;
+    BOOLEAN Publish;
+    BOOLEAN Immortal;
+    ULONG Age;
+    NL_ROUTE_ORIGIN Origin;
+} MIB_IPFORWARD_ROW2, *PMIB_IPFORWARD_ROW2;
+
+NETIOAPI_API GetUnicastIpAddressTable(IN ADDRESS_FAMILY Family, OUT PMIB_UNICASTIPADDRESS_TABLE *Table);
+NETIOAPI_API GetBestRoute2(IN NET_LUID *InterfaceLuid OPTIONAL, IN NET_IFINDEX InterfaceIndex,
+                           IN CONST SOCKADDR_INET *SourceAddress OPTIONAL,
+                           IN CONST SOCKADDR_INET *DestinationAddress, IN ULONG AddressSortOptions,
+                           OUT PMIB_IPFORWARD_ROW2 BestRoute, OUT SOCKADDR_INET *BestSourceAddress);
+
 #endif
+
+#include <ifdef.h>
+
+NETIOAPI_API ConvertInterfaceAliasToLuid(IN CONST WCHAR *InterfaceAlias, OUT PNET_LUID InterfaceLuid);
+NETIOAPI_API ConvertInterfaceGuidToLuid(IN CONST GUID *InterfaceGuid, OUT PNET_LUID InterfaceLuid);
+NETIOAPI_API ConvertInterfaceIndexToLuid(IN NET_IFINDEX InterfaceIndex, OUT PNET_LUID InterfaceLuid);
+NETIOAPI_API ConvertInterfaceLuidToAlias(IN CONST NET_LUID *InterfaceLuid, OUT PWSTR InterfaceAlias, IN SIZE_T Length);
+NETIOAPI_API ConvertInterfaceLuidToGuid(IN CONST NET_LUID *InterfaceLuid, OUT GUID *InterfaceGuid);
+NETIOAPI_API ConvertInterfaceLuidToIndex(IN CONST NET_LUID *InterfaceLuid, OUT PNET_IFINDEX InterfaceIndex);
+NETIOAPI_API ConvertInterfaceLuidToNameA(IN CONST NET_LUID *InterfaceLuid, OUT PSTR InterfaceName, IN SIZE_T Length);
+NETIOAPI_API ConvertInterfaceLuidToNameW(IN CONST NET_LUID *InterfaceLuid, OUT PWSTR InterfaceName, IN SIZE_T Length);
+NETIOAPI_API ConvertInterfaceNameToLuidA(IN CONST CHAR *InterfaceName, OUT NET_LUID *InterfaceLuid);
+NETIOAPI_API ConvertInterfaceNameToLuidW(IN CONST WCHAR *InterfaceName, OUT NET_LUID *InterfaceLuid);
+VOID NETIOAPI_API_ FreeMibTable(IN PVOID Memory);
 
 #ifdef __cplusplus
 }
