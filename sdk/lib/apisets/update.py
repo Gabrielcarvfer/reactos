@@ -26,6 +26,23 @@ REDIRECT_HOSTS = {
 REDIRECT_APISETS = {
     'api-ms-win-core-version-l1-': 'version.dll',
     'api-ms-win-core-versionansi-l1-': 'version.dll',
+    # kernelbase has the registry, security, event tracing and shlwapi
+    # functions on Windows; they are only in these modules of ours
+    'api-ms-win-core-registry-': 'advapi32.dll',
+    'api-ms-win-core-registryuserspecific-': 'advapi32.dll',
+    'api-ms-win-security-base-': 'advapi32.dll',
+    'api-ms-win-eventing-': 'advapi32.dll',
+    'api-ms-win-downlevel-advapi32-': 'advapi32.dll',
+    'api-ms-win-core-shlwapi-legacy-': 'shlwapi.dll',
+    'api-ms-win-core-shlwapi-obsolete-': 'shlwapi.dll',
+    'api-ms-win-legacy-shlwapi-': 'shlwapi.dll',
+    'api-ms-win-obsolete-shlwapi-': 'shlwapi.dll',
+    'api-ms-win-downlevel-shlwapi-': 'shlwapi.dll',
+    'api-ms-win-core-url-': 'shlwapi.dll',
+    'api-ms-win-core-path-': 'kernelbase_ros.dll',
+    'api-ms-win-downlevel-user32-': 'user32.dll',
+    'api-ms-win-downlevel-normaliz-': 'normaliz.dll',
+    'api-ms-win-mm-time-': 'winmm.dll',
 }
 
 OUTPUT_HEADER = """/*
