@@ -581,9 +581,20 @@ FindFirstFileExA(IN LPCSTR lpFileName,
     WIN32_FIND_DATAW FindFileDataW;
     LPWIN32_FIND_DATAA lpFindFileDataA = (LPWIN32_FIND_DATAA)lpFindFileData;
 
+#ifndef FIND_FIRST_EX_LARGE_FETCH
+#define FIND_FIRST_EX_LARGE_FETCH           0x00000002
+#endif
+#ifndef FIND_FIRST_EX_ON_DISK_ENTRIES_ONLY
+#define FIND_FIRST_EX_ON_DISK_ENTRIES_ONLY  0x00000004
+#endif
+    /* FIND_FIRST_EX_LARGE_FETCH (Win7) only asks for bigger buffers, and
+     * FIND_FIRST_EX_ON_DISK_ENTRIES_ONLY (Win8) is about placeholder files,
+     * which we don't have: both can be ignored. Chromium lists directories
+     * with FIND_FIRST_EX_LARGE_FETCH. */
     if ((fInfoLevelId != FindExInfoStandard && fInfoLevelId != FindExInfoBasic) ||
         fSearchOp == FindExSearchLimitToDevices ||
-        dwAdditionalFlags & ~FIND_FIRST_EX_CASE_SENSITIVE /* only supported flag for now */)
+        dwAdditionalFlags & ~(FIND_FIRST_EX_CASE_SENSITIVE | FIND_FIRST_EX_LARGE_FETCH |
+                              FIND_FIRST_EX_ON_DISK_ENTRIES_ONLY))
     {
         SetLastError(fSearchOp == FindExSearchLimitToDevices
                                 ? ERROR_NOT_SUPPORTED
@@ -657,9 +668,20 @@ FindFirstFileExW(IN LPCWSTR lpFileName,
 
     TRACE("FindFirstFileExW(lpFileName %S)\n", lpFileName);
 
+#ifndef FIND_FIRST_EX_LARGE_FETCH
+#define FIND_FIRST_EX_LARGE_FETCH           0x00000002
+#endif
+#ifndef FIND_FIRST_EX_ON_DISK_ENTRIES_ONLY
+#define FIND_FIRST_EX_ON_DISK_ENTRIES_ONLY  0x00000004
+#endif
+    /* FIND_FIRST_EX_LARGE_FETCH (Win7) only asks for bigger buffers, and
+     * FIND_FIRST_EX_ON_DISK_ENTRIES_ONLY (Win8) is about placeholder files,
+     * which we don't have: both can be ignored. Chromium lists directories
+     * with FIND_FIRST_EX_LARGE_FETCH. */
     if ((fInfoLevelId != FindExInfoStandard && fInfoLevelId != FindExInfoBasic) ||
         fSearchOp == FindExSearchLimitToDevices ||
-        dwAdditionalFlags & ~FIND_FIRST_EX_CASE_SENSITIVE /* only supported flag for now */)
+        dwAdditionalFlags & ~(FIND_FIRST_EX_CASE_SENSITIVE | FIND_FIRST_EX_LARGE_FETCH |
+                              FIND_FIRST_EX_ON_DISK_ENTRIES_ONLY))
     {
         SetLastError(fSearchOp == FindExSearchLimitToDevices
                                 ? ERROR_NOT_SUPPORTED
