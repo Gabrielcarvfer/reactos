@@ -463,11 +463,11 @@ FindNextFileW(IN HANDLE hFindFile,
                 FindFileData->NextDirInfo.DirInfo = NULL;
             }
 
-            if ((FindFileData->SearchOp != FindExSearchLimitToDirectories) ||
-                (DirInfo.FullDirInfo->FileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-            {
-                FoundFile = DirInfo;
-            }
+            /* FindExSearchLimitToDirectories is only a hint that file systems
+               may ignore, and Windows' do (NTFS, FAT): callers get the files
+               as well and filter them. Qt 6.8 asks for directories when it
+               lists plugins (files), and found none here. */
+            FoundFile = DirInfo;
         } while ( FoundFile.DirInfo == NULL && (FindFileData->NextDirInfo.DirInfo || FindFileData->HasMoreData) );
 
         if (FoundFile.DirInfo != NULL)
