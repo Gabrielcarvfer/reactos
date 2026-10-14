@@ -5410,4 +5410,54 @@ cleanup:
     return result;
 }
 
+/************************************************************************
+ *  RegCreateKeyTransactedW
+ *
+ * ReactOS has no kernel transaction manager: no program gets a transaction
+ * handle to pass here (CreateTransaction fails), so the key is created
+ * directly.
+ *
+ * @implemented
+ */
+LONG WINAPI
+RegCreateKeyTransactedW(HKEY hKey,
+                        LPCWSTR lpSubKey,
+                        DWORD Reserved,
+                        LPWSTR lpClass,
+                        DWORD dwOptions,
+                        REGSAM samDesired,
+                        LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                        PHKEY phkResult,
+                        LPDWORD lpdwDisposition,
+                        HANDLE hTransaction,
+                        PVOID pExtendedParemeter)
+{
+    if (hTransaction)
+        FIXME("Transaction %p ignored\n", hTransaction);
+    return RegCreateKeyExW(hKey, lpSubKey, Reserved, lpClass, dwOptions, samDesired,
+                           lpSecurityAttributes, phkResult, lpdwDisposition);
+}
+
+
+/************************************************************************
+ *  RegOpenKeyTransactedW
+ *
+ * Opens the key directly (see RegCreateKeyTransactedW)
+ *
+ * @implemented
+ */
+LONG WINAPI
+RegOpenKeyTransactedW(HKEY hKey,
+                      LPCWSTR lpSubKey,
+                      DWORD ulOptions,
+                      REGSAM samDesired,
+                      PHKEY phkResult,
+                      HANDLE hTransaction,
+                      PVOID pExtendedParemeter)
+{
+    if (hTransaction)
+        FIXME("Transaction %p ignored\n", hTransaction);
+    return RegOpenKeyExW(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+}
+
 /* EOF */

@@ -96,6 +96,8 @@ static const WELLKNOWNSID WellKnownSids[] =
     { {'M','E'}, WinMediumLabelSid, { SID_REVISION, 1, { SECURITY_MANDATORY_LABEL_AUTHORITY}, { SECURITY_MANDATORY_MEDIUM_RID } } },
     { {'H','I'}, WinHighLabelSid, { SID_REVISION, 1, { SECURITY_MANDATORY_LABEL_AUTHORITY}, { SECURITY_MANDATORY_HIGH_RID } } },
     { {'S','I'}, WinSystemLabelSid, { SID_REVISION, 1, { SECURITY_MANDATORY_LABEL_AUTHORITY}, { SECURITY_MANDATORY_SYSTEM_RID } } },
+    { {'O','W'}, WinCreatorOwnerRightsSid, { SID_REVISION, 1, { SECURITY_CREATOR_SID_AUTHORITY }, { SECURITY_CREATOR_OWNER_RIGHTS_RID } } },
+    { {'A','C'}, WinBuiltinAnyPackageSid, { SID_REVISION, 2, { SECURITY_APP_PACKAGE_AUTHORITY }, { SECURITY_APP_PACKAGE_BASE_RID, SECURITY_BUILTIN_PACKAGE_ANY_PACKAGE } } },
 };
 
 /* these SIDs must be constructed as relative to some domain - only the RID is well-known */
@@ -1073,6 +1075,58 @@ AddAccessAllowedAceEx(PACL pAcl,
                                       AceFlags,
                                       AccessMask,
                                       pSid);
+    if (!NT_SUCCESS(Status))
+    {
+        SetLastError(RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+/*
+ * Adds a mandatory label (integrity level) ACE to a system ACL.
+ *
+ * @implemented
+ */
+BOOL
+WINAPI
+AddMandatoryAce(PACL pAcl,
+                DWORD dwAceRevision,
+                DWORD AceFlags,
+                DWORD MandatoryPolicy,
+                PSID pLabelSid)
+{
+    static const SID_IDENTIFIER_AUTHORITY MandatoryLabelAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
+    struct
+    {
+        ACE_HEADER Header;
+        ACCESS_MASK Mask;
+        BYTE Sid[SECURITY_MAX_SID_SIZE];
+    } Ace;
+    NTSTATUS Status;
+    ULONG SidLength;
+
+    if (!RtlValidSid(pLabelSid) ||
+        memcmp(RtlIdentifierAuthoritySid(pLabelSid), &MandatoryLabelAuthority, sizeof(MandatoryLabelAuthority)))
+    {
+        SetLastError(ERROR_INVALID_SID);
+        return FALSE;
+    }
+    if (MandatoryPolicy & ~0x7 /* SYSTEM_MANDATORY_LABEL_VALID_MASK */)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    SidLength = RtlLengthSid(pLabelSid);
+    Ace.Header.AceType = SYSTEM_MANDATORY_LABEL_ACE_TYPE;
+    Ace.Header.AceFlags = (BYTE)AceFlags;
+    Ace.Header.AceSize = (WORD)(FIELD_OFFSET(SYSTEM_MANDATORY_LABEL_ACE, SidStart) + SidLength);
+    Ace.Mask = MandatoryPolicy;
+    RtlCopySid(SidLength, (PSID)Ace.Sid, pLabelSid);
+
+    Status = RtlAddAce(pAcl, dwAceRevision, MAXULONG, &Ace, Ace.Header.AceSize);
     if (!NT_SUCCESS(Status))
     {
         SetLastError(RtlNtStatusToDosError(Status));
