@@ -483,6 +483,42 @@ ObpChargeQuotaForObject(IN POBJECT_HEADER ObjectHeader,
     return STATUS_SUCCESS;
 }
 
+/*
+ * Whether setting this SACL needs ACCESS_SYSTEM_SECURITY (SeSecurityPrivilege).
+ * Since Vista a SACL can hold the mandatory integrity label of the object,
+ * which any caller may set (Windows only refuses a label above the caller's
+ * own integrity level; ReactOS has no integrity levels yet): only audit and
+ * alarm ACEs need the privilege. Programs like Chromium label their named
+ * pipes "untrusted" so that sandboxed processes can connect.
+ */
+static
+BOOLEAN
+ObpSaclNeedsPrivilege(
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor)
+{
+    BOOLEAN Present, Defaulted;
+    PACL Sacl;
+    PACE_HEADER Ace;
+    ULONG i;
+
+    if (!NT_SUCCESS(RtlGetSaclSecurityDescriptor(SecurityDescriptor, &Present, &Sacl, &Defaulted)) ||
+        !Present || !Sacl)
+    {
+        /* A NULL SACL removes auditing: that needs the privilege too */
+        return Present;
+    }
+
+    for (i = 0; i < Sacl->AceCount; i++)
+    {
+        if (!NT_SUCCESS(RtlGetAce(Sacl, i, (PVOID*)&Ace)))
+            return TRUE;
+        if (Ace->AceType != SYSTEM_MANDATORY_LABEL_ACE_TYPE)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 NTSTATUS
 NTAPI
 ObpValidateAccessMask(IN PACCESS_STATE AccessState)
@@ -495,7 +531,8 @@ ObpValidateAccessMask(IN PACCESS_STATE AccessState)
     {
         /* Check if the SD has a system ACL but hasn't been granted access to get/set it */
         if ((SecurityDescriptor->Control & SE_SACL_PRESENT) &&
-            !(AccessState->PreviouslyGrantedAccess & ACCESS_SYSTEM_SECURITY))
+            !(AccessState->PreviouslyGrantedAccess & ACCESS_SYSTEM_SECURITY) &&
+            ObpSaclNeedsPrivilege(SecurityDescriptor))
         {
             /* We're gonna need access */
             AccessState->RemainingDesiredAccess |= ACCESS_SYSTEM_SECURITY;

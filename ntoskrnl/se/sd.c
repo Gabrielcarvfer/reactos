@@ -615,6 +615,8 @@ SeQuerySecurityDescriptorInfo(
     SECURITY_DESCRIPTOR_CONTROL Control = 0;
     ULONG_PTR Current;
     ULONG SdLength;
+    /* SACL with only the mandatory label, for LABEL_SECURITY_INFORMATION */
+    ULONG LabelSaclBuffer[(sizeof(ACL) + sizeof(SYSTEM_MANDATORY_LABEL_ACE) + SECURITY_MAX_SID_SIZE) / sizeof(ULONG)];
 
     PAGED_CODE();
 
@@ -680,6 +682,54 @@ SeQuerySecurityDescriptorInfo(
         }
 
         Control |= (ObjectSd->Control & (SE_SACL_DEFAULTED | SE_SACL_PRESENT));
+    }
+    else if (*SecurityInformation & LABEL_SECURITY_INFORMATION)
+    {
+        /* The mandatory integrity label only (Vista+). An object without one is
+         * medium integrity, which is what we report then: like Windows does for
+         * the tokens of normal users, where programs (Chromium) expect a label. */
+        static const SID_IDENTIFIER_AUTHORITY LabelAuthority = { SECURITY_MANDATORY_LABEL_AUTHORITY };
+        PACL ObjectSacl = (ObjectSd->Control & SE_SACL_PRESENT) ? SepGetSaclFromDescriptor(ObjectSd) : NULL;
+        PACE_HEADER LabelAce = NULL;
+        ULONG i;
+
+        for (i = 0; ObjectSacl && i < ObjectSacl->AceCount; i++)
+        {
+            PACE_HEADER Ace;
+            if (NT_SUCCESS(RtlGetAce(ObjectSacl, i, (PVOID*)&Ace)) &&
+                Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE &&
+                Ace->AceSize <= sizeof(SYSTEM_MANDATORY_LABEL_ACE) + SECURITY_MAX_SID_SIZE)
+            {
+                LabelAce = Ace;
+                break;
+            }
+        }
+
+        Sacl = (PACL)LabelSaclBuffer;
+        RtlCreateAcl(Sacl, sizeof(LabelSaclBuffer), ACL_REVISION);
+        if (LabelAce)
+        {
+            RtlAddAce(Sacl, ACL_REVISION, MAXULONG, LabelAce, LabelAce->AceSize);
+        }
+        else
+        {
+            PSYSTEM_MANDATORY_LABEL_ACE Ace;
+            PISID Sid;
+
+            Ace = (PSYSTEM_MANDATORY_LABEL_ACE)(Sacl + 1);
+            Sid = (PISID)&Ace->SidStart;
+            RtlInitializeSid(Sid, (PSID_IDENTIFIER_AUTHORITY)&LabelAuthority, 1);
+            *RtlSubAuthoritySid(Sid, 0) = SECURITY_MANDATORY_MEDIUM_RID;
+            Ace->Header.AceType = SYSTEM_MANDATORY_LABEL_ACE_TYPE;
+            Ace->Header.AceFlags = 0;
+            Ace->Header.AceSize = (USHORT)(FIELD_OFFSET(SYSTEM_MANDATORY_LABEL_ACE, SidStart) + RtlLengthSid(Sid));
+            Ace->Mask = SYSTEM_MANDATORY_LABEL_NO_WRITE_UP;
+            Sacl->AceCount = 1;
+        }
+        /* The ACL only spans what it holds */
+        Sacl->AclSize = (USHORT)(sizeof(ACL) + ((PACE_HEADER)(Sacl + 1))->AceSize);
+        SaclLength = ROUND_UP(Sacl->AclSize, 4);
+        Control |= SE_SACL_PRESENT;
     }
 
     SdLength = OwnerLength + GroupLength + DaclLength +
