@@ -60,6 +60,8 @@ if(WOW64_I386_BUILD_DIR)
     # system32 (2) goes to SysWOW64, and the 32-bit side-by-side assemblies
     # (winsxs\x86_*, and their x86_* manifests) to the same place as there
     set(_wow64_dff ${WOW64_I386_BUILD_DIR}/boot/bootdata/packages/reactos.dff)
+    # (Read again when it changes: a new 32-bit DLL must reach SysWOW64)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_wow64_dff})
     file(STRINGS ${_wow64_dff} _wow64_dirs REGEX "^[0-9]+ = ")
     foreach(_line ${_wow64_dirs})
         if(_line MATCHES "^([0-9]+) = (.*)$")
