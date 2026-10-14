@@ -2320,6 +2320,23 @@ CmpSetVersionData(VOID)
                   ValueData.Buffer,
                   ValueData.Length + sizeof(WCHAR));
 
+#ifdef _WIN64
+    /* 64-bit ReactOS offers the functions of Windows 10, and says so in the
+     * shared user data (see ExpInitializeExecutive). These two values only
+     * exist since Windows 10, and installers check them (LibreOffice's MSI:
+     * "Windows 10 or newer is required") */
+    {
+        ULONG Number;
+
+        RtlInitUnicodeString(&ValueName, L"CurrentMajorVersionNumber");
+        Number = 10;
+        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_DWORD, &Number, sizeof(Number));
+        RtlInitUnicodeString(&ValueName, L"CurrentMinorVersionNumber");
+        Number = 0;
+        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_DWORD, &Number, sizeof(Number));
+    }
+#endif
+
     /* Set the 'BuildLab' value */
     RtlInitUnicodeString(&ValueName, L"BuildLab");
     RtlInitAnsiString(&TempString, NtBuildLab);
