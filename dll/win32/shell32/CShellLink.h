@@ -44,6 +44,7 @@ class CShellLink :
 //  public IServiceProvider,
 //  public IFilter,
     public IObjectWithSite,
+    public IPropertyStore,
 //  public ICustomizeInfoTip,
     public IShellPropSheetExt
 {
@@ -96,6 +97,14 @@ private:
 
     CComPtr<IUnknown>    m_site;
     CComPtr<IDropTarget> m_DropTarget;
+
+    /* IPropertyStore values (in memory only: not written to the .lnk yet) */
+    struct LINK_PROPERTY
+    {
+        PROPERTYKEY Key;
+        PROPVARIANT Value;
+    } *m_Properties;
+    DWORD m_PropertyCount;
 
     VOID Reset();
 
@@ -200,6 +209,13 @@ public:
     STDMETHOD(AddPages)(LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lParam) override;
     STDMETHOD(ReplacePage)(UINT uPageID, LPFNADDPROPSHEETPAGE pfnReplacePage, LPARAM lParam) override;
 
+    // IPropertyStore
+    STDMETHOD(GetCount)(DWORD *cProps) override;
+    STDMETHOD(GetAt)(DWORD iProp, PROPERTYKEY *pkey) override;
+    STDMETHOD(GetValue)(REFPROPERTYKEY key, PROPVARIANT *pv) override;
+    STDMETHOD(SetValue)(REFPROPERTYKEY key, REFPROPVARIANT propvar) override;
+    STDMETHOD(Commit)() override;
+
     // IObjectWithSite
     STDMETHOD(SetSite)(IUnknown *punk) override;
     STDMETHOD(GetSite)(REFIID iid, void **ppvSite) override;
@@ -233,6 +249,7 @@ BEGIN_COM_MAP(CShellLink)
 //  COM_INTERFACE_ENTRY_IID(IID_IServiceProvider, IServiceProvider)
 //  COM_INTERFACE_ENTRY_IID(IID_IFilter, IFilter)
     COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
+    COM_INTERFACE_ENTRY_IID(IID_IPropertyStore, IPropertyStore)
 //  COM_INTERFACE_ENTRY_IID(IID_ICustomizeInfoTip, ICustomizeInfoTip)
     COM_INTERFACE_ENTRY_IID(IID_IShellPropSheetExt, IShellPropSheetExt)
 END_COM_MAP()

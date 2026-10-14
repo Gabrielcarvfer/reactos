@@ -264,6 +264,7 @@ VOID CShellLink::Reset()
 }
 
 CShellLink::CShellLink()
+    : m_Properties(NULL), m_PropertyCount(0)
 {
     m_Header.dwSize = sizeof(m_Header);
     m_Header.clsid = CLSID_ShellLink;
@@ -303,6 +304,10 @@ CShellLink::CShellLink()
 CShellLink::~CShellLink()
 {
     TRACE("-- destroying IShellLink(%p)\n", this);
+
+    for (DWORD i = 0; i < m_PropertyCount; i++)
+        PropVariantClear(&m_Properties[i].Value);
+    HeapFree(GetProcessHeap(), 0, m_Properties);
 
     ILFree(m_pPidl);
 
@@ -3321,4 +3326,79 @@ cleanup:
         ImageList_Destroy(himl);
 
     return hNewIcon;
+}
+
+/**************************************************************************
+ * IPropertyStore: the properties of the link, such as the AppUserModelID
+ * that installers give it (Inno Setup). Kept in memory; not written to the
+ * .lnk file yet (its property store data block).
+ */
+HRESULT STDMETHODCALLTYPE CShellLink::GetCount(DWORD *cProps)
+{
+    if (!cProps)
+        return E_POINTER;
+    *cProps = m_PropertyCount;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetAt(DWORD iProp, PROPERTYKEY *pkey)
+{
+    if (!pkey)
+        return E_POINTER;
+    if (iProp >= m_PropertyCount)
+        return E_INVALIDARG;
+    *pkey = m_Properties[iProp].Key;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetValue(REFPROPERTYKEY key, PROPVARIANT *pv)
+{
+    if (!pv)
+        return E_POINTER;
+    for (DWORD i = 0; i < m_PropertyCount; i++)
+    {
+        if (IsEqualPropertyKey(m_Properties[i].Key, key))
+            return PropVariantCopy(pv, &m_Properties[i].Value);
+    }
+    /* A property that was not set is empty, not an error */
+    PropVariantInit(pv);
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::SetValue(REFPROPERTYKEY key, REFPROPVARIANT propvar)
+{
+    DWORD i;
+
+    for (i = 0; i < m_PropertyCount; i++)
+    {
+        if (IsEqualPropertyKey(m_Properties[i].Key, key))
+            break;
+    }
+
+    if (i == m_PropertyCount)
+    {
+        SIZE_T Size = (m_PropertyCount + 1) * sizeof(*m_Properties);
+        LINK_PROPERTY *NewProperties = (LINK_PROPERTY *)(m_Properties
+            ? HeapReAlloc(GetProcessHeap(), 0, m_Properties, Size)
+            : HeapAlloc(GetProcessHeap(), 0, Size));
+        if (!NewProperties)
+            return E_OUTOFMEMORY;
+        m_Properties = NewProperties;
+        m_Properties[i].Key = key;
+        PropVariantInit(&m_Properties[i].Value);
+        m_PropertyCount++;
+    }
+    else
+    {
+        PropVariantClear(&m_Properties[i].Value);
+    }
+
+    m_bDirty = TRUE;
+    return PropVariantCopy(&m_Properties[i].Value, &propvar);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::Commit()
+{
+    /* Saved with the link (IPersistFile::Save) */
+    return S_OK;
 }
