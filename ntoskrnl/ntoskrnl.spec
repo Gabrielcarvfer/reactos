@@ -1663,3 +1663,18 @@
 @ stdcall -arch=arm __rt_udiv()
 @ stdcall -arch=arm __rt_udiv64()
 @ stdcall -arch=arm __rt_srsh()
+
+# Kernel AddressSanitizer (mm/ARM3/kasan.c), for modules built with KASAN_MODULES
+@ cdecl __asan_load1_noabort(ptr)
+@ cdecl __asan_load2_noabort(ptr)
+@ cdecl __asan_load4_noabort(ptr)
+@ cdecl __asan_load8_noabort(ptr)
+@ cdecl __asan_load16_noabort(ptr)
+@ cdecl __asan_loadN_noabort(ptr long)
+@ cdecl __asan_store1_noabort(ptr)
+@ cdecl __asan_store2_noabort(ptr)
+@ cdecl __asan_store4_noabort(ptr)
+@ cdecl __asan_store8_noabort(ptr)
+@ cdecl __asan_store16_noabort(ptr)
+@ cdecl __asan_storeN_noabort(ptr long)
+@ cdecl __asan_handle_no_return()

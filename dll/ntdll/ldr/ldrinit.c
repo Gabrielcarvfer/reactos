@@ -1813,6 +1813,25 @@ LdrpInitializeExecutionOptions(PUNICODE_STRING ImagePathName, PPEB Peb, PHANDLE 
         if (Peb->MinimumStackCommit < MinimumStackCommit)
             Peb->MinimumStackCommit = MinimumStackCommit;
 
+        /* AddressSanitizer (dll/ntdll/rtl/asan.c), for this program */
+        LdrQueryImageFileKeyOption(KeyHandle,
+                                   L"AsanFlags",
+                                   REG_DWORD,
+                                   &LdrpAsanFlags,
+                                   sizeof(LdrpAsanFlags),
+                                   NULL);
+
+        /* The Windows version to report (LdrpApplyVersionLayer) */
+        if (!NT_SUCCESS(LdrQueryImageFileKeyOption(KeyHandle,
+                                                   L"VersionLayer",
+                                                   REG_SZ,
+                                                   LdrpVersionLayer,
+                                                   sizeof(LdrpVersionLayer) - sizeof(WCHAR),
+                                                   NULL)))
+        {
+            LdrpVersionLayer[0] = UNICODE_NULL;
+        }
+
         /* Set the global flag */
         Status = LdrQueryImageFileKeyOption(KeyHandle,
                                             L"GlobalFlag",
@@ -2450,6 +2469,35 @@ LdrpInitializeProcess(IN PCONTEXT Context,
         DPRINT1("Failed to create process heap\n");
         return STATUS_NO_MEMORY;
     }
+
+    /* AddressSanitizer, if this program has it in its options */
+    if (LdrpAsanFlags)
+        RtlpAsanInitialize(LdrpAsanFlags);
+
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    /* A 64-bit program started by a 32-bit one inherits the program folders
+     * that WoW64 gave the 32-bit one: use the 64-bit ones again */
+    if (!LdrpIsWow64Process)
+    {
+        static const PCWSTR Vars[][2] =
+        {
+            { L"ProgramFiles", L"ProgramW6432" },
+            { L"CommonProgramFiles", L"CommonProgramW6432" },
+        };
+        WCHAR Buffer[MAX_PATH];
+        UNICODE_STRING Name, From, Value;
+        ULONG i;
+
+        for (i = 0; i < RTL_NUMBER_OF(Vars); i++)
+        {
+            RtlInitUnicodeString(&Name, Vars[i][0]);
+            RtlInitUnicodeString(&From, Vars[i][1]);
+            RtlInitEmptyUnicodeString(&Value, Buffer, sizeof(Buffer) - sizeof(WCHAR));
+            if (NT_SUCCESS(RtlQueryEnvironmentVariable_U(NULL, &From, &Value)))
+                RtlSetEnvironmentVariable(NULL, &Name, &Value);
+        }
+    }
+#endif
 
     Status = RtlpInitializeLocaleTable();
     if (!NT_SUCCESS(Status))
@@ -3102,6 +3150,11 @@ LdrpInit(PCONTEXT Context,
             /* Initialize the Process */
             LoaderStatus = LdrpInitializeProcess(Context,
                                                  SystemArgument1);
+
+            /* AddressSanitizer: from now on, it records where blocks are
+             * allocated (walking the first frames is not safe before) */
+            if (RtlpAsanEnabled)
+                RtlpAsanCaptureStacks = TRUE;
 
             /* Check for success and if MinimumStackCommit was requested */
             if (NT_SUCCESS(LoaderStatus) && Peb->MinimumStackCommit)

@@ -20,6 +20,7 @@
 /* INCLUDES *****************************************************************/
 
 #include <rtl.h>
+#include <reactos/rtlasan.h>
 #include <heap.h>
 
 #define NDEBUG
@@ -2064,8 +2065,9 @@ RtlpAllocateNonDedicated(PHEAP Heap,
  * 0x7d030f60--invalid flags in RtlHeapAllocate
  * @implemented
  */
+/* (the public RtlAllocateHeap is in asan.c: in ASan mode, it adds red zones) */
 PVOID NTAPI
-RtlAllocateHeap(IN PVOID HeapPtr,
+RtlpAllocateHeapRaw(IN PVOID HeapPtr,
                 IN ULONG Flags,
                 IN SIZE_T Size)
 {
@@ -2283,7 +2285,7 @@ RtlAllocateHeap(IN PVOID HeapPtr,
  *
  * @implemented
  */
-BOOLEAN NTAPI RtlFreeHeap(
+BOOLEAN NTAPI RtlpFreeHeapRaw(
    HANDLE HeapPtr, /* [in] Handle of heap */
    ULONG Flags,   /* [in] Heap freeing flags */
    PVOID Ptr     /* [in] Address of memory to free */
@@ -2683,7 +2685,7 @@ RtlpGetExtraStuffPointer(PHEAP_ENTRY HeapEntry)
  * @implemented
  */
 PVOID NTAPI
-RtlReAllocateHeap(HANDLE HeapPtr,
+RtlpReAllocateHeapRaw(HANDLE HeapPtr,
                   ULONG Flags,
                   PVOID Ptr,
                   SIZE_T Size)
@@ -3196,7 +3198,7 @@ RtlUnlockHeap(HANDLE HeapPtr)
  * @implemented
  */
 SIZE_T NTAPI
-RtlSizeHeap(
+RtlpSizeHeapRaw(
    HANDLE HeapPtr,
    ULONG Flags,
    PVOID Ptr
@@ -3738,6 +3740,9 @@ BOOLEAN NTAPI RtlValidateHeap(
     BOOLEAN HeapLocked = FALSE;
     BOOLEAN HeapValid;
 
+    /* (an ASan block: the heap knows it by its raw pointer) */
+    Block = RtlpAsanToRawPointer(Block);
+
     /* Check for page heap */
     if (Heap->ForceFlags & HEAP_FLAG_PAGE_ALLOCS)
         return RtlpDebugPageHeapValidate(HeapPtr, Flags, Block);
@@ -3824,6 +3829,9 @@ RtlSetUserValueHeap(IN PVOID HeapHandle,
     PHEAP_ENTRY_EXTRA Extra;
     BOOLEAN HeapLocked = FALSE, ValueSet = FALSE;
 
+    /* (an ASan block: the heap knows it by its raw pointer) */
+    BaseAddress = RtlpAsanToRawPointer(BaseAddress);
+
     /* Force flags */
     Flags |= Heap->ForceFlags;
 
@@ -3886,6 +3894,9 @@ RtlSetUserFlagsHeap(IN PVOID HeapHandle,
     PHEAP_ENTRY HeapEntry;
     BOOLEAN HeapLocked = FALSE;
 
+    /* (an ASan block: the heap knows it by its raw pointer) */
+    BaseAddress = RtlpAsanToRawPointer(BaseAddress);
+
     /* Force flags */
     Flags |= Heap->ForceFlags;
 
@@ -3941,6 +3952,9 @@ RtlGetUserInfoHeap(IN PVOID HeapHandle,
     PHEAP_ENTRY HeapEntry;
     PHEAP_ENTRY_EXTRA Extra;
     BOOLEAN HeapLocked = FALSE;
+
+    /* (an ASan block: the heap knows it by its raw pointer) */
+    BaseAddress = RtlpAsanToRawPointer(BaseAddress);
 
     /* Force flags */
     Flags |= Heap->ForceFlags;

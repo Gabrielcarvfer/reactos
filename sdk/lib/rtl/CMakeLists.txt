@@ -52,6 +52,7 @@ list(APPEND SOURCE
     exception.c
     generictable.c
     handle.c
+    asan.c
     heap.c
     heapdbg.c
     heappage.c

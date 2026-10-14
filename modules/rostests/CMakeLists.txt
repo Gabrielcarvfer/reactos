@@ -19,6 +19,7 @@ add_subdirectory(apitests)
 #add_subdirectory(dibtests)
 add_subdirectory(drivers)
 #add_subdirectory(dxtest)
+add_subdirectory(kasantest)
 if(MSVC OR NOT ARCH STREQUAL "amd64") # FIXME build is broken with new x64 PSEH
 add_subdirectory(kmtests)
 endif()

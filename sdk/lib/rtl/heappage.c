@@ -14,6 +14,7 @@
 /* INCLUDES *****************************************************************/
 
 #include <rtl.h>
+#include <reactos/rtlasan.h>
 #include <heap.h>
 #include <reactos/verifier.h>
 
@@ -1296,7 +1297,7 @@ RtlpDphFreeDelayedBlocksFromHeap(PDPH_HEAP_ROOT DphRoot,
             RtlpDphNumberOfDelayedFreeBlocks--;
 
             /* Free the normal heap */
-            RtlFreeHeap(NormalHeap, 0, BlockInfo);
+            RtlpFreeHeapRaw(NormalHeap, 0, BlockInfo);
         }
 
         /* Move to the next one */

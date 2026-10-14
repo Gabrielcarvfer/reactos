@@ -15,6 +15,9 @@
 #define MODULE_INVOLVED_IN_ARM3
 #include <mm/ARM3/miarm.h>
 
+/* KASAN (kasan.c) */
+BOOLEAN NTAPI KasanIsBlock(IN PVOID P);
+
 #undef ExAllocatePoolWithQuota
 #undef ExAllocatePoolWithQuotaTag
 
@@ -1862,6 +1865,10 @@ ExReturnPoolQuota(IN PVOID P)
         return;
     }
 
+    /* (KASAN blocks are never charged) */
+    if (KasanIsBlock(P))
+        return;
+
     Entry = P;
     Entry--;
     ASSERT((ULONG_PTR)Entry % POOL_BLOCK_SIZE == 0);
@@ -1901,10 +1908,12 @@ ExReturnPoolQuota(IN PVOID P)
  */
 PVOID
 NTAPI
-ExAllocatePoolWithTag(IN POOL_TYPE PoolType,
-                      IN SIZE_T NumberOfBytes,
-                      IN ULONG Tag)
+ExpAllocatePoolWithTagRaw(IN POOL_TYPE PoolType,
+                          IN SIZE_T NumberOfBytes,
+                          IN ULONG Tag)
 {
+    /* (the public ExAllocatePoolWithTag is in kasan.c: with the boot option
+     * KASAN, it adds red zones to small blocks) */
     PPOOL_DESCRIPTOR PoolDesc;
     PLIST_ENTRY ListHead;
     PPOOL_HEADER Entry, NextEntry, FragmentEntry;
@@ -2491,8 +2500,8 @@ ExAllocatePool(POOL_TYPE PoolType,
  */
 VOID
 NTAPI
-ExFreePoolWithTag(IN PVOID P,
-                  IN ULONG TagToFree)
+ExpFreePoolWithTagRaw(IN PVOID P,
+                      IN ULONG TagToFree)
 {
     PPOOL_HEADER Entry, NextEntry;
     USHORT BlockSize;
@@ -2915,15 +2924,7 @@ ExFreePoolWithTag(IN PVOID P,
 /*
  * @implemented
  */
-VOID
-NTAPI
-ExFreePool(PVOID P)
-{
-    //
-    // Just free without checking for the tag
-    //
-    ExFreePoolWithTag(P, 0);
-}
+/* (ExFreePool is in kasan.c, with ExFreePoolWithTag) */
 
 /*
  * @unimplemented
@@ -3030,9 +3031,9 @@ ExAllocatePoolWithQuotaTag(IN POOL_TYPE PoolType,
     }
 
     //
-    // Allocate the pool buffer now
+    // Allocate the pool buffer now (not a KASAN block: its pool header is used)
     //
-    Buffer = ExAllocatePoolWithTag(PoolType, NumberOfBytes, Tag);
+    Buffer = ExpAllocatePoolWithTagRaw(PoolType, NumberOfBytes, Tag);
 
     //
     // If the buffer is page-aligned, this is a large page allocation and we

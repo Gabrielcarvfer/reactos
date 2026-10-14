@@ -387,6 +387,39 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     add_subdirectory(sdk/tools/wpp)
     add_subdirectory(win32ss)
 
+    # AddressSanitizer checks in these modules (;-separated target names): every
+    # memory access calls the ntdll runtime (dll/ntdll/rtl/asan.c). It reports
+    # when the program has AsanFlags = 1 in its Image File Execution Options.
+    set(ASAN_MODULES "" CACHE STRING "Modules built with AddressSanitizer checks")
+    foreach(_module ${ASAN_MODULES})
+        if(NOT TARGET ${_module})
+            message(WARNING "ASAN_MODULES: no module ${_module}")
+            continue()
+        endif()
+        target_compile_options(${_module} PRIVATE
+            "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=kernel-address>"
+            "$<$<COMPILE_LANGUAGE:C,CXX>:--param=asan-instrumentation-with-call-threshold=0>"
+            "$<$<COMPILE_LANGUAGE:C,CXX>:--param=asan-stack=0>"
+            "$<$<COMPILE_LANGUAGE:C,CXX>:--param=asan-globals=0>")
+        add_importlibs(${_module} ntdll)
+    endforeach()
+
+    # The same for kernel-mode modules (drivers): the runtime is in ntoskrnl
+    # (ntoskrnl/mm/ARM3/kasan.c) and reports with the boot option KASAN.
+    set(KASAN_MODULES "" CACHE STRING "Kernel modules built with AddressSanitizer checks")
+    foreach(_module ${KASAN_MODULES})
+        if(NOT TARGET ${_module})
+            message(WARNING "KASAN_MODULES: no module ${_module}")
+            continue()
+        endif()
+        target_compile_options(${_module} PRIVATE
+            "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=kernel-address>"
+            "$<$<COMPILE_LANGUAGE:C,CXX>:--param=asan-instrumentation-with-call-threshold=0>"
+            "$<$<COMPILE_LANGUAGE:C,CXX>:--param=asan-stack=0>"
+            "$<$<COMPILE_LANGUAGE:C,CXX>:--param=asan-globals=0>")
+        add_importlibs(${_module} ntoskrnl)
+    endforeach()
+
     # Create the registry hives
     create_registry_hives()
 

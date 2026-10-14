@@ -1399,6 +1399,13 @@ Phase1InitializationDiscard(IN PVOID Context)
     /* Get the SOS setting */
     SosEnabled = (CommandLine && strstr(CommandLine, "SOS") != NULL);
 
+    /* The kernel AddressSanitizer for the pool (mm/ARM3/kasan.c) */
+    if (CommandLine && strstr(CommandLine, "KASAN") != NULL)
+    {
+        VOID NTAPI KasanInitialize(VOID);
+        KasanInitialize();
+    }
+
     /* Setup the boot video driver */
     InbvEnableBootDriver(!NoGuiBoot);
     InbvDriverInitialize(LoaderBlock, IDB_MAX_RESOURCES);

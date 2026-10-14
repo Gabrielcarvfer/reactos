@@ -9,6 +9,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <rtl.h>
+#include <reactos/rtlasan.h>
 #include <heap.h>
 
 #define NDEBUG
@@ -174,7 +175,7 @@ RtlDebugAllocateHeap(PVOID HeapPtr,
     RtlpValidateHeap(Heap, FALSE);
 
     /* Call main routine to do the stuff */
-    Result = RtlAllocateHeap(HeapPtr, Flags, Size);
+    Result = RtlpAllocateHeapRaw(HeapPtr, Flags, Size);
 
     /* Validate heap headers */
     RtlpValidateHeapHeaders(Heap, TRUE);
@@ -247,7 +248,7 @@ RtlDebugReAllocateHeap(HANDLE HeapPtr,
     if (RtlpValidateHeapEntry(Heap, HeapEntry))
     {
         /* Call main routine to do the stuff */
-        Result = RtlReAllocateHeap(HeapPtr, Flags, Ptr, Size);
+        Result = RtlpReAllocateHeapRaw(HeapPtr, Flags, Ptr, Size);
 
         if (Result)
         {
@@ -305,7 +306,7 @@ RtlDebugFreeHeap(HANDLE HeapPtr,
     if (RtlpValidateHeapEntry(Heap, HeapEntry))
     {
         /* If it succeeded - call the main routine */
-        Result = RtlFreeHeap(HeapPtr, Flags, Ptr);
+        Result = RtlpFreeHeapRaw(HeapPtr, Flags, Ptr);
 
         /* Validate heap headers and then heap itself */
         RtlpValidateHeapHeaders(Heap, TRUE);
@@ -533,7 +534,7 @@ RtlDebugSizeHeap(HANDLE HeapPtr,
     if (RtlpValidateHeapEntry(Heap, HeapEntry))
     {
         /* If it succeeded - call the main routine */
-        Result = RtlSizeHeap(HeapPtr, Flags, Ptr);
+        Result = RtlpSizeHeapRaw(HeapPtr, Flags, Ptr);
     }
 
     /* Release the lock */
