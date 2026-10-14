@@ -127,3 +127,28 @@ BOOL WINAPI InitializeCriticalSectionEx(OUT LPCRITICAL_SECTION lpCriticalSection
     return TRUE;
 }
 
+
+BOOL
+WINAPI
+WaitOnAddress(
+    _In_ volatile VOID *Address,
+    _In_ PVOID CompareAddress,
+    _In_ SIZE_T AddressSize,
+    _In_opt_ DWORD dwMilliseconds)
+{
+    LARGE_INTEGER Timeout;
+    NTSTATUS Status;
+
+    if (dwMilliseconds != INFINITE)
+        Timeout.QuadPart = -(LONGLONG)dwMilliseconds * 10000;
+
+    Status = RtlWaitOnAddress(Address, CompareAddress, AddressSize,
+                              (dwMilliseconds != INFINITE) ? &Timeout : NULL);
+    if (Status != STATUS_SUCCESS)
+    {
+        /* STATUS_TIMEOUT included */
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+    return TRUE;
+}

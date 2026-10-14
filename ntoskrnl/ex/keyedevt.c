@@ -225,6 +225,12 @@ ExpReleaseOrWaitForKeyedEvent(
             RemoveEntryList(&CurrentThread->KeyedWaitChain);
             InitializeListHead(&CurrentThread->KeyedWaitChain);
         }
+        else
+        {
+            /* The other side took us out of the list and signaled us, and
+               it was told that we got its release (or wait): we did */
+            Status = STATUS_SUCCESS;
+        }
 
         /* Unlock the list */
         ExReleasePushLockExclusive(&KeyedEvent->HashTable[HashIndex].Lock);
