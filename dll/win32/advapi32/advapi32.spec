@@ -691,6 +691,7 @@
 @ stdcall TraceMessageVa() ntdll.EtwTraceMessageVa
 @ stdcall TreeResetNamedSecurityInfoA(str ptr ptr ptr ptr ptr ptr long ptr ptr ptr)
 @ stdcall TreeResetNamedSecurityInfoW(wstr long long ptr ptr ptr ptr long ptr long ptr)
+@ stdcall -version=0x600+ TreeSetNamedSecurityInfoW(wstr long long ptr ptr ptr ptr long ptr long ptr)
 @ stub TrusteeAccessToObjectA
 @ stub TrusteeAccessToObjectW
 @ stub UninstallApplication

@@ -1553,6 +1553,49 @@ TreeResetNamedSecurityInfoW(LPWSTR pObjectName,
     return ErrorCode;
 }
 
+#ifndef TREE_SEC_INFO_SET
+#define TREE_SEC_INFO_SET 1
+#define TREE_SEC_INFO_RESET 2
+#define TREE_SEC_INFO_RESET_KEEP_EXPLICIT 3
+#endif
+
+/*
+ * TreeSetNamedSecurityInfoW (Vista): set the security of an object and the
+ * objects under it, or reset them. Setting it on the root makes the system
+ * propagate the inheritable entries to the children.
+ *
+ * @implemented
+ */
+DWORD
+WINAPI
+TreeSetNamedSecurityInfoW(LPWSTR pObjectName,
+                          SE_OBJECT_TYPE ObjectType,
+                          SECURITY_INFORMATION SecurityInfo,
+                          PSID pOwner,
+                          PSID pGroup,
+                          PACL pDacl,
+                          PACL pSacl,
+                          DWORD dwAction,
+                          FN_PROGRESSW fnProgress,
+                          PROG_INVOKE_SETTING ProgressInvokeSetting,
+                          PVOID Args)
+{
+    switch (dwAction)
+    {
+        case TREE_SEC_INFO_SET:
+            return SetNamedSecurityInfoW(pObjectName, ObjectType, SecurityInfo,
+                                         pOwner, pGroup, pDacl, pSacl);
+
+        case TREE_SEC_INFO_RESET:
+        case TREE_SEC_INFO_RESET_KEEP_EXPLICIT:
+            return TreeResetNamedSecurityInfoW(pObjectName, ObjectType, SecurityInfo,
+                                               pOwner, pGroup, pDacl, pSacl,
+                                               dwAction == TREE_SEC_INFO_RESET_KEEP_EXPLICIT,
+                                               fnProgress, ProgressInvokeSetting, Args);
+    }
+    return ERROR_INVALID_PARAMETER;
+}
+
 #ifdef HAS_FN_PROGRESSW
 
 typedef struct _INTERNAL_FNPROGRESSW_DATA
