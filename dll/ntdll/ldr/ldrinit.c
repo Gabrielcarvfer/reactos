@@ -2136,6 +2136,9 @@ LdrpApplyVersionLayer(VOID)
         { L"WIN7SP1",  6, 1, 7601, 0x100, L"Service Pack 1" },
         { L"WIN8RTM",  6, 2, 9200, 0x000, L"" },
         { L"WIN81RTM", 6, 3, 9600, 0x000, L"" },
+        /* (Not compatibility layers on Windows: the versions themselves) */
+        { L"WIN10",   10, 0, 19045, 0x000, L"" },
+        { L"WIN11",   10, 0, 22631, 0x000, L"" },
     };
     static const UNICODE_STRING VarName = RTL_CONSTANT_STRING(L"ROS_COMPAT_WINVER");
     PPEB Peb = NtCurrentPeb();
