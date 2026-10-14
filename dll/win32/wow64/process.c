@@ -892,6 +892,18 @@ NTSTATUS WINAPI wow64_NtSetInformationProcess( UINT *args )
         }
         else return STATUS_INVALID_PARAMETER;
 
+    case ProcessAccessToken:   /* PROCESS_ACCESS_TOKEN: the token, then a thread handle */
+        if (len == 2 * sizeof(ULONG))
+        {
+            HANDLE info[2];
+
+            /* (Handles: sign-extended, like the pseudo ones) */
+            info[0] = LongToHandle( ((LONG *)ptr)[0] );
+            info[1] = LongToHandle( ((LONG *)ptr)[1] );
+            return NtSetInformationProcess( handle, class, info, sizeof(info) );
+        }
+        else return STATUS_INFO_LENGTH_MISMATCH;
+
     case ProcessInstrumentationCallback:   /* PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION */
         if (len == sizeof(PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION32))
         {
