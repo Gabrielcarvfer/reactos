@@ -146,6 +146,11 @@ class Thunks:
             if td and td.ptr == 1 and not td.dims and not td.base.startswith('struct ') and td.base not in ('void', 'VOID'):
                 if not (f.base.startswith('H') and g.resolve(f.base)[0] == 'handle'):
                     return self.param_kind(gen.Field(f.name, td.base, 1, [], None, td.inline))
+            elif (td and td.ptr == 1 and td.base.startswith('struct ') and td.base.endswith('__') and
+                  f.base not in ('HINSTANCE', 'HMODULE')):  # (module addresses: pointers)
+                # DECLARE_HANDLE (HWND = struct HWND__ *): a handle, sign-extended
+                # like on Windows (HWND_MESSAGE is (HWND)-3)
+                return ('handle', None)
             elif td and td.ptr == 1 and td.base.startswith('struct '):
                 return self.param_kind(gen.Field(f.name, td.base, 1, [], None, td.inline))
         if f.ptr:

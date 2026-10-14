@@ -796,6 +796,11 @@ NTSTATUS WINAPI wow64_NtSetInformationFile( UINT *args )
     case FileBasicInformation:   /* FILE_BASIC_INFORMATION */
     case FilePositionInformation:   /* FILE_POSITION_INFORMATION */
     case FileEndOfFileInformation:   /* FILE_END_OF_FILE_INFORMATION */
+#ifdef __REACTOS__
+    /* The same in 32 and 64 bits too (SetEndOfFile sets the allocation size) */
+    case FileAllocationInformation:   /* FILE_ALLOCATION_INFORMATION */
+    case FileShortNameInformation:   /* FILE_NAME_INFORMATION */
+#endif
     case FilePipeInformation:   /* FILE_PIPE_INFORMATION */
     case FileMailslotSetInformation:   /* FILE_MAILSLOT_SET_INFORMATION */
     case FileIoCompletionNotificationInformation:   /* FILE_IO_COMPLETION_NOTIFICATION_INFORMATION */
