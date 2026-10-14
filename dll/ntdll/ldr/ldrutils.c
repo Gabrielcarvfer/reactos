@@ -991,6 +991,31 @@ LdrpSetProtection(PVOID ViewBase,
     return STATUS_SUCCESS;
 }
 
+#ifdef _WIN64
+/*
+ * A .NET image of IL code only belongs to the .NET runtime, which reads it
+ * itself. Like Windows, neither load its imports nor call its entry point:
+ * only a stub for mscoree.dll, and in an "AnyCPU" (32-bit format) image
+ * loaded by a 64-bit process, 32-bit code. (.NET Core programs load their
+ * assemblies this way: Paint.NET's setup crashed in one.)
+ * In a 32-bit process, the .NET Framework relies on that stub.
+ */
+static
+BOOLEAN
+LdrpIsILOnlyImage(PVOID ViewBase)
+{
+    PIMAGE_COR20_HEADER CorHeader;
+    ULONG CorSize;
+
+    CorHeader = RtlImageDirectoryEntryToData(ViewBase,
+                                             TRUE,
+                                             IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR,
+                                             &CorSize);
+    return (CorHeader && CorSize >= sizeof(*CorHeader) &&
+            (CorHeader->Flags & COMIMAGE_FLAGS_ILONLY));
+}
+#endif
+
 /* NOTE: Not yet reviewed */
 NTSTATUS
 NTAPI
@@ -1196,6 +1221,18 @@ SkipCheck:
         return STATUS_INVALID_IMAGE_FORMAT;
     }
 
+#ifdef _WIN64
+    /* A 32-bit DLL cannot run in a 64-bit process (Windows: ERROR_BAD_EXE_FORMAT),
+     * unless it holds IL code only (see LdrpIsILOnlyImage) */
+    if (NtHeaders->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC &&
+        !LdrpIsILOnlyImage(ViewBase))
+    {
+        NtUnmapViewOfSection(NtCurrentProcess(), ViewBase);
+        NtClose(SectionHandle);
+        return STATUS_INVALID_IMAGE_FORMAT;
+    }
+#endif
+
     /* Allocate an entry */
     if (!(LdrEntry = LdrpAllocateDataTableEntry(ViewBase)))
     {
@@ -1213,27 +1250,12 @@ SkipCheck:
     LdrEntry->BaseDllName = BaseDllName;
     LdrEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(LdrEntry->DllBase);
 
-    /* A .NET image of IL code only belongs to the .NET runtime, which reads
-     * it itself. Like Windows, neither load its imports nor call its entry
-     * point: only a stub for mscoree.dll, and in an "AnyCPU" (32-bit format)
-     * image loaded by a 64-bit process, 32-bit code. (.NET Core programs
-     * load their assemblies this way: Paint.NET's setup crashed in one.)
-     * In a 32-bit process, the .NET Framework relies on that stub. */
+    /* (See LdrpIsILOnlyImage) */
 #ifdef _WIN64
+    if (LdrpIsILOnlyImage(ViewBase))
     {
-        PIMAGE_COR20_HEADER CorHeader;
-        ULONG CorSize;
-
-        CorHeader = RtlImageDirectoryEntryToData(ViewBase,
-                                                 TRUE,
-                                                 IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR,
-                                                 &CorSize);
-        if (CorHeader && CorSize >= sizeof(*CorHeader) &&
-            (CorHeader->Flags & COMIMAGE_FLAGS_ILONLY))
-        {
-            LdrEntry->Flags |= LDRP_COR_IMAGE;
-            LdrEntry->EntryPoint = NULL;
-        }
+        LdrEntry->Flags |= LDRP_COR_IMAGE;
+        LdrEntry->EntryPoint = NULL;
     }
 #endif
 
