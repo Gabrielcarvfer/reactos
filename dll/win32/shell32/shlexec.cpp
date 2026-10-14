@@ -786,7 +786,11 @@ static UINT_PTR SHELL_ExecuteW(const WCHAR *lpCmd, WCHAR *env, BOOL shWait,
     }
 
     BOOL createdProcess;
-    if (psei->lpVerb && !StrCmpIW(L"runas", psei->lpVerb))
+    /* "runas" asks for administrator rights. An administrator has them
+       already (no UAC): run it as is, like Windows does for an elevated
+       user, instead of asking which user should run it (installers ask this
+       of themselves: Wireshark, the Visual C++ runtime) */
+    if (psei->lpVerb && !StrCmpIW(L"runas", psei->lpVerb) && !IsUserAnAdmin())
     {
         HRESULT hr = PromptAndRunProcessAs(psei->hwnd, (LPWSTR)lpCmd, dwCreationFlags,
                                                  env, lpDirectory, &startup, &info);
