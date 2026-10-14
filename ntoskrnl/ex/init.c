@@ -1330,8 +1330,18 @@ ExpInitializeExecutive(IN ULONG Cpu,
     SharedUserData->TickCountMultiplier = ExpTickCountMultiplier;
 
     /* Set the OS Version */
+#ifdef _WIN64
+    /* 64-bit ReactOS offers the functions of Windows 10 (its DLLs export
+     * them). Programs read the version here too, not only from GetVersionEx:
+     * NSIS installers do (Notepad++'s: "doesn't support Windows Server 2003") */
+    SharedUserData->NtMajorVersion = 10;
+    SharedUserData->NtMinorVersion = 0;
+    /* NtBuildNumber (0x260, Windows 10 and later) */
+    *(PULONG)((ULONG_PTR)SharedUserData + 0x260) = 19045;
+#else
     SharedUserData->NtMajorVersion = NtMajorVersion;
     SharedUserData->NtMinorVersion = NtMinorVersion;
+#endif
 
     /* Set the machine type */
     SharedUserData->ImageNumberLow = IMAGE_FILE_MACHINE_NATIVE;
