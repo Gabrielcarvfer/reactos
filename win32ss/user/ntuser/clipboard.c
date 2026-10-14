@@ -676,6 +676,56 @@ cleanup:
     return cFormats;
 }
 
+/* The formats on the clipboard, without opening it (Vista) */
+BOOL
+APIENTRY
+NtUserGetUpdatedClipboardFormats(
+    PUINT lpuiFormats,
+    UINT cFormats,
+    PUINT pcFormatsOut)
+{
+    PWINSTATION_OBJECT pWinStaObj;
+    BOOL bRet = FALSE;
+    UINT i;
+
+    UserEnterShared();
+
+    pWinStaObj = IntGetWinStaForCbAccess();
+    if (!pWinStaObj)
+        goto cleanup;
+
+    _SEH2_TRY
+    {
+        ProbeForWrite(pcFormatsOut, sizeof(UINT), sizeof(UINT));
+        if (cFormats)
+            ProbeForWrite(lpuiFormats, cFormats * sizeof(UINT), sizeof(UINT));
+
+        *pcFormatsOut = pWinStaObj->cNumClipFormats;
+        if (pWinStaObj->cNumClipFormats > cFormats)
+        {
+            EngSetLastError(ERROR_INSUFFICIENT_BUFFER);
+        }
+        else
+        {
+            for (i = 0; i < pWinStaObj->cNumClipFormats; ++i)
+                lpuiFormats[i] = pWinStaObj->pClipBase[i].fmt;
+            bRet = TRUE;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        SetLastNtError(_SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    ObDereferenceObject(pWinStaObj);
+
+cleanup:
+    UserLeave();
+
+    return bRet;
+}
+
 BOOL NTAPI
 UserEmptyClipboard(VOID)
 {

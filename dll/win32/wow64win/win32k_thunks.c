@@ -9608,6 +9608,18 @@ NTSTATUS WINAPI wow64_NtGdiGetFontRealizationInfo( UINT *args )
     return (NTSTATUS)(ULONG_PTR)ret;
 }
 
+NTSTATUS WINAPI wow64_NtUserGetUpdatedClipboardFormats( UINT *args )
+{
+    void *p0 = get_ptr( &args );
+    ULONG p1 = get_ulong( &args );
+    void *p2 = get_ptr( &args );
+
+    BOOL ret;
+
+    ret = NtUserGetUpdatedClipboardFormats( (PUINT)p0, (UINT)p1, (PUINT)p2 );
+    return (NTSTATUS)(ULONG_PTR)ret;
+}
+
 /* NULL: not converted yet, see the list at the end */
 const ULONG_PTR wow64win_thunks[] =
 {
@@ -10351,6 +10363,7 @@ const ULONG_PTR wow64win_thunks[] =
     (ULONG_PTR)wow64_NtGdiGetFontFileData,
     (ULONG_PTR)wow64_NtGdiGetFontFileInfo,
     (ULONG_PTR)wow64_NtGdiGetFontRealizationInfo,
+    (ULONG_PTR)wow64_NtUserGetUpdatedClipboardFormats,
 };
 
 /* For the debug output of wow64.dll */
@@ -11096,6 +11109,7 @@ const char * const wow64win_names[] =
     "NtGdiGetFontFileData",
     "NtGdiGetFontFileInfo",
     "NtGdiGetFontRealizationInfo",
+    "NtUserGetUpdatedClipboardFormats",
 };
 
 const BYTE wow64win_args[] =
@@ -11840,9 +11854,10 @@ const BYTE wow64win_args[] =
     20,
     20,
     8,
+    12,
 };
 
-const ULONG wow64win_count = 740;
+const ULONG wow64win_count = 741;
 
 /* Not converted:
  * NtDxEngGetRedirectionBitmap: no prototype
