@@ -701,6 +701,46 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
         DPRINT1("GetUserProfileDirectoryW failed with error %lu\n", GetLastError());
     }
 
+    /* Set 'APPDATA' and 'LOCALAPPDATA' (which Windows has had since Vista)
+     * from the shell folders of the user, once the shell has written them */
+    {
+        static const struct
+        {
+            PCWSTR Folder;
+            PWSTR Variable;
+        } Folders[] =
+        {
+            { L"AppData",       L"APPDATA" },
+            { L"Local AppData", L"LOCALAPPDATA" },
+        };
+        static const PCWSTR Keys[] =
+        {
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+        };
+        ULONG i, j;
+
+        for (i = 0; i < ARRAYSIZE(Folders); i++)
+        {
+            for (j = 0; j < ARRAYSIZE(Keys); j++)
+            {
+                LONG Error;
+
+                if (RegOpenKeyExW(hKeyUser, Keys[j], 0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
+                    continue;
+                Length = sizeof(szValue) - sizeof(WCHAR);
+                Error = RegQueryValueExW(hKey, Folders[i].Folder, NULL, &dwType, (LPBYTE)szValue, &Length);
+                RegCloseKey(hKey);
+                if (Error != ERROR_SUCCESS || (dwType != REG_SZ && dwType != REG_EXPAND_SZ))
+                    continue;
+                szValue[Length / sizeof(WCHAR)] = UNICODE_NULL;
+                SetUserEnvironmentVariable(Environment, Folders[i].Variable, szValue,
+                                           (dwType == REG_EXPAND_SZ));
+                break;
+            }
+        }
+    }
+
     if (GetUserAndDomainName(hToken,
                              &lpUserName,
                              &lpDomainName))
