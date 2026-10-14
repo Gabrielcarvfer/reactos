@@ -78,6 +78,37 @@ HRESULT WINAPI GetDpiForMonitor(HMONITOR monitor, MONITOR_DPI_TYPE type, UINT *x
     if (GetDpiForMonitorInternal( monitor, type, x, y )) return S_OK;
     return HRESULT_FROM_WIN32( GetLastError() );
 }
+#else
+/* ReactOS has one DPI for all the monitors and never scales the windows of
+ * a program: every program is aware of the system DPI */
+HRESULT WINAPI GetProcessDpiAwareness(HANDLE process, PROCESS_DPI_AWARENESS *value)
+{
+    if (!value) return E_INVALIDARG;
+    *value = PROCESS_SYSTEM_DPI_AWARE;
+    return S_OK;
+}
+
+HRESULT WINAPI SetProcessDpiAwareness(PROCESS_DPI_AWARENESS value)
+{
+    if (value < PROCESS_DPI_UNAWARE || value > PROCESS_PER_MONITOR_DPI_AWARE) return E_INVALIDARG;
+    TRACE("%d: nothing to change\n", value);
+    return S_OK;
+}
+
+HRESULT WINAPI GetDpiForMonitor(HMONITOR monitor, MONITOR_DPI_TYPE type, UINT *x, UINT *y)
+{
+    HDC hdc;
+
+    if (!x || !y) return E_INVALIDARG;
+    if (type != MDT_EFFECTIVE_DPI && type != MDT_ANGULAR_DPI && type != MDT_RAW_DPI) return E_INVALIDARG;
+
+    hdc = GetDC(NULL);
+    if (!hdc) return E_FAIL;
+    *x = GetDeviceCaps(hdc, LOGPIXELSX);
+    *y = GetDeviceCaps(hdc, LOGPIXELSY);
+    ReleaseDC(NULL, hdc);
+    return S_OK;
+}
 #endif /* __REACTOS__ */
 
 HRESULT WINAPI GetScaleFactorForMonitor(HMONITOR monitor, DEVICE_SCALE_FACTOR *scale)
