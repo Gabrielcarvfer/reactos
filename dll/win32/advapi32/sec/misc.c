@@ -1067,6 +1067,14 @@ pSetSecurityInfoCheck(PSECURITY_DESCRIPTOR pSecurityDescriptor,
 
     if (SecurityInfo & DACL_SECURITY_INFORMATION)
     {
+        /* A DACL without entries is "no explicit entries" for MARTA on Windows,
+           which builds the new DACL itself, whatever the header says: WiX
+           Burn passes an all-zero ACL to reset a file to inherited rights,
+           which the kernel would reject (STATUS_INVALID_ACL) */
+        static ACL EmptyAcl = { ACL_REVISION, 0, sizeof(ACL), 0, 0 };
+        if (pDacl != NULL && pDacl->AceCount == 0 && !RtlValidAcl(pDacl))
+            pDacl = &EmptyAcl;
+
         if (pDacl != NULL)
         {
             if (SetSecurityDescriptorDacl(pSecurityDescriptor,
