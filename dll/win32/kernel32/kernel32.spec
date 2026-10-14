@@ -3,6 +3,7 @@
 @ stdcall ActivateActCtx(ptr ptr)
 @ stdcall AddAtomA(str)
 @ stdcall AddAtomW(wstr)
+@ stdcall -version=0x601+ AddDllDirectory(wstr)
 @ stdcall AddConsoleAliasA(str str str) ;check
 @ stdcall AddConsoleAliasW(wstr wstr wstr) ;check
 @ stdcall AddLocalAlternateComputerNameA(str ptr)
@@ -911,6 +912,7 @@
 @ stdcall OpenWaitableTimerW(long long wstr)
 @ stdcall OutputDebugStringA(str)
 @ stdcall OutputDebugStringW(wstr)
+@ stdcall -version=0x602+ PackageIdFromFullName(wstr long ptr ptr)
 @ stdcall PeekConsoleInputA(ptr ptr long ptr)
 @ stdcall PeekConsoleInputW(ptr ptr long ptr)
 @ stdcall PeekNamedPipe(long ptr long ptr ptr ptr)
@@ -989,6 +991,7 @@
 @ stub -version=0x600+ RemoveDirectoryTransactedA
 @ stub -version=0x600+ RemoveDirectoryTransactedW
 @ stdcall RemoveDirectoryW(wstr)
+@ stdcall -version=0x601+ RemoveDllDirectory(ptr)
 @ stdcall RemoveLocalAlternateComputerNameA(str long)
 @ stdcall RemoveLocalAlternateComputerNameW(wstr long)
 @ stub -version=0x600+ RemoveSecureMemoryCacheCallback
@@ -1078,6 +1081,7 @@
 @ stdcall SetCurrentDirectoryW(wstr)
 @ stdcall SetDefaultCommConfigA(str ptr long)
 @ stdcall SetDefaultCommConfigW(wstr ptr long)
+@ stdcall -version=0x601+ SetDefaultDllDirectories(long)
 @ stdcall SetDllDirectoryA(str)
 @ stdcall SetDllDirectoryW(wstr)
 @ stub -version=0x600+ SetDynamicTimeZoneInformation

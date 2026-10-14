@@ -679,6 +679,19 @@ GetPackageFamilyName(HANDLE hProcess,
 
 LONG
 WINAPI
+PackageIdFromFullName(PCWSTR packageFullName,
+                      UINT32 flags,
+                      UINT32 *bufferLength,
+                      BYTE *buffer)
+{
+    /* No package names exist to be parsed */
+    if (!packageFullName || !bufferLength)
+        return ERROR_INVALID_PARAMETER;
+    return APPMODEL_ERROR_NO_PACKAGE;
+}
+
+LONG
+WINAPI
 GetApplicationUserModelId(HANDLE hProcess,
                           UINT32 *ApplicationUserModelIdLength,
                           PWSTR ApplicationUserModelId)

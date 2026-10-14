@@ -280,6 +280,123 @@ BasepLoadLibraryAsDatafile(PWSTR Path, LPCWSTR Name, HMODULE *hModule)
 }
 
 /*
+ * The DLL directories a program adds (Windows 7 with KB2533623, Windows 8).
+ * LoadLibraryEx still searches the usual places, and then these: programs
+ * add them to find their own DLLs.
+ */
+typedef struct _BASEP_DLL_DIRECTORY
+{
+    LIST_ENTRY Link;
+    UNICODE_STRING Path;
+} BASEP_DLL_DIRECTORY, *PBASEP_DLL_DIRECTORY;
+
+static LIST_ENTRY BasepDllDirectories = { &BasepDllDirectories, &BasepDllDirectories };
+static DWORD BasepDefaultDllDirectories;
+
+#define LOAD_LIBRARY_SEARCH_FLAGS_ROS (0x00000200 /* APPLICATION_DIR */ | 0x00000400 /* USER_DIRS */ | \
+                                       0x00000800 /* SYSTEM32 */ | 0x00001000 /* DEFAULT_DIRS */)
+
+PVOID
+WINAPI
+AddDllDirectory(
+    _In_ PCWSTR NewDirectory)
+{
+    PBASEP_DLL_DIRECTORY Directory;
+    SIZE_T Length;
+
+    if (!NewDirectory ||
+        (RtlDetermineDosPathNameType_U(NewDirectory) != RtlPathTypeDriveAbsolute &&
+         RtlDetermineDosPathNameType_U(NewDirectory) != RtlPathTypeUncAbsolute))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    Length = (wcslen(NewDirectory) + 1) * sizeof(WCHAR);
+    Directory = RtlAllocateHeap(RtlGetProcessHeap(), 0, sizeof(*Directory) + Length);
+    if (!Directory)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return NULL;
+    }
+    Directory->Path.Buffer = (PWSTR)(Directory + 1);
+    Directory->Path.Length = (USHORT)(Length - sizeof(WCHAR));
+    Directory->Path.MaximumLength = (USHORT)Length;
+    RtlCopyMemory(Directory->Path.Buffer, NewDirectory, Length);
+
+    RtlEnterCriticalSection(NtCurrentPeb()->LoaderLock);
+    InsertTailList(&BasepDllDirectories, &Directory->Link);
+    RtlLeaveCriticalSection(NtCurrentPeb()->LoaderLock);
+    return Directory;
+}
+
+BOOL
+WINAPI
+RemoveDllDirectory(
+    _In_ PVOID Cookie)
+{
+    PLIST_ENTRY Entry;
+    BOOL Found = FALSE;
+
+    RtlEnterCriticalSection(NtCurrentPeb()->LoaderLock);
+    for (Entry = BasepDllDirectories.Flink; Entry != &BasepDllDirectories; Entry = Entry->Flink)
+    {
+        if (Entry == &((PBASEP_DLL_DIRECTORY)Cookie)->Link)
+        {
+            RemoveEntryList(Entry);
+            Found = TRUE;
+            break;
+        }
+    }
+    RtlLeaveCriticalSection(NtCurrentPeb()->LoaderLock);
+
+    if (!Found)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Cookie);
+    return TRUE;
+}
+
+BOOL
+WINAPI
+SetDefaultDllDirectories(
+    _In_ DWORD DirectoryFlags)
+{
+    if (!DirectoryFlags || (DirectoryFlags & ~LOAD_LIBRARY_SEARCH_FLAGS_ROS))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    BasepDefaultDllDirectories = DirectoryFlags;
+    return TRUE;
+}
+
+/* After the usual search failed: the directories the program added */
+static
+NTSTATUS
+BasepLoadFromAddedDllDirectories(
+    _In_ PUNICODE_STRING DllName,
+    _In_ PULONG DllCharacteristics,
+    _Out_ PVOID *BaseAddress)
+{
+    NTSTATUS Status = STATUS_DLL_NOT_FOUND;
+    PLIST_ENTRY Entry;
+
+    RtlEnterCriticalSection(NtCurrentPeb()->LoaderLock);
+    for (Entry = BasepDllDirectories.Flink; Entry != &BasepDllDirectories; Entry = Entry->Flink)
+    {
+        PBASEP_DLL_DIRECTORY Directory = CONTAINING_RECORD(Entry, BASEP_DLL_DIRECTORY, Link);
+        Status = LdrLoadDll(Directory->Path.Buffer, DllCharacteristics, DllName, BaseAddress);
+        if (Status != STATUS_DLL_NOT_FOUND)
+            break;
+    }
+    RtlLeaveCriticalSection(NtCurrentPeb()->LoaderLock);
+    return Status;
+}
+
+/*
  * @implemented
  */
 HINSTANCE
@@ -340,6 +457,15 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
         FreeString = TRUE;
     }
 
+    /* LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: also next to the DLL, which is what
+       LOAD_WITH_ALTERED_SEARCH_PATH does (the other LOAD_LIBRARY_SEARCH_*
+       flags only narrow the search, which stays the usual one) */
+    if ((dwFlags & 0x00000100 /* LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR */) &&
+        RtlDetermineDosPathNameType_U(DllName.Buffer) != RtlPathTypeRelative)
+    {
+        dwFlags |= LOAD_WITH_ALTERED_SEARCH_PATH;
+    }
+
     /* Compute the load path */
     SearchPath = BaseComputeProcessDllPath((dwFlags & LOAD_WITH_ALTERED_SEARCH_PATH) ?
                                            DllName.Buffer : NULL,
@@ -371,6 +497,8 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
                             &DllCharacteristics,
                             &DllName,
                             (PVOID*)&hInst);
+        if (Status == STATUS_DLL_NOT_FOUND && !IsListEmpty(&BasepDllDirectories))
+            Status = BasepLoadFromAddedDllDirectories(&DllName, &DllCharacteristics, (PVOID*)&hInst);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
