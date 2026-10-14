@@ -637,4 +637,24 @@ SHGetPropertyStoreFromParsingName(
     return hr;
 }
 
+/***********************************************************************
+ *   SHGetPropertyStoreForWindow [SHELL32.@]
+ *
+ * Windows 7 programs set their taskbar identity (System.AppUserModel.ID) in
+ * the property store of their windows. The taskbar does not group by it yet.
+ */
+EXTERN_C HRESULT WINAPI
+SHGetPropertyStoreForWindow(
+    _In_ HWND hwnd,
+    _In_ REFIID riid,
+    _Out_ void **ppv)
+{
+    TRACE("(%p,%s,%p)\n", hwnd, debugstr_guid(&riid), ppv);
+
+    if (!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+    return E_NOTIMPL;
+}
+
 #endif /* DLL_EXPORT_VERSION >= _WIN32_WINNT_VISTA */
