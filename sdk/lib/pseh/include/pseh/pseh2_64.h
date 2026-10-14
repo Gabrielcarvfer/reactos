@@ -41,8 +41,11 @@ __asm__(
     "\t.seh_pushreg %r14\n"
     "\tpush %r15\n"
     "\t.seh_pushreg %r15\n"
-    "\tsub $40, %rsp\n"
-    "\t.seh_stackalloc 40\n"
+    /* The funclet is code of the parent function: its calls put their stack
+     * arguments where the parent's outgoing area is, above rsp. Make room
+     * for them, so that they do not overwrite the registers saved above */
+    "\tsub $0x208, %rsp\n"
+    "\t.seh_stackalloc 0x208\n"
     "\t.seh_endprologue\n"
     /* rdx is the original stack pointer, fix it up to be the frame pointer */
     "\tsub %rax, %rdx\n"
@@ -52,7 +55,7 @@ __asm__(
     "\tjmp *%r8\n"
     "__seh2_global_filter_func_exit:\n"
     "\t.p2align 4\n"
-    "\tadd $40, %rsp\n"
+    "\tadd $0x208, %rsp\n"
     "\tpop %r15\n"
     "\tpop %r14\n"
     "\tpop %r13\n"

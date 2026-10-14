@@ -20,6 +20,10 @@ elseif((CMAKE_C_COMPILER_ID STREQUAL "GNU") AND (ARCH STREQUAL "amd64"))
     else()
         target_compile_options(pseh INTERFACE $<$<COMPILE_LANGUAGE:C,CXX>:-fplugin=$<TARGET_FILE:native-gcc_plugin_seh>>)
     endif()
+    # A scope covers the code between the labels of its try block: GCC must
+    # not move parts of that code elsewhere in the function (an exception
+    # there would find no handler). It does that when it reorders blocks.
+    target_compile_options(pseh INTERFACE $<$<COMPILE_LANGUAGE:C,CXX>:-fno-reorder-blocks -fno-reorder-blocks-and-partition>)
 else()
 
     if(USE_PSEH3)

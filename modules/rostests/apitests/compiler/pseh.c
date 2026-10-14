@@ -2834,6 +2834,32 @@ DEFINE_TEST(test_x64_filter_reads_local)
     return handled && (state == 2);
 }
 
+/* The filter calls a function with stack arguments (more than 4 on x64).
+ * They go where the parent function has its outgoing area: the filter
+ * trampoline must have room for them, or they overwrite the registers it
+ * saved for the exception dispatcher (which then crashed). */
+static int __declspec(noinline) many_args_filter(int a, int b, int c, int d, int e, int f, int g, int h)
+{
+    return (a + b + c + d + e + f + g + h == 36) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH;
+}
+
+DEFINE_TEST(test_filter_calls_with_stack_arguments)
+{
+    int handled = 0;
+
+    _SEH2_TRY
+    {
+        raise_after_catch();
+    }
+    _SEH2_EXCEPT(many_args_filter(1, 2, 3, 4, 5, 6, 7, 8))
+    {
+        handled = (_SEH2_GetExceptionCode() == 0xE0000001);
+    }
+    _SEH2_END;
+
+    return handled;
+}
+
 #define USE_TEST_NAME_(NAME_) # NAME_
 #define USE_TEST_NAME(NAME_) USE_TEST_NAME_(NAME_)
 #define USE_TEST(NAME_) { USE_TEST_NAME(NAME_), NAME_ }
@@ -3233,6 +3259,7 @@ START_TEST(pseh)
 		USE_TEST(test_PSEH3_bug2),
 		USE_TEST(test_x64_filter_frame),
 		USE_TEST(test_x64_filter_reads_local),
+		USE_TEST(test_filter_calls_with_stack_arguments),
 	};
 
 	size_t i;
