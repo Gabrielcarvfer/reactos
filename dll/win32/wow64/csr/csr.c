@@ -270,8 +270,11 @@ static VOID UpdateStaticServerData32(VOID)
         WCHAR SysWow64Buffer[MAX_PATH];
         UNICODE_STRING SysWow64;
 
-        /* A 32-bit program's system directory is SysWOW64 (GetSystemDirectory,
-         * the DLL search path, GetSystemWow64Directory) */
+        /* A 32-bit program's system directory is system32, as on Windows: the
+         * file system redirection sends it to SysWOW64, and turning it off
+         * reaches the real one (msi installing 64-bit files from a 32-bit
+         * process: they went to SysWOW64). SysWOW64 itself is the x86 system
+         * directory (GetSystemWow64Directory). */
         RtlInitEmptyUnicodeString(&SysWow64, SysWow64Buffer, sizeof(SysWow64Buffer) - sizeof(WCHAR));
         RtlAppendUnicodeStringToString(&SysWow64, &Base->WindowsDirectory);
         RtlAppendUnicodeToString(&SysWow64, L"\\SysWOW64");
@@ -279,13 +282,14 @@ static VOID UpdateStaticServerData32(VOID)
         SysWow64.MaximumLength = SysWow64.Length + sizeof(WCHAR);
 
         Size = sizeof(*Base32) + Base->WindowsDirectory.MaximumLength +
-               2 * SysWow64.MaximumLength + Base->NamedObjectDirectory.MaximumLength + 16;
+               Base->WindowsSystemDirectory.MaximumLength + SysWow64.MaximumLength +
+               Base->NamedObjectDirectory.MaximumLength + 16;
         Base32 = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Size);
         if (!Base32) return;
         BASE_STATIC_SERVER_DATA_64to32(Base32, Base);
         Strings = (PWCHAR)(Base32 + 1);
         Strings = CopyString32(&Base32->WindowsDirectory, &Base->WindowsDirectory, Strings);
-        Strings = CopyString32(&Base32->WindowsSystemDirectory, &SysWow64, Strings);
+        Strings = CopyString32(&Base32->WindowsSystemDirectory, &Base->WindowsSystemDirectory, Strings);
         Strings = CopyString32(&Base32->NamedObjectDirectory, &Base->NamedObjectDirectory, Strings);
         Strings = CopyString32(&Base32->WindowsSys32x86Directory, &SysWow64, Strings);
         /* FIXME: the INI file mapping (a tree of 64-bit structures) */
