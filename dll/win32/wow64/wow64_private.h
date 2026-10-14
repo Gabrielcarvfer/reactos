@@ -136,6 +136,7 @@ extern BOOLEAN wow64_is_current_process( HANDLE handle );
 extern BOOLEAN wow64_is_processor_feature_present( UINT feature );
 extern TEB32 *wow64_get_teb32(void);
 extern PEB32 *wow64_get_peb32(void);
+extern ULONG wow64_init_child64( HANDLE process );
 extern NTSTATUS wow64_init_process_reactos( SYSTEM_DLL_INIT_BLOCK **block );
 extern void wow64_init_thread_reactos( CONTEXT *context64, BOOL first_thread );
 NTSYSAPI NTSTATUS WINAPI NtResumeProcess( HANDLE process );

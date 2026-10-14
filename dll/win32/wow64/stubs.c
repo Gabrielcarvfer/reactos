@@ -142,7 +142,14 @@ static void put_new_process_peb( HANDLE process )
     ULONG_PTR wow64 = 0;
 
     NtQueryInformationProcess( process, ProcessWow64Information, &wow64, sizeof(wow64), NULL );
-    get_teb32()->Tib.ArbitraryUserPointer = (ULONG)(wow64 ? peb + 0x1000 : peb);
+    if (wow64) peb += 0x1000;
+    else
+    {
+        /* A 64-bit process: a page for the 32-bit PEB fields (see wow64_init_child64) */
+        ULONG peb32 = wow64_init_child64( process );
+        if (peb32) peb = peb32;
+    }
+    get_teb32()->Tib.ArbitraryUserPointer = (ULONG)peb;
 }
 
 NTSTATUS WINAPI wow64_NtCreateProcess( UINT *args )

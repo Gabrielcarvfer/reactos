@@ -412,6 +412,161 @@ static void WINAPI wow64_thread_start( void *param )
     /* Never runs: Wow64LdrpInitialize takes the thread over before */
 }
 
+/*
+ * A 64-bit program started by a 32-bit one. The 32-bit kernel32 writes the
+ * fields of the new PEB in the 32-bit layout (its process parameters among
+ * them, 32-bit ones too): it gets a page of its own to write them to, kept in
+ * the 64-bit PEB until the first thread of the process is created. Then the
+ * 64-bit process parameters are made from the 32-bit ones, and the thread
+ * starts at the entry point of the image (the 32-bit kernel32 knows only
+ * 32-bit addresses).
+ */
+#define CHILD64_MAGIC 0x34364843  /* "CH64" */
+
+/* The address that the 32-bit kernel32 takes for the PEB of the new
+ * 64-bit process (0 if there is no page for it) */
+ULONG wow64_init_child64( HANDLE process )
+{
+    PROCESS_BASIC_INFORMATION info;
+    ULONG magic = CHILD64_MAGIC;
+    SIZE_T size = 0x1000;
+    void *page = NULL;
+
+    if (NtQueryInformationProcess( process, ProcessBasicInformation, &info, sizeof(info), NULL ))
+        return 0;
+    if (NtAllocateVirtualMemory( process, &page, default_zero_bits, &size,
+                                 MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE ))
+        return 0;
+    if (NtWriteVirtualMemory( process, page, &magic, sizeof(magic), NULL ) ||
+        NtWriteVirtualMemory( process, &info.PebBaseAddress->ProcessParameters, &page, sizeof(page), NULL ))
+    {
+        size = 0;
+        NtFreeVirtualMemory( process, &page, &size, MEM_RELEASE );
+        return 0;
+    }
+    return PtrToUlong( page );
+}
+
+static NTSTATUS read_string32( HANDLE process, ULONG base, const UNICODE_STRING32 *str32,
+                               UNICODE_STRING *str )
+{
+    str->Length = str32->Length;
+    str->MaximumLength = str32->Length + sizeof(WCHAR);
+    str->Buffer = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, str->MaximumLength );
+    if (!str->Buffer) return STATUS_NO_MEMORY;
+    if (!str32->Buffer || !str32->Length) return STATUS_SUCCESS;
+    return NtReadVirtualMemory( process, ULongToPtr( base + str32->Buffer ), str->Buffer, str32->Length, NULL );
+}
+
+/* Make the 64-bit process parameters. FALSE: not a new 64-bit process */
+static BOOL put_child64_params( HANDLE process, PEB *peb, NTSTATUS *status )
+{
+    RTL_USER_PROCESS_PARAMETERS32 params32;
+    RTL_USER_PROCESS_PARAMETERS *params = NULL;
+    UNICODE_STRING strings[8];
+    const UNICODE_STRING32 *strings32[8];
+    void *page, *remote = NULL;
+    ULONG magic, addr32, base;
+    SIZE_T size;
+    UINT i;
+
+    if (NtReadVirtualMemory( process, &peb->ProcessParameters, &page, sizeof(page), NULL ) ||
+        !page || (ULONG_PTR)page > 0xffffffff ||
+        NtReadVirtualMemory( process, page, &magic, sizeof(magic), NULL ) || magic != CHILD64_MAGIC)
+        return FALSE;
+
+    *status = NtReadVirtualMemory( process, (char *)page + FIELD_OFFSET( PEB32, ProcessParameters ),
+                                   &addr32, sizeof(addr32), NULL );
+    if (!*status && !addr32) *status = STATUS_INVALID_PARAMETER;
+    if (!*status)
+        *status = NtReadVirtualMemory( process, ULongToPtr( addr32 ), &params32, sizeof(params32), NULL );
+    if (*status) return TRUE;
+
+    /* Not normalized: the string buffers are offsets from the parameters */
+    base = (params32.Flags & PROCESS_PARAMS_FLAG_NORMALIZED) ? 0 : addr32;
+    strings32[0] = &params32.ImagePathName;
+    strings32[1] = &params32.DllPath;
+    strings32[2] = &params32.CurrentDirectory.DosPath;
+    strings32[3] = &params32.CommandLine;
+    strings32[4] = &params32.WindowTitle;
+    strings32[5] = &params32.Desktop;
+    strings32[6] = &params32.ShellInfo;
+    strings32[7] = &params32.RuntimeInfo;
+    memset( strings, 0, sizeof(strings) );
+    for (i = 0; i < ARRAY_SIZE(strings) && !*status; i++)
+        *status = read_string32( process, base, strings32[i], &strings[i] );
+
+    /* (Our own environment is copied in too: it gets replaced) */
+    if (!*status)
+        *status = RtlCreateProcessParameters( &params, &strings[0], &strings[1], &strings[2], &strings[3],
+                                              NULL, &strings[4], &strings[5], &strings[6], &strings[7] );
+    for (i = 0; i < ARRAY_SIZE(strings); i++) RtlFreeHeap( GetProcessHeap(), 0, strings[i].Buffer );
+    if (*status) return TRUE;
+
+    /* (They come denormalized, ready to be copied) */
+    params->Flags            = params32.Flags & ~PROCESS_PARAMS_FLAG_NORMALIZED;
+    params->DebugFlags       = params32.DebugFlags;
+    params->ConsoleHandle    = LongToHandle( params32.ConsoleHandle );
+    params->ConsoleFlags     = params32.ConsoleFlags;
+    params->hStdInput        = LongToHandle( params32.hStdInput );
+    params->hStdOutput       = LongToHandle( params32.hStdOutput );
+    params->hStdError        = LongToHandle( params32.hStdError );
+    params->CurrentDirectory.Handle = LongToHandle( params32.CurrentDirectory.Handle );
+    params->Environment      = ULongToPtr( params32.Environment );
+    params->EnvironmentSize  = params32.EnvironmentSize;
+    params->dwX              = params32.dwX;
+    params->dwY              = params32.dwY;
+    params->dwXSize          = params32.dwXSize;
+    params->dwYSize          = params32.dwYSize;
+    params->dwXCountChars    = params32.dwXCountChars;
+    params->dwYCountChars    = params32.dwYCountChars;
+    params->dwFillAttribute  = params32.dwFillAttribute;
+    params->dwFlags          = params32.dwFlags;
+    params->wShowWindow      = params32.wShowWindow;
+
+    size = params->AllocationSize;
+    *status = NtAllocateVirtualMemory( process, &remote, 0, &size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
+    if (!*status)
+    {
+        params->AllocationSize = size;
+        *status = NtWriteVirtualMemory( process, remote, params, params->Size, NULL );
+    }
+    if (!*status)
+        *status = NtWriteVirtualMemory( process, &peb->ProcessParameters, &remote, sizeof(remote), NULL );
+    RtlDestroyProcessParameters( params );
+    return TRUE;
+}
+
+/* The first thread of a 64-bit process started by this one, or FALSE */
+static BOOL create_child64_thread( HANDLE process, BOOLEAN suspended, HANDLE *handle,
+                                   CLIENT_ID *id, NTSTATUS *status )
+{
+    PROCESS_BASIC_INFORMATION info;
+    IMAGE_DOS_HEADER dos;
+    IMAGE_NT_HEADERS64 nt;
+    void *module;
+
+    if (NtQueryInformationProcess( process, ProcessBasicInformation, &info, sizeof(info), NULL ) ||
+        !put_child64_params( process, info.PebBaseAddress, status ))
+        return FALSE;
+    if (*status) return TRUE;
+
+    *status = NtReadVirtualMemory( process, &info.PebBaseAddress->ImageBaseAddress, &module, sizeof(module), NULL );
+    if (!*status) *status = NtReadVirtualMemory( process, module, &dos, sizeof(dos), NULL );
+    if (!*status) *status = NtReadVirtualMemory( process, (char *)module + dos.e_lfanew, &nt, sizeof(nt), NULL );
+    if (!*status && nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+        *status = STATUS_INVALID_IMAGE_FORMAT;
+    if (*status) return TRUE;
+
+    /* (The stack of the 32-bit kernel32 stays unused) */
+    *status = RtlCreateUserThread( process, NULL, TRUE, 0, nt.OptionalHeader.SizeOfStackReserve,
+                                   nt.OptionalHeader.SizeOfStackCommit,
+                                   (PRTL_THREAD_START_ROUTINE)((char *)module + nt.OptionalHeader.AddressOfEntryPoint),
+                                   info.PebBaseAddress, handle, id );
+    if (!*status && !suspended) NtResumeThread( *handle, NULL );
+    return TRUE;
+}
+
 /**********************************************************************
  *           wow64_NtCreateThread
  *
@@ -440,6 +595,12 @@ NTSTATUS WINAPI wow64_NtCreateThread( UINT *args )
     (void)access;
     (void)attr32;
 
+    if (create_child64_thread( process, suspended, &handle, &id, &status ))
+    {
+        if (status) return status;
+        goto done;
+    }
+
     /* The start block goes to the process of the thread (the first thread of
      * a new process, created by its 32-bit parent, ignores it: it starts at
      * the entry point of its image, see wow64_init_thread_reactos) */
@@ -463,6 +624,7 @@ NTSTATUS WINAPI wow64_NtCreateThread( UINT *args )
     }
     if (!suspended) NtResumeThread( handle, NULL );
 
+done:
     *handle_ptr = HandleToULong( handle );
     if (id32)
     {
