@@ -1780,6 +1780,79 @@ LdrpInitializeDotLocalSupport(PRTL_USER_PROCESS_PARAMETERS ProcessParameters)
 }
 
 
+/*
+ * Windows version to report (ROS_COMPAT_WINVER=WIN7SP1 and the like, with the
+ * names of the Windows compatibility layers; inherited by child processes,
+ * and unlike __COMPAT_LAYER it does not involve the shim engine): report that
+ * Windows version through the PEB,
+ * which every version API (RtlGetVersion, GetVersionEx, VerifyVersionInfo)
+ * reads. Lets programs that refuse to run before a given Windows version, like
+ * Chromium, start when asked to.
+ */
+static
+VOID
+LdrpApplyVersionLayer(VOID)
+{
+    static const struct
+    {
+        PCWSTR Layer;
+        USHORT Major, Minor, Build, ServicePack;
+        PCWSTR CSDVersion;
+    } Layers[] =
+    {
+        { L"VISTARTM", 6, 0, 6000, 0x000, L"" },
+        { L"VISTASP1", 6, 0, 6001, 0x100, L"Service Pack 1" },
+        { L"VISTASP2", 6, 0, 6002, 0x200, L"Service Pack 2" },
+        { L"WIN7RTM",  6, 1, 7600, 0x000, L"" },
+        { L"WIN7SP1",  6, 1, 7601, 0x100, L"Service Pack 1" },
+        { L"WIN8RTM",  6, 2, 9200, 0x000, L"" },
+        { L"WIN81RTM", 6, 3, 9600, 0x000, L"" },
+    };
+    static const UNICODE_STRING VarName = RTL_CONSTANT_STRING(L"ROS_COMPAT_WINVER");
+    PPEB Peb = NtCurrentPeb();
+    WCHAR Buffer[128];
+    UNICODE_STRING Value;
+    ULONG i;
+
+    /* Pass the environment explicitly: with NULL the PEB lock would be taken,
+     * and it is not initialized yet at this point */
+    if (!Peb->ProcessParameters || !Peb->ProcessParameters->Environment)
+        return;
+    RtlInitEmptyUnicodeString(&Value, Buffer, sizeof(Buffer) - sizeof(WCHAR));
+    if (!NT_SUCCESS(RtlQueryEnvironmentVariable_U(Peb->ProcessParameters->Environment, &VarName, &Value)))
+        return;
+    Buffer[Value.Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+    /* Upper case by hand: the NLS case tables are not set up yet */
+    for (i = 0; Buffer[i]; i++)
+    {
+        if (Buffer[i] >= L'a' && Buffer[i] <= L'z')
+            Buffer[i] -= L'a' - L'A';
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(Layers); i++)
+    {
+        /* The variable is a space separated list of names */
+        PCWSTR Found = wcsstr(Buffer, Layers[i].Layer);
+        SIZE_T Len = wcslen(Layers[i].Layer);
+        if (!Found || (Found != Buffer && Found[-1] != L' ') ||
+            (Found[Len] != UNICODE_NULL && Found[Len] != L' '))
+        {
+            continue;
+        }
+
+        Peb->OSMajorVersion = Layers[i].Major;
+        Peb->OSMinorVersion = Layers[i].Minor;
+        Peb->OSBuildNumber = Layers[i].Build;
+        Peb->OSCSDVersion = Layers[i].ServicePack;
+        RtlInitUnicodeString(&Peb->CSDVersion, Layers[i].CSDVersion);
+        DPRINT1("LdrpApplyVersionLayer: %wZ reports Windows %u.%u.%u (%S)\n",
+                &Peb->ProcessParameters->ImagePathName, Layers[i].Major,
+                Layers[i].Minor, Layers[i].Build, Layers[i].Layer);
+        return;
+    }
+}
+
 NTSTATUS
 NTAPI
 LdrpInitializeProcess(IN PCONTEXT Context,
@@ -1898,6 +1971,9 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     /* Reset NLS Translations */
     RtlResetRtlTranslations(&NlsTable);
+
+    /* Windows version to report, if one was asked for (needs the NLS tables) */
+    LdrpApplyVersionLayer();
 
     /* Get the Image Config Directory */
     LoadConfig = RtlImageDirectoryEntryToData(Peb->ImageBaseAddress,
