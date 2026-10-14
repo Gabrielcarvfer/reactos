@@ -55,7 +55,60 @@ static const INFORMATION_CLASS_INFO SeTokenInformationClass[] = {
     IQS_SAME(TOKEN_AUDIT_POLICY_INFORMATION, ULONG, ICIF_SET | ICIF_SET_SIZE_VARIABLE),
     /* TokenOrigin */
     IQS_SAME(TOKEN_ORIGIN, ULONG, ICIF_QUERY | ICIF_SET),
+    /* TokenElevationType */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY),
+    /* TokenLinkedToken */
+    IQS_SAME(TOKEN_LINKED_TOKEN, ULONG, ICIF_QUERY),
+    /* TokenElevation */
+    IQS_SAME(TOKEN_ELEVATION, ULONG, ICIF_QUERY),
+    /* TokenHasRestrictions */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY),
+    /* TokenAccessInformation (not supported) */
+    IQS_NONE,
+    /* TokenVirtualizationAllowed */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY),
+    /* TokenVirtualizationEnabled */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY),
+    /* TokenIntegrityLevel */
+    IQS_SAME(TOKEN_MANDATORY_LABEL, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
+    /* TokenUIAccess */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY),
+    /* TokenMandatoryPolicy */
+    IQS_SAME(TOKEN_MANDATORY_POLICY, ULONG, ICIF_QUERY),
+    /* TokenLogonSid (not supported) */
+    IQS_NONE,
+    /* TokenIsAppContainer */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY),
+    /* TokenCapabilities */
+    IQS_SAME(TOKEN_GROUPS, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
+    /* TokenAppContainerSid */
+    IQS_SAME(PSID, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
+    /* TokenAppContainerNumber */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY),
 };
+
+/*
+ * Whether a token has the Administrators group enabled. ReactOS has no UAC:
+ * such a token is not split in two, it is "elevated" (as on Windows with UAC
+ * turned off), with a high integrity level; the other ones have a medium one.
+ */
+static
+BOOLEAN
+SepTokenIsAdmin(
+    _In_ PTOKEN Token)
+{
+    ULONG i;
+
+    for (i = 1; i < Token->UserAndGroupCount; i++)
+    {
+        if ((Token->UserAndGroups[i].Attributes & SE_GROUP_ENABLED) &&
+            RtlEqualSid(Token->UserAndGroups[i].Sid, SeAliasAdminsSid))
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
 
 /* PUBLIC FUNCTIONS *****************************************************************/
 
@@ -1068,6 +1121,107 @@ NtQueryInformationToken(
                     }
                     _SEH2_END;
                 }
+
+                break;
+            }
+
+            /* The classes of Windows Vista and later that have a fixed answer
+             * on ReactOS (no UAC, no virtualization, no app containers) */
+            case TokenElevationType:
+            case TokenElevation:
+            case TokenHasRestrictions:
+            case TokenVirtualizationAllowed:
+            case TokenVirtualizationEnabled:
+            case TokenUIAccess:
+            case TokenMandatoryPolicy:
+            case TokenIsAppContainer:
+            case TokenAppContainerNumber:
+            {
+                ULONG Value = 0;
+
+                if (TokenInformationClass == TokenElevationType)
+                    Value = 1; /* TokenElevationTypeDefault */
+                else if (TokenInformationClass == TokenElevation)
+                    Value = SepTokenIsAdmin(Token);
+                else if (TokenInformationClass == TokenHasRestrictions)
+                    Value = (Token->RestrictedSidCount != 0);
+                else if (TokenInformationClass == TokenMandatoryPolicy)
+                    Value = TOKEN_MANDATORY_POLICY_NO_WRITE_UP;
+
+                _SEH2_TRY
+                {
+                    /* Buffer size was already verified (all of these are a ULONG) */
+                    *(PULONG)TokenInformation = Value;
+                    *ReturnLength = sizeof(ULONG);
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Status = _SEH2_GetExceptionCode();
+                }
+                _SEH2_END;
+
+                break;
+            }
+
+            case TokenLinkedToken:
+            {
+                /* No UAC: no token has a linked one */
+                Status = STATUS_NO_SUCH_LOGON_SESSION;
+                break;
+            }
+
+            case TokenIntegrityLevel:
+            {
+                PTOKEN_MANDATORY_LABEL Label = (PTOKEN_MANDATORY_LABEL)TokenInformation;
+                static SID_IDENTIFIER_AUTHORITY MandatoryLabelAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
+
+                RequiredLength = sizeof(TOKEN_MANDATORY_LABEL) + RtlLengthRequiredSid(1);
+                _SEH2_TRY
+                {
+                    if (TokenInformationLength >= RequiredLength)
+                    {
+                        PSID Sid = (PSID)(Label + 1);
+
+                        RtlInitializeSid(Sid, &MandatoryLabelAuthority, 1);
+                        *RtlSubAuthoritySid(Sid, 0) = SepTokenIsAdmin(Token) ?
+                            SECURITY_MANDATORY_HIGH_RID : SECURITY_MANDATORY_MEDIUM_RID;
+                        Label->Label.Sid = Sid;
+                        Label->Label.Attributes = 0x20 | 0x40; /* SE_GROUP_INTEGRITY | SE_GROUP_INTEGRITY_ENABLED */
+                    }
+                    else
+                    {
+                        Status = STATUS_BUFFER_TOO_SMALL;
+                    }
+                    *ReturnLength = RequiredLength;
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Status = _SEH2_GetExceptionCode();
+                }
+                _SEH2_END;
+
+                break;
+            }
+
+            case TokenCapabilities:
+            case TokenAppContainerSid:
+            {
+                /* No capabilities (an empty TOKEN_GROUPS), no app container SID */
+                RequiredLength = (TokenInformationClass == TokenCapabilities) ?
+                                 sizeof(TOKEN_GROUPS) : sizeof(PSID);
+                _SEH2_TRY
+                {
+                    if (TokenInformationLength >= RequiredLength)
+                        RtlZeroMemory(TokenInformation, RequiredLength);
+                    else
+                        Status = STATUS_BUFFER_TOO_SMALL;
+                    *ReturnLength = RequiredLength;
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Status = _SEH2_GetExceptionCode();
+                }
+                _SEH2_END;
 
                 break;
             }
