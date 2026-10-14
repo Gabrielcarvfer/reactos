@@ -46,6 +46,34 @@
                              RTL_SRWLOCK_SHARED | RTL_SRWLOCK_CONTENTION_LOCK)
 #define RTL_SRWLOCK_BITS    4
 
+/*
+ * Waiting for an SRW lock spins, which only works if the owner can run
+ * meanwhile. With one CPU, or if the waiter has a higher priority than the
+ * owner, the owner may never run again: spin a little (cheap for short
+ * holds), then give the CPU away, eventually sleeping so that threads of
+ * lower priority (like the owner) run too.
+ */
+VOID
+NTAPI
+RtlpSrwBackoff(IN OUT PULONG Spins)
+{
+    LARGE_INTEGER Interval;
+
+    if (++*Spins < 64)
+    {
+        YieldProcessor();
+    }
+    else if (*Spins < 128)
+    {
+        NtYieldExecution();
+    }
+    else
+    {
+        Interval.QuadPart = -10000; /* 1 ms */
+        NtDelayExecution(FALSE, &Interval);
+    }
+}
+
 typedef struct _RTLP_SRWLOCK_SHARED_WAKE
 {
     LONG Wake;
@@ -198,6 +226,7 @@ static PRTLP_SRWLOCK_WAITBLOCK
 NTAPI
 RtlpAcquireWaitBlockLock(IN OUT PRTL_SRWLOCK SRWLock)
 {
+    ULONG Spins = 0;
     LONG_PTR PrevValue;
     PRTLP_SRWLOCK_WAITBLOCK WaitBlock;
 
@@ -209,7 +238,7 @@ RtlpAcquireWaitBlockLock(IN OUT PRTL_SRWLOCK SRWLock)
         if (!(PrevValue & RTL_SRWLOCK_CONTENTION_LOCK))
             break;
 
-        YieldProcessor();
+        RtlpSrwBackoff(&Spins);
     }
 
     if (!(PrevValue & RTL_SRWLOCK_CONTENDED) ||
@@ -232,6 +261,7 @@ NTAPI
 RtlpAcquireSRWLockExclusiveWait(IN OUT PRTL_SRWLOCK SRWLock,
                                 IN PRTLP_SRWLOCK_WAITBLOCK WaitBlock)
 {
+    ULONG Spins = 0;
     LONG_PTR CurrentValue;
 
     while (1)
@@ -257,7 +287,7 @@ RtlpAcquireSRWLockExclusiveWait(IN OUT PRTL_SRWLOCK SRWLock,
             }
         }
 
-        YieldProcessor();
+        RtlpSrwBackoff(&Spins);
     }
 }
 
@@ -268,11 +298,12 @@ RtlpAcquireSRWLockSharedWait(IN OUT PRTL_SRWLOCK SRWLock,
                              IN OUT PRTLP_SRWLOCK_WAITBLOCK FirstWait  OPTIONAL,
                              IN OUT PRTLP_SRWLOCK_SHARED_WAKE WakeChain)
 {
+    ULONG Spins = 0;
     if (FirstWait != NULL)
     {
         while (WakeChain->Wake == 0)
         {
-            YieldProcessor();
+            RtlpSrwBackoff(&Spins);
         }
     }
     else
@@ -306,7 +337,7 @@ RtlpAcquireSRWLockSharedWait(IN OUT PRTL_SRWLOCK SRWLock,
                 }
             }
 
-            YieldProcessor();
+            RtlpSrwBackoff(&Spins);
         }
     }
 }
@@ -324,6 +355,7 @@ VOID
 NTAPI
 RtlAcquireSRWLockShared(IN OUT PRTL_SRWLOCK SRWLock)
 {
+    ULONG Spins = 0;
     __ALIGNED(16) RTLP_SRWLOCK_WAITBLOCK StackWaitBlock;
     RTLP_SRWLOCK_SHARED_WAKE SharedWake;
     LONG_PTR CurrentValue, NewValue;
@@ -516,7 +548,7 @@ RtlAcquireSRWLockShared(IN OUT PRTL_SRWLOCK SRWLock)
             }
         }
 
-        YieldProcessor();
+        RtlpSrwBackoff(&Spins);
     }
 }
 
@@ -525,6 +557,7 @@ VOID
 NTAPI
 RtlReleaseSRWLockShared(IN OUT PRTL_SRWLOCK SRWLock)
 {
+    ULONG Spins = 0;
     LONG_PTR CurrentValue, NewValue;
     PRTLP_SRWLOCK_WAITBLOCK WaitBlock;
     BOOLEAN LastShared;
@@ -581,7 +614,7 @@ RtlReleaseSRWLockShared(IN OUT PRTL_SRWLOCK SRWLock)
             RtlRaiseStatus(STATUS_RESOURCE_NOT_OWNED);
         }
 
-        YieldProcessor();
+        RtlpSrwBackoff(&Spins);
     }
 }
 
@@ -590,6 +623,7 @@ VOID
 NTAPI
 RtlAcquireSRWLockExclusive(IN OUT PRTL_SRWLOCK SRWLock)
 {
+    ULONG Spins = 0;
     __ALIGNED(16) RTLP_SRWLOCK_WAITBLOCK StackWaitBlock;
     PRTLP_SRWLOCK_WAITBLOCK First, Last;
 
@@ -699,7 +733,7 @@ AddWaitBlock:
                 }
             }
 
-            YieldProcessor();
+            RtlpSrwBackoff(&Spins);
         }
     }
 }
@@ -709,6 +743,7 @@ VOID
 NTAPI
 RtlReleaseSRWLockExclusive(IN OUT PRTL_SRWLOCK SRWLock)
 {
+    ULONG Spins = 0;
     LONG_PTR CurrentValue, NewValue;
     PRTLP_SRWLOCK_WAITBLOCK WaitBlock;
 
@@ -762,7 +797,7 @@ RtlReleaseSRWLockExclusive(IN OUT PRTL_SRWLOCK SRWLock)
             RtlRaiseStatus(STATUS_RESOURCE_NOT_OWNED);
         }
 
-        YieldProcessor();
+        RtlpSrwBackoff(&Spins);
     }
 }
 
@@ -770,21 +805,36 @@ BOOLEAN
 NTAPI
 RtlTryAcquireSRWLockShared(PRTL_SRWLOCK SRWLock)
 {
+    LONG_PTR CurrentValue, NewValue;
 
-    LONG_PTR CompareValue, NewValue, GotValue;
-
-    do
+    for (;;)
     {
-        CompareValue = *(volatile LONG_PTR *)&SRWLock->Ptr;
-        NewValue = ((CompareValue >> RTL_SRWLOCK_BITS) + 1) | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
+        CurrentValue = *(volatile LONG_PTR *)&SRWLock->Ptr;
 
-        /* Only increment shared count if there is no waiter */
-        CompareValue &= ~RTL_SRWLOCK_MASK | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
-    } while (
-        ((GotValue = (LONG_PTR)InterlockedCompareExchangePointer(&SRWLock->Ptr, (LONG_PTR*)NewValue, (LONG_PTR*)CompareValue)) != CompareValue)
-        && (((GotValue & RTL_SRWLOCK_MASK) == (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED)) || (GotValue == 0)));
+        if (CurrentValue == 0)
+        {
+            /* Free: we are the first shared owner */
+            NewValue = (_ONE << RTL_SRWLOCK_BITS) | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
+        }
+        else if ((CurrentValue & RTL_SRWLOCK_MASK) == (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED))
+        {
+            /* Shared, nobody waiting: one more shared owner. The count is
+               stored above the flag bits, like RtlAcquireSRWLockShared does */
+            NewValue = (((CurrentValue >> RTL_SRWLOCK_BITS) + 1) << RTL_SRWLOCK_BITS) |
+                       RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
+        }
+        else
+        {
+            /* Owned exclusively, or there are waiters: don't wait */
+            return FALSE;
+        }
 
-    return ((GotValue & RTL_SRWLOCK_MASK) == (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED)) || (GotValue == 0);
+        if ((LONG_PTR)InterlockedCompareExchangePointer(&SRWLock->Ptr, (PVOID)NewValue,
+                                                        (PVOID)CurrentValue) == CurrentValue)
+        {
+            return TRUE;
+        }
+    }
 }
 
 BOOLEAN

@@ -16,6 +16,7 @@ extern void func__wcslwr(void);
 extern void func__wcsnicmp(void);
 extern void func__wcsupr(void);
 extern void func_mbstowcs(void);
+extern void func_RtlSRWLock(void);
 extern void func_setjmp(void);
 extern void func_sprintf(void);
 extern void func_strcpy(void);
@@ -158,6 +159,7 @@ const struct test winetest_testlist[] =
     { "_wcsnicmp", func__wcsnicmp },
     { "_wcsupr", func__wcsupr },
     { "mbstowcs", func_mbstowcs },
+    { "RtlSRWLock", func_RtlSRWLock },
     { "setjmp", func_setjmp },
     { "sprintf", func_sprintf },
     { "strcpy", func_strcpy },

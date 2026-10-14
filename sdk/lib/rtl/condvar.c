@@ -18,6 +18,9 @@
 #define NDEBUG
 #include <debug.h>
 
+/* srw.c */
+VOID NTAPI RtlpSrwBackoff(IN OUT PULONG Spins);
+
 /* INTERNAL TYPES ************************************************************/
 
 #define COND_VAR_UNUSED_FLAG         ((ULONG_PTR)1)
@@ -78,6 +81,7 @@ InternalLockCondVar(IN OUT PRTL_CONDITION_VARIABLE ConditionVariable,
                     IN PCOND_VAR_WAIT_ENTRY InsertEntry OPTIONAL,
                     IN BOOLEAN * AbortIfLocked OPTIONAL)
 {
+    ULONG Spins = 0;
     /* InsertEntry and AbortIfLocked may be NULL on entry. This routine
        will return NULL if the lock was not acquired. Otherwise it has
        successfully acquired the lock and the return value is a valid
@@ -108,7 +112,7 @@ InternalLockCondVar(IN OUT PRTL_CONDITION_VARIABLE ConditionVariable,
             /* The locked flag is set, indicating someone else currently
                holds the lock. We'll spin until this flag becomes
                clear or we're asked to abort. */
-            YieldProcessor();
+            RtlpSrwBackoff(&Spins);
 
             if ((AbortIfLocked != NULL) && *AbortIfLocked)
             {
