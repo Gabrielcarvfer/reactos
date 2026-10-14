@@ -58,6 +58,14 @@ typedef struct _EVENT_DATA_DESCRIPTOR {
   ULONG Reserved;
 } EVENT_DATA_DESCRIPTOR, *PEVENT_DATA_DESCRIPTOR;
 
+typedef enum _EVENT_INFO_CLASS {
+  EventProviderBinaryTrackInfo,
+  EventProviderSetReserved1,
+  EventProviderSetTraits,
+  EventProviderUseDescriptorType,
+  MaxEventInfo
+} EVENT_INFO_CLASS;
+
 typedef struct _EVENT_DESCRIPTOR {
   USHORT Id;
   UCHAR Version;
