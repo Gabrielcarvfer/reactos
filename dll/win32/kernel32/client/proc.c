@@ -922,6 +922,16 @@ GetActiveProcessorGroupCount(VOID)
     return 1; // TODO: SharedUserData->ActiveGroupCount?
 }
 
+/*
+ * @implemented
+ */
+WORD
+WINAPI
+GetMaximumProcessorGroupCount(VOID)
+{
+    return 1; // FIXME: Real group support (see GetActiveProcessorGroupCount)
+}
+
 static DWORD
 GetProcessorCountInfo(IN WORD GroupNumber, IN BOOL Maximum)
 {
@@ -2313,6 +2323,14 @@ CreateProcessInternalW(IN HANDLE hUserToken,
     /* Capture the special window flag */
     NoWindow = dwCreationFlags & CREATE_NO_WINDOW;
     dwCreationFlags &= ~CREATE_NO_WINDOW;
+
+    /* STARTUPINFOEX: the attribute list is not supported yet. Its common use,
+     * a list of handles to inherit, is a subset of what we do anyway: inherit
+     * every inheritable handle when bInheritHandles is TRUE. */
+#ifndef EXTENDED_STARTUPINFO_PRESENT
+#define EXTENDED_STARTUPINFO_PRESENT 0x00080000
+#endif
+    dwCreationFlags &= ~EXTENDED_STARTUPINFO_PRESENT;
 
 #if _SXS_SUPPORT_ENABLED_
     /* Setup the SxS static string arrays and buffers */
