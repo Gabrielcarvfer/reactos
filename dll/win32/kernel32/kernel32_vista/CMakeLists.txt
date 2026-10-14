@@ -26,6 +26,7 @@ list(APPEND SOURCE
     threadpool.c
     vista.c
     win7.c
+    win8.c
     xstate.c)
 
 # These functions are not exported from kernel32_vista (yet).
