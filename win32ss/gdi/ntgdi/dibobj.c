@@ -1998,7 +1998,8 @@ DIB_CreateDIBSection(
         bm.bmBits = EngAllocUserMem(totalSize, 0);
         if(!bm.bmBits)
         {
-            DPRINT1("Failed to allocate memory\n");
+            DPRINT1("Failed to allocate %lu bytes for a %ldx%ld, %u bpp DIB section\n",
+                    totalSize, bi->biWidth, bi->biHeight, bi->biBitCount);
             goto cleanup;
         }
     }
