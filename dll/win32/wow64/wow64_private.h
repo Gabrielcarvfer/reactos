@@ -251,6 +251,31 @@ static inline CLIENT_ID *client_id_32to64( CLIENT_ID *id, const CLIENT_ID32 *id3
     return id;
 }
 
+/* A SID or ACL of a 32-bit program, copied to memory with the alignment the
+ * kernel asks for: in 32-bit code an ACL is only 2-byte aligned (WiX Burn
+ * keeps one on its stack), and NtSetSecurityObject then failed with
+ * STATUS_DATATYPE_MISALIGNMENT. Windows' wow64 copies them too. */
+static inline void *secdesc_copy_aligned( const void *data, ULONG size )
+{
+    void *copy;
+
+    if (!data || !size) return (void *)data;
+    if (!((ULONG_PTR)data & 3)) return (void *)data;
+    copy = Wow64AllocateTemp( size );
+    if (copy) memcpy( copy, data, size );
+    return copy ? copy : (void *)data;
+}
+
+static inline PSID secdesc_sid_32to64( const void *sid )
+{
+    return sid ? secdesc_copy_aligned( sid, RtlLengthSid( (PSID)sid ) ) : NULL;
+}
+
+static inline PACL secdesc_acl_32to64( const void *acl )
+{
+    return acl ? secdesc_copy_aligned( acl, ((const ACL *)acl)->AclSize ) : NULL;
+}
+
 static inline SECURITY_DESCRIPTOR *secdesc_32to64( SECURITY_DESCRIPTOR *out, const SECURITY_DESCRIPTOR *in )
 {
     /* relative descr has the same layout for 32 and 64 */
@@ -262,17 +287,17 @@ static inline SECURITY_DESCRIPTOR *secdesc_32to64( SECURITY_DESCRIPTOR *out, con
     out->Control  = sd->Control & ~SE_SELF_RELATIVE;
     if (sd->Control & SE_SELF_RELATIVE)
     {
-        out->Owner = sd->Owner ? (PSID)((BYTE *)sd + sd->Owner) : NULL;
-        out->Group = sd->Group ? (PSID)((BYTE *)sd + sd->Group) : NULL;
-        out->Sacl = ((sd->Control & SE_SACL_PRESENT) && sd->Sacl) ? (PSID)((BYTE *)sd + sd->Sacl) : NULL;
-        out->Dacl = ((sd->Control & SE_DACL_PRESENT) && sd->Dacl) ? (PSID)((BYTE *)sd + sd->Dacl) : NULL;
+        out->Owner = sd->Owner ? secdesc_sid_32to64( (BYTE *)sd + sd->Owner ) : NULL;
+        out->Group = sd->Group ? secdesc_sid_32to64( (BYTE *)sd + sd->Group ) : NULL;
+        out->Sacl = ((sd->Control & SE_SACL_PRESENT) && sd->Sacl) ? secdesc_acl_32to64( (BYTE *)sd + sd->Sacl ) : NULL;
+        out->Dacl = ((sd->Control & SE_DACL_PRESENT) && sd->Dacl) ? secdesc_acl_32to64( (BYTE *)sd + sd->Dacl ) : NULL;
     }
     else
     {
-        out->Owner = ULongToPtr( sd->Owner );
-        out->Group = ULongToPtr( sd->Group );
-        out->Sacl = (sd->Control & SE_SACL_PRESENT) ? ULongToPtr( sd->Sacl ) : NULL;
-        out->Dacl = (sd->Control & SE_DACL_PRESENT) ? ULongToPtr( sd->Dacl ) : NULL;
+        out->Owner = secdesc_sid_32to64( ULongToPtr( sd->Owner ));
+        out->Group = secdesc_sid_32to64( ULongToPtr( sd->Group ));
+        out->Sacl = (sd->Control & SE_SACL_PRESENT) ? secdesc_acl_32to64( ULongToPtr( sd->Sacl )) : NULL;
+        out->Dacl = (sd->Control & SE_DACL_PRESENT) ? secdesc_acl_32to64( ULongToPtr( sd->Dacl )) : NULL;
     }
     return out;
 }
