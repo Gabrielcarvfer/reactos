@@ -240,6 +240,23 @@ extern ULONG NTAPI RtlGetCurrentDirectory_U_RtlpMsysDecoy(ULONG MaximumLength, P
 #define DEFAULT_SECURITY_COOKIE 0xBB40E64E
 #endif
 
+/* The exception of a DLL entry point that failed, for the debug log */
+static PVOID LdrpInitExceptionAddress;
+static ULONG_PTR LdrpInitExceptionParameters[2];
+
+static
+LONG
+LdrpRecordInitException(
+    _In_ PEXCEPTION_POINTERS ExceptionInfo)
+{
+    PEXCEPTION_RECORD Record = ExceptionInfo->ExceptionRecord;
+
+    LdrpInitExceptionAddress = Record->ExceptionAddress;
+    LdrpInitExceptionParameters[0] = Record->NumberParameters > 0 ? Record->ExceptionInformation[0] : 0;
+    LdrpInitExceptionParameters[1] = Record->NumberParameters > 1 ? Record->ExceptionInformation[1] : 0;
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 /* FUNCTIONS *****************************************************************/
 
 /*
@@ -1158,11 +1175,26 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
                                                 DLL_PROCESS_ATTACH,
                                                 Context);
             }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            _SEH2_EXCEPT(LdrpRecordInitException(_SEH2_GetExceptionInformation()))
             {
+                PLDR_DATA_TABLE_ENTRY FaultEntry = NULL;
+
                 DllStatus = FALSE;
                 DPRINT1("WARNING: Exception 0x%x during LdrpCallInitRoutine(DLL_PROCESS_ATTACH) for %wZ\n",
                         _SEH2_GetExceptionCode(), &LdrEntry->BaseDllName);
+
+                /* Where: the module and offset, and what was accessed */
+                if (NT_SUCCESS(LdrFindEntryForAddress(LdrpInitExceptionAddress, &FaultEntry)) && FaultEntry)
+                {
+                    DPRINT1("  at %wZ+0x%Ix, parameters %Ix %Ix\n", &FaultEntry->BaseDllName,
+                            (ULONG_PTR)LdrpInitExceptionAddress - (ULONG_PTR)FaultEntry->DllBase,
+                            LdrpInitExceptionParameters[0], LdrpInitExceptionParameters[1]);
+                }
+                else
+                {
+                    DPRINT1("  at %p, parameters %Ix %Ix\n", LdrpInitExceptionAddress,
+                            LdrpInitExceptionParameters[0], LdrpInitExceptionParameters[1]);
+                }
             }
             _SEH2_END;
 
