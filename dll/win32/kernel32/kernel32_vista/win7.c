@@ -126,6 +126,49 @@ WerUnregisterRuntimeExceptionModule(
 }
 
 /*
+ * The interrupt time functions of Windows 10, in 100ns units. The precise
+ * ones read the performance counter instead of the last clock tick; ReactOS
+ * does not track sleep time, so biased and unbiased are the same.
+ */
+VOID
+WINAPI
+QueryInterruptTime(
+    _Out_ PULONGLONG lpInterruptTime)
+{
+    QueryUnbiasedInterruptTime(lpInterruptTime);
+}
+
+static
+ULONGLONG
+PerformanceCounterTime(VOID)
+{
+    LARGE_INTEGER Counter, Frequency;
+
+    NtQueryPerformanceCounter(&Counter, &Frequency);
+    if (!Frequency.QuadPart)
+        return 0;
+    /* (in two steps, so that it does not overflow) */
+    return (Counter.QuadPart / Frequency.QuadPart) * 10000000ULL +
+           (Counter.QuadPart % Frequency.QuadPart) * 10000000ULL / Frequency.QuadPart;
+}
+
+VOID
+WINAPI
+QueryInterruptTimePrecise(
+    _Out_ PULONGLONG lpInterruptTimePrecise)
+{
+    *lpInterruptTimePrecise = PerformanceCounterTime();
+}
+
+VOID
+WINAPI
+QueryUnbiasedInterruptTimePrecise(
+    _Out_ PULONGLONG lpUnbiasedInterruptTimePrecise)
+{
+    *lpUnbiasedInterruptTimePrecise = PerformanceCounterTime();
+}
+
+/*
  * SetWaitableTimerEx: SetWaitableTimer with power management hints (wake
  * context, tolerable delay), which ReactOS does not use.
  */
@@ -223,6 +266,43 @@ GetNumaProcessorNodeEx(
 
     *NodeNumber = 0;
     return TRUE;
+}
+
+/*
+ * CopyFile2 (Windows 8): CopyFileExW with its flags in a structure and an
+ * HRESULT. Its progress callback has another form: not called.
+ * (COPYFILE2_EXTENDED_PARAMETERS, which winbase.h has for Windows 8 builds)
+ */
+typedef struct _COPYFILE2_PARAMETERS_ROS
+{
+    DWORD dwSize;
+    DWORD dwCopyFlags;
+    BOOL *pfCancel;
+    PVOID pProgressRoutine;
+    PVOID pvCallbackContext;
+} COPYFILE2_PARAMETERS_ROS;
+
+HRESULT
+WINAPI
+CopyFile2(
+    _In_ PCWSTR pwszExistingFileName,
+    _In_ PCWSTR pwszNewFileName,
+    _In_opt_ COPYFILE2_PARAMETERS_ROS *pExtendedParameters)
+{
+    DWORD Flags = 0;
+    LPBOOL Cancel = NULL;
+
+    if (pExtendedParameters)
+    {
+        if (pExtendedParameters->dwSize < sizeof(*pExtendedParameters))
+            return E_INVALIDARG;
+        Flags = pExtendedParameters->dwCopyFlags;
+        Cancel = pExtendedParameters->pfCancel;
+    }
+
+    if (!CopyFileExW(pwszExistingFileName, pwszNewFileName, NULL, NULL, Cancel, Flags))
+        return HRESULT_FROM_WIN32(GetLastError());
+    return S_OK;
 }
 
 /*
