@@ -5174,6 +5174,20 @@ typedef BOOL (WINAPI *ExportPublicKeyInfoExFunc)(HCRYPTPROV_OR_NCRYPT_KEY_HANDLE
 #ifdef __REACTOS__
 /* A CNG (bcrypt) key: ReactOS's bcrypt cannot export one yet. The function
  * exists for the programs that import it (LibreOffice's xmlsec). */
+/* Asks a time stamp server for an RFC 3161 time stamp: not supported yet */
+BOOL WINAPI CryptRetrieveTimeStamp(LPCWSTR wszUrl, DWORD dwRetrievalFlags, DWORD dwTimeout,
+ LPCSTR pszHashId, const void *pPara, const BYTE *pbData, DWORD cbData, void **ppTsContext,
+ PCCERT_CONTEXT *ppTsSigner, HCERTSTORE *phStore)
+{
+    FIXME("(%s, %08lx, %lu, %s, %p, %p, %ld): not supported\n", debugstr_w(wszUrl),
+     dwRetrievalFlags, dwTimeout, debugstr_a(pszHashId), pPara, pbData, cbData);
+    if (ppTsContext) *ppTsContext = NULL;
+    if (ppTsSigner) *ppTsSigner = NULL;
+    if (phStore) *phStore = NULL;
+    SetLastError(NTE_NOT_SUPPORTED);
+    return FALSE;
+}
+
 /* RFC 3161 time stamps: not supported yet (LibreOffice imports it) */
 BOOL WINAPI CryptVerifyTimeStampSignature(const BYTE *pbTSContentInfo, DWORD cbTSContentInfo,
  const BYTE *pbData, DWORD cbData, HCERTSTORE hAdditionalStore, void **ppTsContext,
