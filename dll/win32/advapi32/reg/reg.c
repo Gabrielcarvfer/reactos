@@ -1014,7 +1014,11 @@ CreateNestedKey(PHKEY KeyHandle,
 
     LocalKeyHandle = NULL;
 
-    /* Remove the last part of the key name and try to create the key again. */
+    /* Remove the last part of the key name and try to create the key again.
+       The parents are created in the registry view the caller asked for
+       (KEY_WOW64_64KEY / KEY_WOW64_32KEY): else a 32-bit program asking for
+       the 64-bit view got them in the 32-bit one, and the key itself was then
+       "not found" (the 32-bit msi publishing the Visual C++ runtime) */
     while (Status == STATUS_OBJECT_NAME_NOT_FOUND)
     {
         Ptr = wcsrchr(LocalKeyName.Buffer, '\\');
@@ -1028,7 +1032,7 @@ CreateNestedKey(PHKEY KeyHandle,
         LocalKeyName.Length = (USHORT)wcslen(LocalKeyName.Buffer) * sizeof(WCHAR);
 
         Status = NtCreateKey(&LocalKeyHandle,
-                             KEY_CREATE_SUB_KEY,
+                             KEY_CREATE_SUB_KEY | (samDesired & KEY_WOW64_RES),
                              &LocalObjectAttributes,
                              0,
                              NULL,
@@ -1067,7 +1071,7 @@ CreateNestedKey(PHKEY KeyHandle,
         }
 
         Status = NtCreateKey(&LocalKeyHandle,
-                             KEY_CREATE_SUB_KEY,
+                             KEY_CREATE_SUB_KEY | (samDesired & KEY_WOW64_RES),
                              &LocalObjectAttributes,
                              0,
                              NULL,
