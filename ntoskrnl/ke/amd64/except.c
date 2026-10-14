@@ -243,6 +243,80 @@ KiPrepareUserDebugData(void)
     _disable();
 }
 
+/* The module of a user-mode address, from the loader lists of the current
+ * process (also the 32-bit one of a WoW64 process). Prints "module+offset". */
+static
+VOID
+KiPrintUserAddress(
+    _In_ PCSTR Prefix,
+    _In_ ULONG_PTR Address)
+{
+    PEPROCESS Process = PsGetCurrentProcess();
+
+    _SEH2_TRY
+    {
+        PPEB_LDR_DATA Ldr = Process->Peb ? Process->Peb->Ldr : NULL;
+        PLIST_ENTRY Entry;
+
+        for (Entry = Ldr ? Ldr->InLoadOrderModuleList.Flink : NULL;
+             Entry && Entry != &Ldr->InLoadOrderModuleList;
+             Entry = Entry->Flink)
+        {
+            PLDR_DATA_TABLE_ENTRY Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+            if (Address >= (ULONG_PTR)Module->DllBase &&
+                Address < (ULONG_PTR)Module->DllBase + Module->SizeOfImage)
+            {
+                DbgPrint("%s%wZ+0x%Ix\n", Prefix, &Module->BaseDllName, Address - (ULONG_PTR)Module->DllBase);
+                _SEH2_YIELD(return;)
+            }
+        }
+
+        /* A 32-bit process: its PEB32, PEB_LDR_DATA32 and LDR_DATA_TABLE_ENTRY32 */
+        if (Process->Wow64Process && !IS_WOW64_PROCESS_INITIALIZING(Process) && Address < 0x100000000ULL)
+        {
+            ULONG Peb32 = PtrToUlong(Process->Wow64Process->Wow64);
+            ULONG Ldr32 = *(PULONG)UlongToPtr(Peb32 + 0x0C);
+            ULONG Head = Ldr32 + 0x0C, Link = *(PULONG)UlongToPtr(Head);
+            ULONG Count = 0;
+
+            while (Ldr32 && Link && Link != Head && Count++ < 512)
+            {
+                ULONG Base = *(PULONG)UlongToPtr(Link + 0x18);
+                ULONG Size = *(PULONG)UlongToPtr(Link + 0x20);
+                if (Address >= Base && Address < (ULONG_PTR)Base + Size)
+                {
+                    UNICODE_STRING Name;
+                    Name.Length = *(PUSHORT)UlongToPtr(Link + 0x2C);
+                    Name.MaximumLength = Name.Length;
+                    Name.Buffer = UlongToPtr(*(PULONG)UlongToPtr(Link + 0x30));
+                    DbgPrint("%s%wZ+0x%Ix (32-bit)\n", Prefix, &Name, Address - Base);
+                    _SEH2_YIELD(return;)
+                }
+                Link = *(PULONG)UlongToPtr(Link);
+            }
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+
+    DbgPrint("%s%p\n", Prefix, (PVOID)Address);
+}
+
+static
+VOID
+KiPrintUnhandledUserException(
+    _In_ PEXCEPTION_RECORD ExceptionRecord)
+{
+    DbgPrint("Unhandled exception 0x%08lx in %.16s (thread %p), parameters %Ix %Ix\n",
+             ExceptionRecord->ExceptionCode, PsGetCurrentProcess()->ImageFileName,
+             PsGetCurrentThread()->Cid.UniqueThread,
+             ExceptionRecord->NumberParameters > 0 ? ExceptionRecord->ExceptionInformation[0] : 0,
+             ExceptionRecord->NumberParameters > 1 ? ExceptionRecord->ExceptionInformation[1] : 0);
+    KiPrintUserAddress("  at ", (ULONG_PTR)ExceptionRecord->ExceptionAddress);
+}
+
 VOID
 NTAPI
 KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
@@ -370,6 +444,10 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
 
             /* Failed to dispatch, fall through for second chance handling */
         }
+
+        /* Nothing in the program handled it: say where it happened (the
+         * process is killed now, usually by csrss with STATUS_ABANDONED) */
+        KiPrintUnhandledUserException(ExceptionRecord);
 
         /* Try second chance */
         if (DbgkForwardException(ExceptionRecord, TRUE, TRUE))
