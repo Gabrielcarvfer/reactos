@@ -2109,10 +2109,11 @@ LdrpInitializeDotLocalSupport(PRTL_USER_PROCESS_PARAMETERS ProcessParameters)
 
 
 /*
- * Windows version to report (ROS_COMPAT_WINVER=WIN7SP1 and the like, with the
- * names of the Windows compatibility layers; inherited by child processes,
- * and unlike __COMPAT_LAYER it does not involve the shim engine): report that
- * Windows version through the PEB,
+ * Windows version to report: the VersionLayer string of the program's Image
+ * File Execution Options, or else ROS_COMPAT_WINVER (inherited by child
+ * processes); WIN7SP1 and the like, the names of the Windows compatibility
+ * layers (unlike __COMPAT_LAYER, it does not involve the shim engine). Report
+ * that Windows version through the PEB,
  * which every version API (RtlGetVersion, GetVersionEx, VerifyVersionInfo)
  * reads. Lets programs that refuse to run before a given Windows version, like
  * Chromium, start when asked to.
@@ -2146,10 +2147,18 @@ LdrpApplyVersionLayer(VOID)
      * and it is not initialized yet at this point */
     if (!Peb->ProcessParameters || !Peb->ProcessParameters->Environment)
         return;
-    RtlInitEmptyUnicodeString(&Value, Buffer, sizeof(Buffer) - sizeof(WCHAR));
-    if (!NT_SUCCESS(RtlQueryEnvironmentVariable_U(Peb->ProcessParameters->Environment, &VarName, &Value)))
-        return;
-    Buffer[Value.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    if (LdrpVersionLayer[0])
+    {
+        /* The setting of this program wins over the inherited variable */
+        wcscpy(Buffer, LdrpVersionLayer); /* Shorter than Buffer */
+    }
+    else
+    {
+        RtlInitEmptyUnicodeString(&Value, Buffer, sizeof(Buffer) - sizeof(WCHAR));
+        if (!NT_SUCCESS(RtlQueryEnvironmentVariable_U(Peb->ProcessParameters->Environment, &VarName, &Value)))
+            return;
+        Buffer[Value.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
 
     /* Upper case by hand: the NLS case tables are not set up yet */
     for (i = 0; Buffer[i]; i++)
