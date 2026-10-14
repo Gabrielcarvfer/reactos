@@ -1408,21 +1408,15 @@ RegDeleteKeyExW(
         return ErrorCode;
     }
 
-    if (samDesired & KEY_WOW64_32KEY)
-        ERR("Wow64 not yet supported!\n");
-
-    if (samDesired & KEY_WOW64_64KEY)
-        ERR("Wow64 not yet supported!\n");
-
-
     RtlInitUnicodeString(&SubKeyName, lpSubKey);
     InitializeObjectAttributes(&ObjectAttributes,
                                &SubKeyName,
                                OBJ_CASE_INSENSITIVE,
                                ParentKey,
                                NULL);
+    /* (Under WoW64, the registry view asked for picks the key) */
     Status = NtOpenKey(&TargetKey,
-                       DELETE,
+                       DELETE | (samDesired & KEY_WOW64_RES),
                        &ObjectAttributes);
     if (!NT_SUCCESS(Status))
     {
