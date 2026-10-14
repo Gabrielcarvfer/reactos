@@ -354,7 +354,12 @@
 @ stdcall -version=0x602+ GetPointerInfo(long ptr)
 @ stdcall -version=0x602+ GetPointerTouchInfo(long ptr)
 @ stdcall -version=0x602+ GetPointerTouchInfoHistory(long ptr ptr)
+@ stdcall -version=0x602+ GetPointerDeviceRects(ptr ptr ptr)
 @ stdcall -version=0x601+ GetPointerDevices(ptr ptr)
+@ stdcall -version=0x602+ GetPointerFrameTouchInfo(long ptr ptr)
+@ stdcall -version=0x602+ GetPointerFrameTouchInfoHistory(long ptr ptr ptr)
+@ stdcall -version=0x602+ GetPointerPenInfo(long ptr)
+@ stdcall -version=0x602+ GetPointerPenInfoHistory(long ptr ptr)
 @ stdcall -version=0x602+ GetPointerType(long ptr)
 @ stdcall GetPriorityClipboardFormat(ptr long) NtUserGetPriorityClipboardFormat
 @ stdcall GetProcessDefaultLayout(ptr)
@@ -733,6 +738,7 @@
 @ stdcall ShowWindowAsync(long long) NtUserShowWindowAsync
 @ stdcall -version=0x600+ ShutdownBlockReasonCreate(long wstr)
 @ stdcall -version=0x600+ ShutdownBlockReasonDestroy(long)
+@ stdcall -version=0x602+ SkipPointerFrameMessages(long)
 @ stdcall SoftModalMessageBox(ptr)
 @ stdcall SubtractRect(ptr ptr ptr)
 @ stdcall SwapMouseButton(long)

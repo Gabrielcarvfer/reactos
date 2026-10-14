@@ -14,6 +14,7 @@ list(APPEND VISTA_SOURCE
 
 list(APPEND SOURCE
     dpi.c
+    pointer.c
     timer.c)
 
 # These are just for Vista+ support
