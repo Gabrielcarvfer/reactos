@@ -350,6 +350,11 @@ NtGdiSelectBitmap(
     HDC hdcOld;
     ASSERT_NOGDILOCKS();
 
+    /* A GDI handle has 32 bits, and a 64-bit program may have it sign-extended
+       (from a 32-bit one): compare and keep them as the handle table has them */
+    hdc = (HDC)(ULONG_PTR)PtrToUlong(hdc);
+    hbmp = (HBITMAP)(ULONG_PTR)PtrToUlong(hbmp);
+
     /* Verify parameters */
     if (hdc == NULL || hbmp == NULL) return NULL;
 
