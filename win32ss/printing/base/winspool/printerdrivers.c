@@ -1025,3 +1025,19 @@ InstallPrinterDriverFromPackageW(PCWSTR pszServer, PCWSTR pszInfPath, PCWSTR psz
           pszServer, pszInfPath, pszDriverName, pszEnvironment, dwFlags);
     return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
 }
+
+/*
+ * UploadPrinterDriverPackageW (Vista): put a driver package into the driver
+ * store of a print server. No driver store, as for
+ * InstallPrinterDriverFromPackageW.
+ */
+HRESULT WINAPI
+UploadPrinterDriverPackageW(PCWSTR pszServer, PCWSTR pszInfPath, PCWSTR pszEnvironment, DWORD dwFlags,
+                            HWND hwnd, PWSTR pszDestInfPath, PULONG pcchDestInfPath)
+{
+    FIXME("UploadPrinterDriverPackageW(%S, %S, %S, %lu): no driver store\n",
+          pszServer, pszInfPath, pszEnvironment, dwFlags);
+    if (pszDestInfPath && pcchDestInfPath && *pcchDestInfPath)
+        *pszDestInfPath = UNICODE_NULL;
+    return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+}

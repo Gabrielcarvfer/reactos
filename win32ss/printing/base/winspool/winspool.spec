@@ -199,3 +199,4 @@
 298 stdcall WritePrinter(ptr ptr long ptr)
 299 stdcall XcvDataW(ptr wstr ptr long ptr long ptr ptr)
 @ stdcall -version=0x600+ InstallPrinterDriverFromPackageW(wstr wstr wstr wstr long)
+@ stdcall -version=0x600+ UploadPrinterDriverPackageW(wstr wstr wstr long ptr wstr ptr)
