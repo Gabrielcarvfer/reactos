@@ -12,12 +12,14 @@ list(APPEND SOURCE
     EnumSystemCodePages.c
     FindActCtxSectionStringW.c
     FindFiles.c
+    FindFirstFileEx.c
     FLS.c
     FormatMessage.c
     GetComputerNameEx.c
     GetCPInfo.c
     GetCurrentDirectory.c
     GetDriveType.c
+    GetDynamicTimeZoneInformation.c
     GetEnvironmentVariable.c
     GetFinalPathNameByHandle.c
     GetLocaleInfo.c
@@ -37,13 +39,16 @@ list(APPEND SOURCE
     MultiByteToWideChar.c
     Pipes.c
     PrivMoveFileIdentityW.c
+    ProcThreadAttributeList.c
     QueueUserAPC.c
     ReadFile.c
+    SecurityLabel.c
     SetComputerNameExW.c
     SetConsoleWindowInfo.c
     SetCurrentDirectory.c
     SetSearchPathMode.c
     SetUnhandledExceptionFilter.c
+    StackGuard.c
     SystemFirmware.c
     TerminateProcess.c
     TunnelCache.c

@@ -11,12 +11,14 @@ extern void func_dosdev(void);
 extern void func_EnumSystemCodePages(void);
 extern void func_FindActCtxSectionStringW(void);
 extern void func_FindFiles(void);
+extern void func_FindFirstFileEx(void);
 extern void func_FLS(void);
 extern void func_FormatMessage(void);
 extern void func_GetComputerNameEx(void);
 extern void func_GetCPInfo(void);
 extern void func_GetCurrentDirectory(void);
 extern void func_GetDriveType(void);
+extern void func_GetDynamicTimeZoneInformation(void);
 extern void func_GetEnvironmentVariable(void);
 extern void func_GetFinalPathNameByHandle(void);
 extern void func_GetLocaleInfo(void);
@@ -36,11 +38,14 @@ extern void func_MailslotRead(void);
 extern void func_MultiByteToWideChar(void);
 extern void func_Pipes(void);
 extern void func_PrivMoveFileIdentityW(void);
+extern void func_ProcThreadAttributeList(void);
 extern void func_QueueUserAPC(void);
+extern void func_SecurityLabel(void);
 extern void func_SetComputerNameExW(void);
 extern void func_SetConsoleWindowInfo(void);
 extern void func_SetCurrentDirectory(void);
 extern void func_SetUnhandledExceptionFilter(void);
+extern void func_StackGuard(void);
 extern void func_SystemFirmware(void);
 extern void func_TerminateProcess(void);
 extern void func_TunnelCache(void);
@@ -58,12 +63,14 @@ const struct test winetest_testlist[] =
     { "EnumSystemCodePages",         func_EnumSystemCodePages },
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
     { "FindFiles",                   func_FindFiles },
+    { "FindFirstFileEx", func_FindFirstFileEx },
     { "FLS",                         func_FLS },
     { "FormatMessage",               func_FormatMessage },
     { "GetComputerNameEx",           func_GetComputerNameEx },
     { "GetCPInfo",                   func_GetCPInfo },
     { "GetCurrentDirectory",         func_GetCurrentDirectory },
     { "GetDriveType",                func_GetDriveType },
+    { "GetDynamicTimeZoneInformation", func_GetDynamicTimeZoneInformation },
     { "GetEnvironmentVariable",      func_GetEnvironmentVariable },
     { "GetFinalPathNameByHandle",    func_GetFinalPathNameByHandle },
     { "GetLocaleInfo",               func_GetLocaleInfo },
@@ -83,11 +90,14 @@ const struct test winetest_testlist[] =
     { "MultiByteToWideChar",         func_MultiByteToWideChar },
     { "Pipes",                       func_Pipes },
     { "PrivMoveFileIdentityW",       func_PrivMoveFileIdentityW },
+    { "ProcThreadAttributeList", func_ProcThreadAttributeList },
     { "QueueUserAPC",                func_QueueUserAPC },
+    { "SecurityLabel", func_SecurityLabel },
     { "SetComputerNameExW",          func_SetComputerNameExW },
     { "SetConsoleWindowInfo",        func_SetConsoleWindowInfo },
     { "SetCurrentDirectory",         func_SetCurrentDirectory },
     { "SetUnhandledExceptionFilter", func_SetUnhandledExceptionFilter },
+    { "StackGuard", func_StackGuard },
     { "SystemFirmware",              func_SystemFirmware },
     { "TerminateProcess",            func_TerminateProcess },
     { "TunnelCache",                 func_TunnelCache },
