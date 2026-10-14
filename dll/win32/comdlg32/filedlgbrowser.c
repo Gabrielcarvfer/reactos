@@ -468,6 +468,10 @@ static HRESULT WINAPI IShellBrowserImpl_BrowseObject(IShellBrowser *iface,
 
     /* Select the new folder in the Look In combo box of the Open file dialog */
     FILEDLG95_LOOKIN_SelectItem(fodInfos->DlgInfos.hwndLookInCB,fodInfos->ShellInfos.pidlAbsCurrent);
+#ifdef __REACTOS__
+    /* and in the navigation pane (Windows 11 layout) */
+    FILEDLGNAV_FolderChanged(This->hwndOwner);
+#endif
 
     /* changes the tab order of the ListView to reflect the window's File Dialog */
     hDlgWnd = GetDlgItem(GetParent(hwndView), IDC_LOOKIN);
@@ -951,6 +955,17 @@ static HRESULT WINAPI IShellBrowserImpl_ICommDlgBrowser_IncludeObject(ICommDlgBr
     if( (ulAttr & SFGAO_HIDDEN) ||                                      /* hidden */
         !(ulAttr & (SFGAO_FILESYSTEM | SFGAO_FILESYSANCESTOR))) /* special folder */
         return S_FALSE;
+
+#ifdef __REACTOS__
+    /* The search box (Windows 11 layout): only names that contain its text */
+    if (fodInfos->Nav.lpstrSearch &&
+        SUCCEEDED(IShellFolder_GetDisplayNameOf(fodInfos->Shell.FOIShellFolder, pidl, SHGDN_INFOLDER, &str)) &&
+        COMDLG32_StrRetToStrNW(szPathW, MAX_PATH, &str, pidl) &&
+        !FILEDLGNAV_IncludeName(fodInfos, szPathW))
+    {
+        return S_FALSE;
+    }
+#endif
 
     /* always include directories and links */
     if(ulAttr & (SFGAO_FOLDER | SFGAO_LINK))

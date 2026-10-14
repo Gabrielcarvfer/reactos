@@ -444,6 +444,14 @@ static BOOL GetFileName95(FileOpenDlgInfos *fodInfos)
 
     /* Create the dialog from a template */
 
+#ifdef __REACTOS__
+    /* The Windows 11 style layout, unless the program customizes the dialog */
+    fodInfos->Nav.bEnabled = FILEDLGNAV_IsEnabled(fodInfos) &&
+        FindResourceW(COMDLG32_hInstance, MAKEINTRESOURCEW(NEWFILEOPENELEVENORD), (LPCWSTR)RT_DIALOG);
+    if (fodInfos->Nav.bEnabled)
+        templateid = NEWFILEOPENELEVENORD;
+    else
+#endif
     if (is_places_bar_enabled(fodInfos))
         templateid = NEWFILEOPENV2ORD;
     else
@@ -1324,10 +1332,23 @@ static LRESULT FILEDLG95_OnWMSize(HWND hwnd, WPARAM wParam)
              * move to bottom */
             switch( ctrlid)
             {
+#ifdef __REACTOS__
+                /* Windows 11 layout: the file types are on the right of the name */
+                case cmb1:
+                    if (fodInfos->Nav.bEnabled)
+                    {
+                        DeferWindowPos( hdwp, ctrl, NULL, rc.left + chgx, rc.top + chgy,
+                                0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
+                        break;
+                    }
+                    /* fall through */
+#endif
                 /* file name (edit or comboboxex) and file types combo change also width */
                 case edt1:
                 case cmb13:
+#ifndef __REACTOS__
                 case cmb1:
+#endif
                     DeferWindowPos( hdwp, ctrl, NULL, rc.left, rc.top + chgy,
                             rc.right - rc.left + chgx, rc.bottom - rc.top,
                             SWP_NOACTIVATE | SWP_NOZORDER);
@@ -1381,9 +1402,25 @@ static LRESULT FILEDLG95_OnWMSize(HWND hwnd, WPARAM wParam)
                             SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
                     break;
                 case IDC_TOOLBARPLACES:
+#ifdef __REACTOS__
+                case IDC_NAVPANE:
+#endif
                     DeferWindowPos( hdwp, ctrl, NULL, 0, 0, rc.right - rc.left, rc.bottom - rc.top + chgy,
                                     SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
                     break;
+#ifdef __REACTOS__
+                /* Windows 11 layout: the path is as wide as the dialog, the
+                 * search box stays on the right */
+                case IDC_LOOKIN:
+                    if (fodInfos->Nav.bEnabled)
+                        DeferWindowPos( hdwp, ctrl, NULL, 0, 0, rc.right - rc.left + chgx, rc.bottom - rc.top,
+                                        SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
+                    break;
+                case IDC_SEARCH:
+                    DeferWindowPos( hdwp, ctrl, NULL, rc.left + chgx, rc.top, 0, 0,
+                                    SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
+                    break;
+#endif
             }
         }
     }
@@ -1605,6 +1642,16 @@ INT_PTR CALLBACK FileOpenDlgProc95(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
     {
 	LPNMHDR lpnmh = (LPNMHDR)lParam;
 	UINT stringId = -1;
+#ifdef __REACTOS__
+	LRESULT lResult;
+
+	/* the navigation pane of the Windows 11 layout */
+	if (FILEDLGNAV_OnNotify(hwnd, lpnmh, &lResult))
+	{
+	    SetWindowLongPtrW(hwnd, DWLP_MSGRESULT, lResult);
+	    return TRUE;
+	}
+#endif
 
 	/* set up the button tooltips strings */
 	if(TTN_GETDISPINFOA == lpnmh->code )
@@ -1632,6 +1679,14 @@ INT_PTR CALLBACK FileOpenDlgProc95(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 		case FCIDM_TB_DESKTOP:
 		    stringId = IDS_TODESKTOP;
 		    break;
+#ifdef __REACTOS__
+		case FCIDM_TB_BACK:
+		    stringId = IDS_BACK;
+		    break;
+		case FCIDM_TB_FORWARD:
+		    stringId = IDS_FORWARD;
+		    break;
+#endif
 		default:
 		    stringId = 0;
 	    }
@@ -1725,10 +1780,16 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
   GetWindowRect(GetDlgItem(hwnd,IDC_TOOLBARSTATIC),&rectTB);
   MapWindowPoints( 0, hwnd,(LPPOINT)&rectTB,2);
 
+#ifdef __REACTOS__
+  /* Windows 11 layout: the buttons are on the left of the path */
+  if (!fodInfos->Nav.bEnabled)
+#endif
+  {
   rectTB.right = rectlook.right + rectTB.right - rectTB.left;
   rectTB.bottom = rectlook.top - 1 + rectTB.bottom - rectTB.top;
   rectTB.left = rectlook.right;
   rectTB.top = rectlook.top-1;
+  }
 
   if (fodInfos->unicode)
       fodInfos->DlgInfos.hwndTB = CreateWindowExW(0, TOOLBARCLASSNAMEW, NULL,
@@ -1761,8 +1822,37 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
   CoTaskMemFree(desktopPidl);
 
   /* Finish Toolbar Construction */
+#ifdef __REACTOS__
+  if (fodInfos->Nav.bEnabled)
+  {
+      /* back, forward, up | new folder | list, details */
+      static const TBADDBITMAP tbaHist = {HINST_COMMCTRL, IDB_HIST_SMALL_COLOR};
+      int iHist;
+
+      /* (after the desktop icon, which was added to the image list directly) */
+      SendMessageW(fodInfos->DlgInfos.hwndTB, TB_ADDBITMAP, 5, (LPARAM)&tbaHist);
+      iHist = ImageList_GetImageCount(toolbarImageList) - 5;
+      TBBUTTON tbbNav[] =
+      {
+       {iHist + HIST_BACK,    FCIDM_TB_BACK,       TBSTATE_ENABLED, BTNS_BUTTON, {0, 0}, 0, 0 },
+       {iHist + HIST_FORWARD, FCIDM_TB_FORWARD,    TBSTATE_ENABLED, BTNS_BUTTON, {0, 0}, 0, 0 },
+       {VIEW_PARENTFOLDER,    FCIDM_TB_UPFOLDER,   TBSTATE_ENABLED, BTNS_BUTTON, {0, 0}, 0, 0 },
+       {0,                    0,                   TBSTATE_ENABLED, BTNS_SEP, {0, 0}, 0, 0 },
+       {VIEW_NEWFOLDER,       FCIDM_TB_NEWFOLDER,  TBSTATE_ENABLED, BTNS_BUTTON, {0, 0}, 0, 0 },
+       {0,                    0,                   TBSTATE_ENABLED, BTNS_SEP, {0, 0}, 0, 0 },
+       {VIEW_LIST,            FCIDM_TB_SMALLICON,  TBSTATE_ENABLED, BTNS_BUTTON, {0, 0}, 0, 0 },
+       {VIEW_DETAILS,         FCIDM_TB_REPORTVIEW, TBSTATE_ENABLED, BTNS_BUTTON, {0, 0}, 0, 0 },
+      };
+      SendMessageW(fodInfos->DlgInfos.hwndTB, TB_ADDBUTTONSW, ARRAY_SIZE(tbbNav), (LPARAM)tbbNav);
+  }
+  else
+#endif
   SendMessageW(fodInfos->DlgInfos.hwndTB, TB_ADDBUTTONSW, 9, (LPARAM) tbb);
   SendMessageW(fodInfos->DlgInfos.hwndTB, TB_AUTOSIZE, 0, 0);
+#ifdef __REACTOS__
+  if (fodInfos->Nav.bEnabled)
+      FILEDLGNAV_InitControls(hwnd, fodInfos);
+#endif
 
   if (is_places_bar_enabled(fodInfos))
   {
@@ -2168,6 +2258,9 @@ static LRESULT FILEDLG95_FillControls(HWND hwnd, WPARAM wParam, LPARAM lParam)
  */
 void FILEDLG95_Clean(HWND hwnd)
 {
+#ifdef __REACTOS__
+      FILEDLGNAV_Clean(hwnd);
+#endif
       FILEDLG95_FILETYPE_Clean(hwnd);
       FILEDLG95_LOOKIN_Clean(hwnd);
       FILEDLG95_SHELL_Clean(hwnd);
@@ -2196,6 +2289,12 @@ static LRESULT FILEDLG95_OnWMCommand(HWND hwnd, WPARAM wParam)
   FileOpenDlgInfos *fodInfos = get_filedlg_infoptr(hwnd);
   WORD wNotifyCode = HIWORD(wParam); /* notification code */
   WORD id = LOWORD(wParam);         /* item, control, or accelerator identifier */
+
+#ifdef __REACTOS__
+  /* back, forward, the search box of the Windows 11 layout */
+  if (FILEDLGNAV_OnCommand(hwnd, id, wNotifyCode))
+    return FALSE;
+#endif
 
   switch (id)
   {

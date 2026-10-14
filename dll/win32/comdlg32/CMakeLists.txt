@@ -11,6 +11,7 @@ list(APPEND SOURCE
     filedlg.c
     filedlg31.c
     filedlgbrowser.c
+    filedlgnav.c
     finddlg.c
     fontdlg.c
     itemdlg.c
@@ -28,7 +29,7 @@ if(DLL_EXPORT_VERSION GREATER_EQUAL 0x600)
     add_idl_reg_scripts(comdlg32 registry comdlg32_classes.idl)
 endif()
 target_link_libraries(comdlg32 uuid wine wine_dll_register wine_dll_canunload oldnames)
-add_delay_importlibs(comdlg32 ole32)
+add_delay_importlibs(comdlg32 ole32 uxtheme)
 add_importlibs(comdlg32 shell32 shlwapi comctl32 winspool user32 gdi32 advapi32 msvcrt kernel32 ntdll)
 add_pch(comdlg32 precomp.h SOURCE)
 add_cd_file(TARGET comdlg32 DESTINATION reactos/system32 FOR all)

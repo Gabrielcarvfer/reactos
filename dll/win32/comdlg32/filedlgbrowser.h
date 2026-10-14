@@ -101,6 +101,18 @@ typedef struct
     LPVOID pvCWD; /* ICurrentWorkingDirectory */
     LPVOID pvDropDown; /* IAutoCompleteDropDown */
     LPVOID pvACList; /* IACList2 */
+    /* The Windows 11 style layout (filedlgnav.c) */
+    struct {
+        BOOL bEnabled;
+        HWND hwndNavPane;       /* tree: home, pinned folders, this PC, network */
+        HWND hwndSearch;        /* search box: filters the current folder */
+        LPWSTR lpstrSearch;     /* its text, NULL if empty */
+        LPITEMIDLIST history[32]; /* visited folders, for back and forward */
+        int nHistory;
+        int iHistory;           /* the current one */
+        BOOL bHistoryMove;      /* browsing because of back/forward */
+        BOOL bSyncingTree;      /* selecting in the tree because the folder changed */
+    } Nav;
 #endif
 } FileOpenDlgInfos;
 
@@ -124,6 +136,12 @@ typedef struct
 #define IDS_LISTVIEW                    152
 #define IDS_REPORTVIEW                  153
 #define IDS_TODESKTOP                   154
+#ifdef __REACTOS__
+#define IDS_BACK                        160
+#define IDS_FORWARD                     161
+#define IDS_SEARCHCUE                   162
+#define IDS_NAVHOME                     163
+#endif
 
 #define IDC_OPENREADONLY                chx1
 
@@ -141,6 +159,12 @@ typedef struct
 
 #define IDC_TOOLBAR			1
 #define IDC_TOOLBARPLACES               ctl1
+#ifdef __REACTOS__
+#define IDC_NAVPANE                     (ctl1 + 1) /* Windows 11 layout: navigation tree */
+#define IDC_SEARCH                      edt2    /* Windows 11 layout: search box */
+#define FCIDM_TB_BACK                   0xA020
+#define FCIDM_TB_FORWARD                0xA021
+#endif
 
 /***********************************************************************
  * Prototypes for the methods of the IShellBrowserImpl class
@@ -163,6 +187,18 @@ extern IShellFolder*    GetShellFolderFromPidl(LPITEMIDLIST pidlAbs);
 extern LPITEMIDLIST     GetParentPidl(LPITEMIDLIST pidl);
 
 extern int     FILEDLG95_LOOKIN_SelectItem(HWND hwnd,LPITEMIDLIST pidl);
+
+#ifdef __REACTOS__
+/* The Windows 11 style layout (filedlgnav.c) */
+#define NEWFILEOPENELEVENORD 1560   /* its dialog template */
+BOOL FILEDLGNAV_IsEnabled(const FileOpenDlgInfos *fodInfos);
+void FILEDLGNAV_InitControls(HWND hwnd, FileOpenDlgInfos *fodInfos);
+BOOL FILEDLGNAV_OnNotify(HWND hwnd, LPNMHDR pnmh, LRESULT *pResult);
+BOOL FILEDLGNAV_OnCommand(HWND hwnd, WORD wID, WORD wNotifyCode);
+void FILEDLGNAV_FolderChanged(HWND hwnd);
+BOOL FILEDLGNAV_IncludeName(const FileOpenDlgInfos *fodInfos, LPCWSTR pszName);
+void FILEDLGNAV_Clean(HWND hwnd);
+#endif
 extern LRESULT SendCustomDlgNotificationMessage(HWND hwndParentDlg, UINT uCode);
 
 #endif /*SHBROWSER_H*/
