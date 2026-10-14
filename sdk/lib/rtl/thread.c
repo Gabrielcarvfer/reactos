@@ -99,11 +99,17 @@ RtlpCreateUserStack(IN HANDLE ProcessHandle,
     /* Update the stack position */
     Stack += StackReserve - StackCommit;
 
-    /* Check if we can add a guard page */
-    if (StackReserve >= StackCommit + SystemBasicInfo.PageSize)
+    /* Check if we can add a guard page (two on x64, like Windows: code
+       relies on 8 KB of guard, it probes the stack every 8 KB) */
+#ifdef _WIN64
+    GuardPageSize = 2 * SystemBasicInfo.PageSize;
+#else
+    GuardPageSize = SystemBasicInfo.PageSize;
+#endif
+    if (StackReserve >= StackCommit + GuardPageSize)
     {
-        Stack -= SystemBasicInfo.PageSize;
-        StackCommit += SystemBasicInfo.PageSize;
+        Stack -= GuardPageSize;
+        StackCommit += GuardPageSize;
         UseGuard = TRUE;
     }
     else
@@ -131,7 +137,6 @@ RtlpCreateUserStack(IN HANDLE ProcessHandle,
     /* Create a guard page if needed */
     if (UseGuard)
     {
-        GuardPageSize = SystemBasicInfo.PageSize;
         Status = ZwProtectVirtualMemory(ProcessHandle,
                                         (PVOID*)&Stack,
                                         &GuardPageSize,

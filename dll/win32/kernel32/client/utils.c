@@ -460,11 +460,17 @@ BaseCreateStack(
     /* Update the stack position */
     Stack += StackReserve - StackCommit;
 
-    /* Check if we can add a guard page */
-    if (StackReserve >= StackCommit + PageSize)
+    /* Check if we can add a guard page (two on x64, like Windows: code
+       relies on 8 KB of guard, it probes the stack every 8 KB) */
+#ifdef _WIN64
+    GuardPageSize = 2 * PageSize;
+#else
+    GuardPageSize = PageSize;
+#endif
+    if (StackReserve >= StackCommit + GuardPageSize)
     {
-        Stack -= PageSize;
-        StackCommit += PageSize;
+        Stack -= GuardPageSize;
+        StackCommit += GuardPageSize;
         UseGuard = TRUE;
     }
     else
@@ -493,7 +499,6 @@ BaseCreateStack(
     /* Create a guard page if needed */
     if (UseGuard)
     {
-        GuardPageSize = PageSize;
         Status = NtProtectVirtualMemory(hProcess,
                                         (PVOID*)&Stack,
                                         &GuardPageSize,

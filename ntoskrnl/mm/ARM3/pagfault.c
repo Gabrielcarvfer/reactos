@@ -12,6 +12,13 @@
 #define NDEBUG
 #include <debug.h>
 
+/* Guard pages below a user mode stack (see MiCheckForUserStackOverflow) */
+#ifdef _WIN64
+#define MI_USER_STACK_GUARD_SIZE (2 * PAGE_SIZE)
+#else
+#define MI_USER_STACK_GUARD_SIZE PAGE_SIZE
+#endif
+
 #define MODULE_INVOLVED_IN_ARM3
 #include <mm/ARM3/miarm.h>
 
@@ -67,8 +74,10 @@ MiCheckForUserStackOverflow(IN PVOID Address,
     /* Guarantees make this code harder, for now, assume there aren't any */
     ASSERT(GuaranteedSize == 0);
 
-    /* So allocate only the minimum guard page size */
-    GuaranteedSize = PAGE_SIZE;
+    /* So allocate only the minimum guard size: one page, two on x64. Windows
+     * x64 keeps 8 KB of guard pages, and code relies on it: it probes its
+     * stack every 8 KB (e.g. the dav1d AV1 decoder in web browsers). */
+    GuaranteedSize = MI_USER_STACK_GUARD_SIZE;
 
     /* Does this faulting stack address actually exist in the stack? */
     if ((Address >= StackBase) || (Address < DeallocationStack))
@@ -121,6 +130,17 @@ MiCheckForUserStackOverflow(IN PVOID Address,
 
     /* Don't handle this flag yet */
     ASSERT((PsGetCurrentProcess()->Peb->NtGlobalFlag & FLG_DISABLE_STACK_EXTENSION) == 0);
+
+    /* The rest of the guard region above the faulting page, if the access
+     * skipped it, becomes normal stack too */
+    if ((ULONG_PTR)PAGE_ALIGN(Address) + PAGE_SIZE < (ULONG_PTR)Teb->NtTib.StackLimit)
+    {
+        PVOID Base = (PVOID)((ULONG_PTR)PAGE_ALIGN(Address) + PAGE_SIZE);
+        SIZE_T Size = (ULONG_PTR)Teb->NtTib.StackLimit - (ULONG_PTR)Base;
+        ULONG OldProtect;
+
+        ZwProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, PAGE_READWRITE, &OldProtect);
+    }
 
     /* Update the stack limit */
     Teb->NtTib.StackLimit = (PVOID)((ULONG_PTR)NextStackAddress + GuaranteedSize);
