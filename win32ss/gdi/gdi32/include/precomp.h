@@ -37,6 +37,10 @@
 #include <ndk/rtlfuncs.h>
 #include <wingdi.h>
 #define _ENGINE_EXPORT_
+#ifdef BUILD_WOW6432
+/* The DC_ATTRs of the 64-bit kernel (see win32ss/include/kptr.h) */
+#define WOW64_KERNEL_FLOATOBJ
+#endif
 #include <winddi.h>
 #include <prntfont.h>
 #include <winddiui.h>

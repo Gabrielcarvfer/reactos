@@ -3538,9 +3538,12 @@ StartScan:
         }
     }
 
-    /* Make sure the image was compiled for this processor */
-    if ((ImageInformation.Machine < SharedUserData->ImageNumberLow) ||
-        (ImageInformation.Machine > SharedUserData->ImageNumberHigh))
+    /* Make sure the image was compiled for this processor. 32-bit x86 images
+     * also run on 64-bit ReactOS (WoW64): there, the kernel reports the 64-bit
+     * machine, to the 32-bit kernel32 too. */
+    if (((ImageInformation.Machine < SharedUserData->ImageNumberLow) ||
+         (ImageInformation.Machine > SharedUserData->ImageNumberHigh)) &&
+        (ImageInformation.Machine != IMAGE_FILE_MACHINE_I386))
     {
         /* It was not -- raise a hard error */
         ErrorResponse = ResponseOk;
@@ -4143,8 +4146,11 @@ StartScan:
     /* Write the remote PEB address and clear it locally, we no longer use it */
     CreateProcessMsg->PebAddressNative = RemotePeb;
 #ifdef _WIN64
-    DPRINT("TODO: WOW64 is not supported yet\n");
-    CreateProcessMsg->PebAddressWow64 = 0;
+    /* A 32-bit process has a 32-bit PEB too, in the page after the 64-bit one */
+    if (ImageInformation.Machine == IMAGE_FILE_MACHINE_I386)
+        CreateProcessMsg->PebAddressWow64 = (ULONG)((ULONG_PTR)RemotePeb + ROUND_TO_PAGES(sizeof(PEB)));
+    else
+        CreateProcessMsg->PebAddressWow64 = 0;
 #else
     CreateProcessMsg->PebAddressWow64 = (ULONG)RemotePeb;
 #endif

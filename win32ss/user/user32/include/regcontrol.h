@@ -24,6 +24,9 @@ struct builtin_class_descr
 
 extern DWORD RegisterDefaultClasses;
 BOOL WINAPI RegisterSystemControls(VOID);
+#ifdef KPTR_64BIT_LAYOUT
+WNDPROC FASTCALL Wow64MapClientProc(WNDPROC Proc);
+#endif
 
 extern const struct builtin_class_descr BUTTON_builtin_class;
 extern const struct builtin_class_descr COMBO_builtin_class;

@@ -2431,38 +2431,85 @@ GetSystemWindowsDirectoryW(OUT LPWSTR lpBuffer,
     return ReturnLength / sizeof(WCHAR);
 }
 
+/* The SysWOW64 directory (32-bit system files) of 64-bit ReactOS: for the 64-bit
+ * kernel32 it is the Windows directory + \SysWOW64; wow64 gives the 32-bit one
+ * the path in its static server data */
+static
+BOOLEAN
+BaseGetSystemWow64Directory(OUT PUNICODE_STRING Directory)
+{
+#ifdef _WIN64
+#ifdef BUILD_WOW64_ENABLED
+    static WCHAR Buffer[MAX_PATH];
+    UNICODE_STRING Path;
+
+    RtlInitEmptyUnicodeString(&Path, Buffer, sizeof(Buffer));
+    if (!NT_SUCCESS(RtlAppendUnicodeStringToString(&Path, &BaseWindowsDirectory)) ||
+        !NT_SUCCESS(RtlAppendUnicodeToString(&Path, L"\\SysWOW64")))
+        return FALSE;
+    *Directory = Path;
+    return TRUE;
+#else
+    return FALSE;
+#endif
+#else
+    *Directory = BaseStaticServerData->WindowsSys32x86Directory;
+    return Directory->Length != 0;
+#endif
+}
+
 /*
- * @unimplemented
+ * @implemented
  */
 UINT
 WINAPI
 GetSystemWow64DirectoryW(OUT LPWSTR lpBuffer,
                          IN UINT uSize)
 {
-#ifdef _WIN64
-    UNIMPLEMENTED;
-    return 0;
-#else
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return 0;
-#endif
+    UNICODE_STRING Directory;
+    ULONG Length;
+
+    if (!BaseGetSystemWow64Directory(&Directory))
+    {
+        SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+        return 0;
+    }
+
+    Length = Directory.Length / sizeof(WCHAR);
+    if (!lpBuffer || uSize <= Length)
+        return Length + 1;
+
+    RtlCopyMemory(lpBuffer, Directory.Buffer, Directory.Length);
+    lpBuffer[Length] = UNICODE_NULL;
+    return Length;
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 UINT
 WINAPI
 GetSystemWow64DirectoryA(OUT LPSTR lpBuffer,
                          IN UINT uSize)
 {
-#ifdef _WIN64
-    UNIMPLEMENTED;
-    return 0;
-#else
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return 0;
-#endif
+    UNICODE_STRING Directory;
+    ANSI_STRING Ansi;
+    ULONG AnsiLength;
+
+    if (!BaseGetSystemWow64Directory(&Directory))
+    {
+        SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+        return 0;
+    }
+
+    AnsiLength = BasepUnicodeStringTo8BitSize(&Directory);
+    if (!lpBuffer || uSize < AnsiLength)
+        return AnsiLength;
+
+    RtlInitEmptyAnsiString(&Ansi, lpBuffer, (USHORT)min(uSize, MAXUSHORT));
+    if (!NT_SUCCESS(BasepUnicodeStringTo8BitString(&Ansi, &Directory, FALSE)))
+        return 0;
+    return Ansi.Length;
 }
 
 /* EOF */

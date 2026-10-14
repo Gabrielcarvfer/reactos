@@ -81,6 +81,20 @@
 #define MI_HYPERSPACE_PTES                     (256 - 1)
 #define MI_ZERO_PTES                           (32)
 #define MI_MAX_ZERO_BITS                        53
+
+/* Like on Windows, a ZeroBits value above 32 is a mask of the address bits
+ * that may be set (WoW64 passes 0x7FFFFFFF); turn it into a bit count */
+FORCEINLINE
+ULONG_PTR
+MiZeroBitsFromMask(ULONG_PTR ZeroBits)
+{
+    ULONG Index;
+
+    if (ZeroBits <= 32) return ZeroBits;
+    _BitScanReverse64(&Index, ZeroBits);
+    return 63 - Index;
+}
+#define MI_ZERO_BITS_FROM_MASK(ZeroBits) MiZeroBitsFromMask(ZeroBits)
 #define SESSION_POOL_LOOKASIDES                 21
 
 /* MMPTE related defines */

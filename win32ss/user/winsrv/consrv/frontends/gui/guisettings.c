@@ -213,9 +213,9 @@ GuiConsoleShowConsoleProperties(PGUI_CONSOLE_DATA GuiData,
 
         _SEH2_TRY
         {
-            Thread = CreateRemoteThread(ProcessData->Process->ProcessHandle, NULL, 0,
-                                        ProcessData->PropRoutine,
-                                        ThreadParameter, 0, NULL);
+            Thread = ConSrvCreateRemoteThread(ProcessData->Process->ProcessHandle,
+                                              ProcessData->PropRoutine,
+                                              ThreadParameter);
             if (NULL == Thread)
             {
                 DPRINT1("Failed thread creation (Error: 0x%x)\n", GetLastError());

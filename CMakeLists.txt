@@ -278,8 +278,20 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     add_definitions(-D_NEW_DELETE_OPERATORS_)
     if(ARCH STREQUAL "i386")
         add_definitions(-DUSE_COMPILER_EXCEPTIONS -D_USE_32BIT_TIME_T)
+        # The 32-bit system files of 64-bit ReactOS (SysWOW64, for WoW64):
+        # their system calls go to wow64.dll, and the structures that
+        # user32 and gdi32 share with win32k have the 64-bit layout
+        option(BUILD_WOW6432 "Build the 32-bit files of 64-bit ReactOS (SysWOW64)" OFF)
+        if(BUILD_WOW6432)
+            add_compile_definitions(BUILD_WOW6432)
+        endif()
     elseif(ARCH STREQUAL "amd64")
         add_compile_definitions(USE_COMPILER_EXCEPTIONS)
+        # Run 32-bit programs (WoW64)
+        option(BUILD_WOW64 "Build WoW64 support" ON)
+        if(BUILD_WOW64)
+            add_compile_definitions(BUILD_WOW64_ENABLED)
+        endif()
     elseif(ARCH STREQUAL "arm")
         add_compile_definitions(USE_COMPILER_EXCEPTIONS)
     elseif(ARCH STREQUAL "arm64")

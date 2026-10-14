@@ -48,6 +48,11 @@ ConSrvValidateConsole(OUT struct _CONSRV_CONSOLE** /* PCONSRV_CONSOLE* */ Consol
                       IN CONSOLE_STATE ExpectedState,
                       IN BOOLEAN LockConsole);
 
+HANDLE
+ConSrvCreateRemoteThread(IN HANDLE ProcessHandle,
+                         IN LPTHREAD_START_ROUTINE StartRoutine,
+                         IN PVOID Parameter);
+
 NTSTATUS
 ConSrvConsoleCtrlEventTimeout(IN ULONG CtrlEvent,
                               IN PCONSOLE_PROCESS_DATA ProcessData,

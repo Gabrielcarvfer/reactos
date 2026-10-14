@@ -1369,7 +1369,7 @@ ImmDllInitialize(
             break;
 
         case DLL_THREAD_DETACH:
-            if (!IS_IMM_MODE() || NtCurrentTeb()->Win32ThreadInfo == NULL)
+            if (!IS_IMM_MODE() || NtCurrentWin32ThreadInfo() == NULL)
                 return TRUE;
 
             hKL = GetKeyboardLayout(0);

@@ -667,7 +667,9 @@ typedef struct _FD_LIGATURE {
   LIGATURE alig[1];
 } FD_LIGATURE;
 
-#if defined(_X86_) && !defined(USERMODE_DRIVER)
+/* (WOW64_KERNEL_FLOATOBJ: the 32-bit gdi32 of 64-bit ReactOS, which reads the
+ * FLOATOBJs of the 64-bit kernel) */
+#if defined(_X86_) && !defined(USERMODE_DRIVER) && !defined(WOW64_KERNEL_FLOATOBJ)
 typedef struct _FLOATOBJ
 {
   ULONG  ul1;
@@ -2650,7 +2652,7 @@ EngWritePrinter(
     _Out_ LPDWORD pcWritten);
 #endif /* !USERMODE_DRIVER */
 
-#if defined(_X86_) && !defined(USERMODE_DRIVER)
+#if defined(_X86_) && !defined(USERMODE_DRIVER) && !defined(WOW64_KERNEL_FLOATOBJ)
 ENGAPI
 VOID
 APIENTRY

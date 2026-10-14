@@ -1392,6 +1392,33 @@ InitializeProgramFilesDir(VOID)
         DPRINT1("Warning: %lu\n", Error);
     }
 
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    {
+        /* The programs of 32-bit programs (WoW64) go to "Program Files (x86)" */
+        WCHAR szX86Path[MAX_PATH], szX86CommonPath[MAX_PATH];
+        PCWSTR pszCommon = wcsrchr(szCommonFilesDirPath, L'\\');
+
+        _snwprintf(szX86Path, ARRAYSIZE(szX86Path), L"%s (x86)", szProgramFilesDirPath);
+        szX86Path[ARRAYSIZE(szX86Path) - 1] = UNICODE_NULL;
+        _snwprintf(szX86CommonPath, ARRAYSIZE(szX86CommonPath), L"%s%s", szX86Path,
+                   pszCommon ? pszCommon : L"\\Common Files");
+        szX86CommonPath[ARRAYSIZE(szX86CommonPath) - 1] = UNICODE_NULL;
+
+        RegSetValueExW(hKey, L"ProgramFilesDir (x86)", 0, REG_SZ, (LPBYTE)szX86Path,
+                       (wcslen(szX86Path) + 1) * sizeof(WCHAR));
+        RegSetValueExW(hKey, L"CommonFilesDir (x86)", 0, REG_SZ, (LPBYTE)szX86CommonPath,
+                       (wcslen(szX86CommonPath) + 1) * sizeof(WCHAR));
+        RegSetValueExW(hKey, L"ProgramW6432Dir", 0, REG_SZ, (LPBYTE)szProgramFilesDirPath,
+                       (wcslen(szProgramFilesDirPath) + 1) * sizeof(WCHAR));
+        RegSetValueExW(hKey, L"CommonW6432Dir", 0, REG_SZ, (LPBYTE)szCommonFilesDirPath,
+                       (wcslen(szCommonFilesDirPath) + 1) * sizeof(WCHAR));
+
+        // FIXME: Security!
+        CreateDirectoryW(szX86Path, NULL);
+        CreateDirectoryW(szX86CommonPath, NULL);
+    }
+#endif
+
     RegCloseKey(hKey);
 
     /* Create directory */

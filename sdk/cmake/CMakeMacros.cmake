@@ -239,6 +239,8 @@ macro(dir_to_num dir var)
     elseif(${dir} STREQUAL reactos/winsxs/amd64_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.14393.0_none_deadbeef)
         set(${var} 71)
 
+    elseif(${dir} STREQUAL reactos/SysWOW64)
+        set(${var} 83)
     elseif(${dir} STREQUAL reactos/winsxs/arm_microsoft.windows.common-controls_6595b64144ccf1df_5.82.2600.2982_none_deadbeef)
         set(${var} 72)
     elseif(${dir} STREQUAL reactos/winsxs/arm_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef)

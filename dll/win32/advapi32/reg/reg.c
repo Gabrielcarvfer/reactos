@@ -20,6 +20,65 @@
 
 #include "reg.h"
 
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+#include <wow64regview.h>
+
+/*
+ * KEY_WOW64_32KEY from a 64-bit program: the key of the registry view of
+ * 32-bit programs (Wow6432Node). Result gets the full name of that key
+ * (free it with RtlFreeUnicodeString), if it is another key.
+ */
+static
+BOOLEAN
+RegpGetWow64Key32(HANDLE KeyHandle, PCUNICODE_STRING SubKey, PUNICODE_STRING Result)
+{
+    const ULONG MaxChars = 2048;
+    PKEY_NAME_INFORMATION Info;
+    PWSTR Path, Out;
+    SIZE_T Length;
+    ULONG Size;
+    BOOLEAN Ret = FALSE;
+
+    Info = RtlAllocateHeap(RtlGetProcessHeap(), 0, sizeof(*Info) + MaxChars * sizeof(WCHAR));
+    Path = RtlAllocateHeap(RtlGetProcessHeap(), 0, 2 * MaxChars * sizeof(WCHAR));
+    Out = RtlAllocateHeap(RtlGetProcessHeap(), 0, MaxChars * sizeof(WCHAR));
+    if (!Info || !Path || !Out ||
+        !NT_SUCCESS(NtQueryKey(KeyHandle, KeyNameInformation, Info,
+                               sizeof(*Info) + MaxChars * sizeof(WCHAR), &Size)))
+    {
+        goto Done;
+    }
+
+    Length = Info->NameLength / sizeof(WCHAR);
+    RtlCopyMemory(Path, Info->Name, Length * sizeof(WCHAR));
+    if (SubKey && SubKey->Length && Length + 1 + SubKey->Length / sizeof(WCHAR) < 2 * MaxChars)
+    {
+        PCWSTR Name = SubKey->Buffer;
+        SIZE_T NameLength = SubKey->Length / sizeof(WCHAR);
+
+        if (Name[0] == L'\\') { Name++; NameLength--; }
+        Path[Length++] = L'\\';
+        RtlCopyMemory(Path + Length, Name, NameLength * sizeof(WCHAR));
+        Length += NameLength;
+    }
+    while (Length && Path[Length - 1] == L'\\') Length--;
+    Path[Length] = UNICODE_NULL;
+
+    if (GetKeyView32(Path, Length, Out, MaxChars))
+    {
+        RtlInitUnicodeString(Result, Out);
+        Out = NULL;     /* (now Result's) */
+        Ret = TRUE;
+    }
+
+Done:
+    if (Info) RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
+    if (Path) RtlFreeHeap(RtlGetProcessHeap(), 0, Path);
+    if (Out) RtlFreeHeap(RtlGetProcessHeap(), 0, Out);
+    return Ret;
+}
+#endif
+
 WINE_DEFAULT_DEBUG_CHANNEL(reg);
 
 /* DEFINES ******************************************************************/
@@ -1151,12 +1210,41 @@ RegCreateKeyExW(
                                Attributes,
                                (HANDLE)ParentKey,
                                lpSecurityAttributes ? (PSECURITY_DESCRIPTOR)lpSecurityAttributes->lpSecurityDescriptor : NULL);
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    {
+        UNICODE_STRING Wow64Name;
+
+        /* The registry view of 32-bit programs */
+        if ((samDesired & KEY_WOW64_32KEY) && RegpGetWow64Key32(ParentKey, &SubKeyString, &Wow64Name))
+        {
+            ObjectAttributes.RootDirectory = NULL;
+            ObjectAttributes.ObjectName = &Wow64Name;
+            Status = CreateNestedKey(phkResult,
+                                     &ObjectAttributes,
+                                     (lpClass == NULL)? NULL : &ClassString,
+                                     dwOptions,
+                                     samDesired,
+                                     lpdwDisposition);
+            RtlFreeUnicodeString(&Wow64Name);
+        }
+        else
+        {
+            Status = CreateNestedKey(phkResult,
+                                     &ObjectAttributes,
+                                     (lpClass == NULL)? NULL : &ClassString,
+                                     dwOptions,
+                                     samDesired,
+                                     lpdwDisposition);
+        }
+    }
+#else
     Status = CreateNestedKey(phkResult,
                              &ObjectAttributes,
                              (lpClass == NULL)? NULL : &ClassString,
                              dwOptions,
                              samDesired,
                              lpdwDisposition);
+#endif
 
     ClosePredefKey(ParentKey);
 
@@ -3409,6 +3497,22 @@ RegOpenKeyExW(HKEY hKey,
                                Attributes,
                                KeyHandle,
                                NULL);
+
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    {
+        UNICODE_STRING Wow64Name;
+
+        /* The registry view of 32-bit programs */
+        if ((samDesired & KEY_WOW64_32KEY) && RegpGetWow64Key32(KeyHandle, &SubKeyString, &Wow64Name))
+        {
+            ObjectAttributes.RootDirectory = NULL;
+            ObjectAttributes.ObjectName = &Wow64Name;
+            Status = NtOpenKey((PHANDLE)phkResult, samDesired, &ObjectAttributes);
+            RtlFreeUnicodeString(&Wow64Name);
+            goto Exit;
+        }
+    }
+#endif
 
     Status = NtOpenKey((PHANDLE)phkResult,
                        samDesired,

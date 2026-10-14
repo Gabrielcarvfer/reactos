@@ -625,6 +625,26 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
                                        FALSE);
         }
 
+        /* 64-bit Windows: the folders of the 32-bit programs, and the 64-bit
+         * ones under other names (WoW64 points ProgramFiles to the first) */
+        {
+            static const PCWSTR Values[][2] =
+            {
+                { L"ProgramFilesDir (x86)", L"ProgramFiles(x86)" },
+                { L"CommonFilesDir (x86)",  L"CommonProgramFiles(x86)" },
+                { L"ProgramW6432Dir",       L"ProgramW6432" },
+                { L"CommonW6432Dir",        L"CommonProgramW6432" },
+            };
+            UINT i;
+
+            for (i = 0; i < _countof(Values); i++)
+            {
+                Length = sizeof(szValue);
+                if (RegQueryValueExW(hKey, Values[i][0], NULL, &dwType, (LPBYTE)szValue, &Length) == ERROR_SUCCESS)
+                    SetUserEnvironmentVariable(Environment, (LPWSTR)Values[i][1], szValue, FALSE);
+            }
+        }
+
         RegCloseKey(hKey);
     }
 

@@ -4480,6 +4480,10 @@ NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
     TABLE_SEARCH_RESULT Result;
     PAGED_CODE();
 
+#ifdef MI_ZERO_BITS_FROM_MASK
+    ZeroBits = MI_ZERO_BITS_FROM_MASK(ZeroBits);
+#endif
+
     /* Check for valid Zero bits */
     if (ZeroBits > MI_MAX_ZERO_BITS)
     {

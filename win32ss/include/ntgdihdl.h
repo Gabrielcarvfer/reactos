@@ -12,6 +12,7 @@
 #define _NTGDIHDL_
 
 #include <winddi.h>
+#include "kptr.h"
 
 /* DEFINES *******************************************************************/
 
@@ -202,7 +203,7 @@
 
 typedef struct _GDI_TABLE_ENTRY
 {
-    PVOID KernelData; /* Points to the kernel mode structure */
+    KPTR(PVOID, KernelData); /* Points to the kernel mode structure */
     DWORD ProcessId;  /* process id that created the object, 0 for stock objects */
     union{            /* temp union structure. */
     LONG  Type;       /* the first 16 bit is the object type including the stock obj flag, the last 16 bits is just the object type */
@@ -211,7 +212,7 @@ typedef struct _GDI_TABLE_ENTRY
     UCHAR  ObjectType; /* objt */
     UCHAR  Flags;      /* Flags */
     };};
-    PVOID UserData;   /* pUser Points to the user mode structure, usually NULL though */
+    KPTR(PVOID, UserData);   /* pUser Points to the user mode structure, usually NULL though */
 } GDI_TABLE_ENTRY, *PGDI_TABLE_ENTRY;
 
 typedef struct _ENTRY
@@ -246,7 +247,7 @@ typedef struct __GDI_SHARED_HANDLE_TABLE /* Must match win32k/include/gdiobj.h *
     GDI_TABLE_ENTRY Entries[GDI_HANDLE_COUNT]; /* Handle table. */
     DEVCAPS         DevCaps;                   /* Shared device capabilities. */
     FLONG           flDeviceUniq;              /* Device settings uniqueness. */
-    PVOID           pvLangPack;                /* Lanuage Pack. */
+    KPTR(PVOID, pvLangPack);                /* Lanuage Pack. */
     CFONT           cfPublic[GDI_CFONT_MAX];   /* Public Fonts. */
     DWORD           dwCFCount;
 } GDI_SHARED_HANDLE_TABLE, *PGDI_SHARED_HANDLE_TABLE;
@@ -290,10 +291,10 @@ typedef struct _LDC
  */
 typedef struct _DC_ATTR
 {
-    PVOID pvLDC;
+    KPTR(PVOID, pvLDC);
     ULONG ulDirty_;
-    HANDLE hbrush;
-    HANDLE hpen;
+    KPTR(HANDLE, hbrush);
+    KPTR(HANDLE, hpen);
     COLORREF crBackgroundClr;
     ULONG ulBackgroundClr;
     COLORREF crForegroundClr;
@@ -315,19 +316,19 @@ typedef struct _DC_ATTR
     LONG lStretchBltMode;
     FLONG flFontMapper;
     LONG lIcmMode;
-    HANDLE hcmXform;
-    HCOLORSPACE hColorSpace;
+    KPTR(HANDLE, hcmXform);
+    KPTR(HCOLORSPACE, hColorSpace);
     FLONG flIcmFlags;
     INT IcmBrushColor;
     INT IcmPenColor;
-    PVOID pvLIcm;
+    KPTR(PVOID, pvLIcm);
     FLONG flTextAlign;
     LONG lTextAlign;
     LONG lTextExtra;
     LONG lRelAbs;
     LONG lBreakExtra;
     LONG cBreak;
-    HANDLE hlfntNew;
+    KPTR(HANDLE, hlfntNew);
     MATRIX mxWorldToDevice;
     MATRIX mxDeviceToWorld;
     MATRIX mxWorldToPage;
@@ -359,7 +360,7 @@ typedef struct _BRUSH_ATTR /* Used with pen too. */
 typedef struct _FONT_ATTR
 {
     BOOL    bSlowWidths;
-    PCFONT  pCharWidthData;
+    KPTR(PCFONT, pCharWidthData);
 } FONT_ATTR, *PFONT_ATTR;
 
 

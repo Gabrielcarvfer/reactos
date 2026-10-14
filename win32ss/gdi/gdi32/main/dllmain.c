@@ -50,11 +50,21 @@ GdiProcessSetup(VOID)
         hProcessHeap = GetProcessHeap();
 
         /* map the gdi handle table to user space */
+#ifdef BUILD_WOW6432
+        {
+            /* 32-bit gdi32 on 64-bit ReactOS: win32k fills the 64-bit PEB,
+             * which is right before the 32-bit one */
+            GdiHandleTable = (PVOID)(ULONG_PTR)KPEB64_FIELD(ULONG64, KPEB64_GDISHAREDHANDLETABLE);
+            GdiSharedHandleTable = (PVOID)GdiHandleTable;
+            GDI_BatchLimit = KPEB64_FIELD(ULONG, KPEB64_GDIDCATTRIBUTELIST);
+        }
+#else
         GdiHandleTable = NtCurrentTeb()->ProcessEnvironmentBlock->GdiSharedHandleTable;
         GdiSharedHandleTable = NtCurrentTeb()->ProcessEnvironmentBlock->GdiSharedHandleTable;
+        GDI_BatchLimit = (DWORD) NtCurrentTeb()->ProcessEnvironmentBlock->GdiDCAttributeList;
+#endif
         GdiDevCaps = &GdiSharedHandleTable->DevCaps;
         CurrentProcessId = NtCurrentTeb()->ClientId.UniqueProcess;
-        GDI_BatchLimit = (DWORD) NtCurrentTeb()->ProcessEnvironmentBlock->GdiDCAttributeList;
         GdiHandleCache = (PGDIHANDLECACHE)NtCurrentTeb()->ProcessEnvironmentBlock->GdiHandleBuffer;
         RtlInitializeCriticalSection(&semLocal);
         InitializeCriticalSection(&gcsClientObjLinks);

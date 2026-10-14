@@ -3369,6 +3369,10 @@ NtMapViewOfSection(
         return STATUS_INVALID_PARAMETER_3;
     }
 
+#ifdef MI_ZERO_BITS_FROM_MASK
+    ZeroBits = MI_ZERO_BITS_FROM_MASK(ZeroBits);
+#endif
+
     /* Check for invalid zero bits */
     if (ZeroBits)
     {

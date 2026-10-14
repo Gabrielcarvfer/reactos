@@ -645,7 +645,9 @@ ObQueryDeviceMapInformation(
     /* Copy back data */
     _SEH2_TRY
     {
-        RtlCopyMemory(DeviceMapInfo, &MapInfo, sizeof(PROCESS_DEVICEMAP_INFORMATION));
+        /* (only the Query part: on 64-bit the structure is larger, the caller
+         * gives exactly that size, see NtQueryInformationProcess) */
+        RtlCopyMemory(&DeviceMapInfo->Query, &MapInfo.Query, sizeof(MapInfo.Query));
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

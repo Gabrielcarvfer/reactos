@@ -704,6 +704,50 @@ Test_ProcQueryAlignmentProbe(void)
     }
 }
 
+static
+void
+Test_ProcessDeviceMap(void)
+{
+    NTSTATUS Status;
+    struct
+    {
+        PROCESS_DEVICEMAP_INFORMATION Info;
+        UCHAR Guard[16];
+    } Buffer;
+    const ULONG QuerySize = RTL_FIELD_SIZE(PROCESS_DEVICEMAP_INFORMATION, Query);
+    PUCHAR Bytes = (PUCHAR)&Buffer;
+    ULONG Length, i;
+
+    /* Only the Query part may be written: on 64-bit, the whole structure is
+     * larger than what the caller gives (a 32-bit stack buffer, under WoW64) */
+    RtlFillMemory(&Buffer, sizeof(Buffer), 0x55);
+    Length = 0xdeadbeef;
+    Status = NtQueryInformationProcess(NtCurrentProcess(),
+                                       ProcessDeviceMap,
+                                       &Buffer.Info,
+                                       QuerySize,
+                                       &Length);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_long(Length, QuerySize);
+    ok(Buffer.Info.Query.DriveMap != 0x55555555, "DriveMap not written\n");
+    for (i = QuerySize; i < sizeof(Buffer); i++)
+    {
+        if (Bytes[i] != 0x55)
+        {
+            ok(FALSE, "Byte %lu after the Query part was overwritten (0x%02x)\n", i, Bytes[i]);
+            break;
+        }
+    }
+
+    /* Any other size is refused */
+    Status = NtQueryInformationProcess(NtCurrentProcess(),
+                                       ProcessDeviceMap,
+                                       &Buffer.Info,
+                                       QuerySize + 1,
+                                       NULL);
+    ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+}
+
 START_TEST(NtQueryInformationProcess)
 {
     NTSTATUS Status;
@@ -721,4 +765,5 @@ START_TEST(NtQueryInformationProcess)
     Test_ProcessPriorityClassAlignment();
     Test_ProcessWx86Information();
     Test_ProcQueryAlignmentProbe();
+    Test_ProcessDeviceMap();
 }

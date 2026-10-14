@@ -17,9 +17,9 @@ HANDLE ghImmHeap = NULL;
 
 PTHREADINFO FASTCALL Imm32CurrentPti(VOID)
 {
-    if (NtCurrentTeb()->Win32ThreadInfo == NULL)
+    if (NtCurrentWin32ThreadInfo() == NULL)
         NtUserGetThreadState(THREADSTATE_GETTHREADINFO);
-    return NtCurrentTeb()->Win32ThreadInfo;
+    return NtCurrentWin32ThreadInfo();
 }
 
 BOOL Imm32IsCrossThreadAccess(HIMC hIMC)

@@ -2499,6 +2499,94 @@ SaveSettings(
     SendMessage(pItemsData->hwndDlg, PM_ITEM_END, 2, Error);
 }
 
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+/*
+ * 32-bit programs (WoW64) have their own HKLM\SOFTWARE, in
+ * HKLM\SOFTWARE\Wow6432Node (see dll/win32/wow64/regredirect.c), and their own
+ * COM registrations in HKLM\SOFTWARE\Classes\Wow6432Node. Start it as a copy
+ * of the 64-bit one (the 32-bit system files have the same names, in
+ * SysWOW64), with the 32-bit program folders.
+ */
+static
+VOID
+CreateWow64RegistryView(VOID)
+{
+    static const PCWSTR Classes[] = { L"CLSID", L"DirectShow", L"Interface", L"Media Type", L"MediaFoundation" };
+    static const PCWSTR Values[][2] =
+    {
+        { L"ProgramFilesDir", L"ProgramFilesDir (x86)" },
+        { L"CommonFilesDir",  L"CommonFilesDir (x86)" },
+        /* (the names under which shell32 keeps these folders) */
+        { L"ProgramFiles",       L"ProgramFilesDir (x86)" },
+        { L"ProgramFilesCommon", L"CommonFilesDir (x86)" },
+    };
+    HKEY hSoftware, hWow, hClasses, hClassesWow, hDst, hSrc;
+    WCHAR szName[256], szValue[MAX_PATH];
+    DWORD i, cchName, cbValue, dwType;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE", 0, KEY_ALL_ACCESS, &hSoftware) != ERROR_SUCCESS)
+        return;
+    if (RegCreateKeyExW(hSoftware, L"Wow6432Node", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hWow, NULL) != ERROR_SUCCESS)
+    {
+        RegCloseKey(hSoftware);
+        return;
+    }
+
+    /* Everything but the classes and the view itself */
+    for (i = 0; cchName = ARRAYSIZE(szName),
+         RegEnumKeyExW(hSoftware, i, szName, &cchName, NULL, NULL, NULL, NULL) == ERROR_SUCCESS; i++)
+    {
+        if (!_wcsicmp(szName, L"Wow6432Node") || !_wcsicmp(szName, L"Classes"))
+            continue;
+        if (RegCreateKeyExW(hWow, szName, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hDst, NULL) == ERROR_SUCCESS)
+        {
+            SHCopyKeyW(hSoftware, szName, hDst, 0);
+            RegCloseKey(hDst);
+        }
+    }
+
+    /* The COM registrations */
+    if (RegOpenKeyExW(hSoftware, L"Classes", 0, KEY_ALL_ACCESS, &hClasses) == ERROR_SUCCESS)
+    {
+        if (RegCreateKeyExW(hClasses, L"Wow6432Node", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hClassesWow, NULL) == ERROR_SUCCESS)
+        {
+            for (i = 0; i < ARRAYSIZE(Classes); i++)
+            {
+                if (RegOpenKeyExW(hClasses, Classes[i], 0, KEY_READ, &hSrc) != ERROR_SUCCESS)
+                    continue;
+                RegCloseKey(hSrc);
+                if (RegCreateKeyExW(hClassesWow, Classes[i], 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hDst, NULL) == ERROR_SUCCESS)
+                {
+                    SHCopyKeyW(hClasses, Classes[i], hDst, 0);
+                    RegCloseKey(hDst);
+                }
+            }
+            RegCloseKey(hClassesWow);
+        }
+        RegCloseKey(hClasses);
+    }
+
+    /* The program folders of 32-bit programs */
+    if (RegOpenKeyExW(hSoftware, L"Microsoft\\Windows\\CurrentVersion", 0, KEY_READ, &hSrc) == ERROR_SUCCESS)
+    {
+        if (RegOpenKeyExW(hWow, L"Microsoft\\Windows\\CurrentVersion", 0, KEY_SET_VALUE, &hDst) == ERROR_SUCCESS)
+        {
+            for (i = 0; i < ARRAYSIZE(Values); i++)
+            {
+                cbValue = sizeof(szValue);
+                if (RegQueryValueExW(hSrc, Values[i][1], NULL, &dwType, (LPBYTE)szValue, &cbValue) == ERROR_SUCCESS)
+                    RegSetValueExW(hDst, Values[i][0], 0, dwType, (LPBYTE)szValue, cbValue);
+            }
+            RegCloseKey(hDst);
+        }
+        RegCloseKey(hSrc);
+    }
+
+    RegCloseKey(hWow);
+    RegCloseKey(hSoftware);
+}
+#endif
+
 static
 DWORD
 CALLBACK
@@ -2522,6 +2610,11 @@ ItemCompletionThread(
 
     /* Step 3 - Install optional components */
     InstallOptionalComponents(pItemsData);
+
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    /* The registry of 32-bit programs, now that everything is registered */
+    CreateWow64RegistryView();
+#endif
 
     /* Step 4 - Removing temporary files */
 //    RemoveTempFiles(pItemsData);

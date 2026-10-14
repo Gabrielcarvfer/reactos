@@ -12,6 +12,7 @@
 #define _NTGDITYP_
 
 #include "ntwin32.h"
+#include "kptr.h"
 
 /* ENUMERATIONS **************************************************************/
 
@@ -431,12 +432,12 @@ typedef union
 
 typedef struct _CFONT
 {
-    struct _CFONT   *pcfNext;
-    HFONT           hf;
+    KPTR(struct _CFONT   *, pcfNext);
+    KPTR(HFONT, hf);
     ULONG           cRef;               // Count of all pointers to this CFONT.
     FLONG           fl;
     LONG            lHeight;            // Precomputed logical height.
-    HDC             hdc;                // HDC of realization.  0 for display.
+    KPTR(HDC, hdc);                // HDC of realization.  0 for display.
     EFLOAT_S        efM11;              // efM11 of WtoD of DC of realization
     EFLOAT_S        efM22;              // efM22 of WtoD of DC of realization
     EFLOAT_S        efDtoWBaseline;     // Precomputed back transform.  (FXtoL)

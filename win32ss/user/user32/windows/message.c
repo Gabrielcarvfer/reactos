@@ -1436,6 +1436,10 @@ IntCallWindowProcW(BOOL IsAnsiProc,
   LRESULT Result = 0, PreResult = 0;
   DWORD Data = 0;
 
+#ifdef KPTR_64BIT_LAYOUT
+  WndProc = Wow64MapClientProc(WndProc);
+#endif
+
   if (WndProc == NULL)
   {
       WARN("IntCallWindowsProcW() called with WndProc = NULL!\n");
@@ -1594,6 +1598,10 @@ IntCallWindowProcA(BOOL IsAnsiProc,
   BOOL Hook = FALSE, MsgOverride = FALSE, Dialog, DlgOverride = FALSE;
   LRESULT Result = 0, PreResult = 0;
   DWORD Data = 0;
+
+#ifdef KPTR_64BIT_LAYOUT
+  WndProc = Wow64MapClientProc(WndProc);
+#endif
 
   TRACE("IntCallWindowProcA: IsAnsiProc : %s, WndProc %p, pWnd %p, hWnd %p, Msg %u, wParam %Iu, lParam %Iu.\n",
       IsAnsiProc ? "TRUE" : "FALSE", WndProc, pWnd, hWnd, Msg, wParam, lParam);

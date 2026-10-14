@@ -16,6 +16,42 @@ static PFNCLIENT pfnClientA;
 static PFNCLIENT pfnClientW;
 static PFNCLIENTWORKER pfnClientWorker;
 
+#ifdef KPTR_64BIT_LAYOUT
+/*
+ * A 32-bit program on 64-bit ReactOS: win32k has the window procedures of the
+ * system classes (buttons, edit boxes, the IME window...) as the 64-bit user32
+ * registered them. Their low halves (what the 32-bit code sees of them) are
+ * above 2 GB, so they are never 32-bit addresses: give our own procedures.
+ */
+WNDPROC FASTCALL
+Wow64MapClientProc(WNDPROC Proc)
+{
+    ULONG64 *Kernel, *Local;
+    ULONG i;
+
+    if ((ULONG_PTR)Proc < 0x80000000 || !gpsi)
+        return Proc;
+
+    Kernel = (ULONG64 *)&gpsi->apfnClientW;
+    Local = (ULONG64 *)&pfnClientW;
+    for (i = 0; i < sizeof(PFNCLIENT) / sizeof(ULONG64); i++)
+    {
+        if ((ULONG)Kernel[i] == (ULONG_PTR)Proc)
+            return (WNDPROC)(ULONG_PTR)Local[i];
+    }
+
+    Kernel = (ULONG64 *)&gpsi->apfnClientA;
+    Local = (ULONG64 *)&pfnClientA;
+    for (i = 0; i < sizeof(PFNCLIENT) / sizeof(ULONG64); i++)
+    {
+        if ((ULONG)Kernel[i] == (ULONG_PTR)Proc)
+            return (WNDPROC)(ULONG_PTR)Local[i];
+    }
+
+    return Proc;
+}
+#endif
+
 
 /***********************************************************************
  *           set_control_clipping

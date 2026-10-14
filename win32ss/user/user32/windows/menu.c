@@ -661,6 +661,13 @@ User32CallLoadMenuFromKernel(PVOID Arguments, ULONG ArgumentLength)
 
   Common = (PLOADMENU_CALLBACK_ARGUMENTS) Arguments;
 
+#ifdef KPTR_64BIT_LAYOUT
+  /* The menus of user32 itself: win32k has the 64-bit user32 for them (its
+   * low half, above 2 GB: never a 32-bit module), we are its 32-bit twin */
+  if ((ULONG_PTR)Common->hModule >= 0x80000000)
+      Common->hModule = User32Instance;
+#endif
+
   Result = (LRESULT)LoadMenuW(Common->hModule, Common->InterSource ? MAKEINTRESOURCEW(Common->InterSource) : (LPCWSTR)&Common->MenuName);
 
   return ZwCallbackReturn(&Result, sizeof(LRESULT), STATUS_SUCCESS);

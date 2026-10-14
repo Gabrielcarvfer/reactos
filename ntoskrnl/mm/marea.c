@@ -205,6 +205,11 @@ MmFindGap(
     {
         /* Find an address top-down */
         HighestAddress = Process ? (ULONG_PTR)MM_HIGHEST_VAD_ADDRESS : (LONG_PTR)-1;
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+        /* In a 32-bit process, keep memory where 32-bit code can reach it */
+        if (Process && Process->Wow64Process)
+            HighestAddress = MM_HIGHEST_USER_ADDRESS_WOW64;
+#endif
         Result = MiFindEmptyAddressRangeDownTree(Length,
                                                  HighestAddress,
                                                  Granularity,

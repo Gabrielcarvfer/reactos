@@ -1301,6 +1301,48 @@ ConSrvRemoveConsole(
 
 /* CONSOLE PROCESS MANAGEMENT FUNCTIONS ***************************************/
 
+/*
+ * Start a routine of the client (its kernel32: Ctrl+C dispatcher, console
+ * properties...) in a new thread of the client process.
+ */
+HANDLE
+ConSrvCreateRemoteThread(IN HANDLE ProcessHandle,
+                         IN LPTHREAD_START_ROUTINE StartRoutine,
+                         IN PVOID Parameter)
+{
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    ULONG_PTR Wow64Peb = 0;
+
+    /*
+     * A 32-bit process: the routine is in its 32-bit kernel32.
+     * CreateRemoteThread would start the thread in the startup code of our
+     * (64-bit) kernel32, which is not there. Start the routine itself:
+     * WoW64 runs it as a 32-bit thread.
+     */
+    if (NT_SUCCESS(NtQueryInformationProcess(ProcessHandle, ProcessWow64Information,
+                                             &Wow64Peb, sizeof(Wow64Peb), NULL)) &&
+        Wow64Peb != 0)
+    {
+        /* (ntdll has the classic signature; the NDK declares the Vista one
+         * for this build) */
+        typedef NTSTATUS (NTAPI *PRTL_CREATE_USER_THREAD)(HANDLE, PSECURITY_DESCRIPTOR, BOOLEAN,
+            ULONG, SIZE_T, SIZE_T, PTHREAD_START_ROUTINE, PVOID, PHANDLE, PCLIENT_ID);
+        HANDLE Thread = NULL;
+        NTSTATUS Status;
+
+        Status = ((PRTL_CREATE_USER_THREAD)RtlCreateUserThread)(ProcessHandle, NULL, FALSE, 0, 0, 0,
+                                                                StartRoutine, Parameter, &Thread, NULL);
+        if (!NT_SUCCESS(Status))
+        {
+            SetLastError(RtlNtStatusToDosError(Status));
+            return NULL;
+        }
+        return Thread;
+    }
+#endif
+    return CreateRemoteThread(ProcessHandle, NULL, 0, StartRoutine, Parameter, 0, NULL);
+}
+
 NTSTATUS
 ConSrvConsoleCtrlEventTimeout(IN ULONG CtrlEvent,
                               IN PCONSOLE_PROCESS_DATA ProcessData,
@@ -1321,9 +1363,9 @@ ConSrvConsoleCtrlEventTimeout(IN ULONG CtrlEvent,
 
         _SEH2_TRY
         {
-            Thread = CreateRemoteThread(ProcessData->Process->ProcessHandle, NULL, 0,
-                                        ProcessData->CtrlRoutine,
-                                        UlongToPtr(CtrlEvent), 0, NULL);
+            Thread = ConSrvCreateRemoteThread(ProcessData->Process->ProcessHandle,
+                                              ProcessData->CtrlRoutine,
+                                              UlongToPtr(CtrlEvent));
             if (NULL == Thread)
             {
                 Status = RtlGetLastNtStatus();

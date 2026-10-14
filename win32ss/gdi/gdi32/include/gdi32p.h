@@ -412,6 +412,16 @@ GdiAllocBatchCommand(
     USHORT cjSize;
     PGDIBATCHHDR pHdr;
 
+#ifdef BUILD_WOW6432
+    /* 32-bit gdi32 on 64-bit ReactOS: the batch buffer win32k reads is in
+     * the 64-bit TEB, with the 64-bit layout: no batching, the calls go to
+     * win32k one by one */
+    UNREFERENCED_PARAMETER(pTeb);
+    UNREFERENCED_PARAMETER(cjSize);
+    UNREFERENCED_PARAMETER(pHdr);
+    return NULL;
+#endif
+
     /* Get a pointer to the TEB */
     pTeb = NtCurrentTeb();
 
@@ -511,7 +521,7 @@ GdiGetRgnAttr(HRGN hrgn)
     return prgnattr;
 }
 
-#ifdef _M_IX86
+#if defined(_M_IX86) && !defined(WOW64_KERNEL_FLOATOBJ)
 FLOATL FASTCALL EFtoF(EFLOAT_S * efp);
 #define FOtoF(pfo) EFtoF((EFLOAT_S*)pfo)
 #else

@@ -28,10 +28,14 @@
 #elif defined(_AMD64_)
 
 //
-// R8/R9 on AMD64
+// R8/R9 on AMD64, EBX/EDI for 32-bit code (WoW64) as on x86
 //
-#define KdpGetParameterThree(Context)  ((Context)->R8)
-#define KdpGetParameterFour(Context)   ((Context)->R9)
+#define KdpIsCompatibilityMode(Context) \
+    (((Context)->SegCs & ~RPL_MASK) == KGDT64_R3_CMCODE)
+#define KdpGetParameterThree(Context) \
+    (KdpIsCompatibilityMode(Context) ? (ULONG)(Context)->Rbx : (Context)->R8)
+#define KdpGetParameterFour(Context) \
+    (KdpIsCompatibilityMode(Context) ? (ULONG)(Context)->Rdi : (Context)->R9)
 
 #elif defined(_ARM_)
 

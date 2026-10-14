@@ -266,9 +266,10 @@ PUBLIC KiReloadWow64Fs
 .PROC KiReloadWow64Fs
     .endprolog
 
-    /* Force reloading of FS */
-    push fs
-    pop fs
+    /* Force reloading of FS. Load the selector of the 32-bit TEB, not the
+     * current one: FS may hold anything (a null selector would not reload) */
+    mov ax, KGDT64_R3_CMTEB or RPL_MASK
+    mov fs, ax
 
     ret
 .ENDP

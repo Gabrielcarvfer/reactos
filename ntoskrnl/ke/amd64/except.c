@@ -589,7 +589,7 @@ NTSTATUS
 KiGeneralProtectionFaultUserMode(
     _In_ PKTRAP_FRAME TrapFrame)
 {
-    BOOLEAN Wow64 = TrapFrame->SegCs == KGDT64_R3_CMCODE;
+    BOOLEAN Wow64 = (TrapFrame->SegCs & ~RPL_MASK) == KGDT64_R3_CMCODE;
     PUCHAR InstructionPointer;
     NTSTATUS Status;
 

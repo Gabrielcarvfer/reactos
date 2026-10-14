@@ -37,7 +37,7 @@ GetSysColorBrush(int nIndex)
 {
   if(nIndex >= 0 && nIndex < NUM_SYSCOLORS)
   {
-    return gpsi->ahbrSystem[nIndex];
+    return (HBRUSH)(ULONG_PTR)gpsi->ahbrSystem[nIndex];
   }
 
   return NULL;

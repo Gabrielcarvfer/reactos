@@ -277,6 +277,12 @@ MiInsertVadEx(
         /* Make sure HighestAddress is not too large */
         HighestAddress = min(HighestAddress, (ULONG_PTR)MM_HIGHEST_VAD_ADDRESS);
 
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+        /* In a 32-bit process, keep memory where 32-bit code can reach it */
+        if (CurrentProcess->Wow64Process)
+            HighestAddress = min(HighestAddress, (ULONG_PTR)MM_HIGHEST_USER_ADDRESS_WOW64);
+#endif
+
         /* Which way should we search? */
         if ((AllocationType & MEM_TOP_DOWN) || CurrentProcess->VmTopDown)
         {

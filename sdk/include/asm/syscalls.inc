@@ -55,6 +55,17 @@ SyscallId = 0
 #ifdef _M_IX86
 #define KUSER_SHARED_SYSCALL HEX(7ffe0300)
 #define KGDT_R0_CODE 8
+#ifdef BUILD_WOW6432
+/* 32-bit code on 64-bit ReactOS (SysWOW64): system calls go to wow64.dll,
+ * through the transition that the 32-bit TEB points to (WOW32Reserved) */
+MACRO(STUBCODE_U, Name, SyscallId, ArgCount)
+    StackBytes = 4 * ArgCount
+    FPO 0, 0, 0, 0, 0, FRAME_FPO
+    mov eax, SyscallId
+    call dword ptr fs:[HEX(0C0)]
+    ret StackBytes
+ENDM
+#else
 MACRO(STUBCODE_U, Name, SyscallId, ArgCount)
     StackBytes = 4 * ArgCount
     FPO 0, 0, 0, 0, 0, FRAME_FPO
@@ -63,6 +74,7 @@ MACRO(STUBCODE_U, Name, SyscallId, ArgCount)
     call dword ptr [edx]
     ret StackBytes
 ENDM
+#endif
 MACRO(STUBCODE_K, Name, SyscallId, ArgCount)
     StackBytes = 4 * &ArgCount
     FPO 0, 0, 0, 0, 0, FRAME_FPO

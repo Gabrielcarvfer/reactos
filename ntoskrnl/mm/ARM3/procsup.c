@@ -569,6 +569,46 @@ MmSetMemoryPriorityProcess(IN PEPROCESS Process,
     return OldPriority;
 }
 
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+/* Fill the 32-bit PEB of a 32-bit (WoW64) process from the 64-bit one.
+ * The process parameters and the loader data are set up later, in user
+ * mode, by wow64.dll and the 32-bit ntdll. */
+static
+VOID
+MiInitializeWowPeb(IN PPEB Peb, IN struct _PEB32 *Peb32)
+{
+    RtlZeroMemory(Peb32, sizeof(PEB32));
+    Peb32->InheritedAddressSpace = Peb->InheritedAddressSpace;
+    Peb32->BeingDebugged = Peb->BeingDebugged;
+    Peb32->BitField = Peb->BitField;
+    Peb32->Mutant = HandleToUlong(Peb->Mutant);
+    Peb32->ImageBaseAddress = PtrToUlong(Peb->ImageBaseAddress);
+    Peb32->AnsiCodePageData = PtrToUlong(Peb->AnsiCodePageData);
+    Peb32->OemCodePageData = PtrToUlong(Peb->OemCodePageData);
+    Peb32->UnicodeCaseTableData = PtrToUlong(Peb->UnicodeCaseTableData);
+    Peb32->NumberOfProcessors = Peb->NumberOfProcessors;
+    Peb32->NtGlobalFlag = Peb->NtGlobalFlag;
+    Peb32->CriticalSectionTimeout = Peb->CriticalSectionTimeout;
+    Peb32->HeapSegmentReserve = (ULONG)Peb->HeapSegmentReserve;
+    Peb32->HeapSegmentCommit = (ULONG)Peb->HeapSegmentCommit;
+    Peb32->HeapDeCommitTotalFreeThreshold = (ULONG)Peb->HeapDeCommitTotalFreeThreshold;
+    Peb32->HeapDeCommitFreeBlockThreshold = (ULONG)Peb->HeapDeCommitFreeBlockThreshold;
+    Peb32->MaximumNumberOfHeaps = (PAGE_SIZE - sizeof(PEB32)) / sizeof(ULONG);
+    Peb32->ProcessHeaps = PtrToUlong(Peb32 + 1);
+    Peb32->OSMajorVersion = Peb->OSMajorVersion;
+    Peb32->OSMinorVersion = Peb->OSMinorVersion;
+    Peb32->OSBuildNumber = Peb->OSBuildNumber;
+    Peb32->OSCSDVersion = Peb->OSCSDVersion;
+    Peb32->OSPlatformId = Peb->OSPlatformId;
+    Peb32->ImageSubsystem = Peb->ImageSubsystem;
+    Peb32->ImageSubsystemMajorVersion = Peb->ImageSubsystemMajorVersion;
+    Peb32->ImageSubsystemMinorVersion = Peb->ImageSubsystemMinorVersion;
+    Peb32->ImageProcessAffinityMask = (ULONG)Peb->ImageProcessAffinityMask;
+    Peb32->SessionId = Peb->SessionId;
+    Peb32->MinimumStackCommit = (ULONG)Peb->MinimumStackCommit;
+}
+#endif
+
 NTSTATUS
 NTAPI
 MmCreatePeb(IN PEPROCESS Process,
@@ -590,6 +630,22 @@ MmCreatePeb(IN PEPROCESS Process,
     // Attach to Process
     //
     KeAttachProcess(&Process->Pcb);
+
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    /* A 32-bit image makes this a WoW64 process. Mark it now: from here on,
+     * memory without an explicit address is placed below 2 GB, where 32-bit
+     * code can reach it (the NLS tables, the PEB and the TEBs included). */
+    _SEH2_TRY
+    {
+        NtHeaders = RtlImageNtHeader(Process->SectionBaseAddress);
+        if (NtHeaders && NtHeaders->FileHeader.Machine == IMAGE_FILE_MACHINE_I386)
+            Process->Wow64Process = UlongToPtr(1);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+#endif
 
     //
     // Map NLS Tables
@@ -727,6 +783,10 @@ MmCreatePeb(IN PEPROCESS Process,
                                                            TRUE,
                                                            IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG,
                                                            (PULONG)&ViewSize);
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+            /* The 32-bit load config has another layout */
+            if (Process->Wow64Process) ImageConfigData = NULL;
+#endif
             if (ImageConfigData)
             {
                 //
@@ -795,6 +855,22 @@ MmCreatePeb(IN PEPROCESS Process,
         }
         _SEH2_END;
     }
+
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    if (Process->Wow64Process)
+    {
+        _SEH2_TRY
+        {
+            MiInitializeWowPeb(Peb, PS_GET_PEB32_FROM_PEB(Peb));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            KeDetachProcess();
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+#endif
 
     //
     // Detach from the Process
@@ -891,6 +967,30 @@ MmCreateTeb(IN PEPROCESS Process,
         //
         Teb->StaticUnicodeString.MaximumLength = sizeof(Teb->StaticUnicodeBuffer);
         Teb->StaticUnicodeString.Buffer = Teb->StaticUnicodeBuffer;
+
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+        /* A 32-bit process also gets a 32-bit TEB, right after the 64-bit one.
+         * Its stack is set up by wow64.dll, which owns the 32-bit side. */
+        if (Process->Wow64Process)
+        {
+            PTEB32 Teb32 = PS_GET_TEB32_FROM_TEB(Teb);
+
+            RtlZeroMemory(Teb32, sizeof(TEB32));
+            Teb32->NtTib.ExceptionList = PtrToUlong(EXCEPTION_CHAIN_END);
+            Teb32->NtTib.Self = PtrToUlong(Teb32);
+            Teb32->NtTib.Version = Teb->NtTib.Version;
+            Teb32->ClientId.UniqueProcess = HandleToUlong(ClientId->UniqueProcess);
+            Teb32->ClientId.UniqueThread = HandleToUlong(ClientId->UniqueThread);
+            Teb32->RealClientId = Teb32->ClientId;
+            Teb32->ProcessEnvironmentBlock = PtrToUlong(PS_GET_PEB32_FROM_PEB(Process->Peb));
+            Teb32->CurrentLocale = Teb->CurrentLocale;
+            Teb32->StaticUnicodeString.MaximumLength = sizeof(Teb32->StaticUnicodeBuffer);
+            Teb32->StaticUnicodeString.Buffer = PtrToUlong(Teb32->StaticUnicodeBuffer);
+
+            /* Like Windows, the 64-bit TEB points to the 32-bit one */
+            Teb->NtTib.ExceptionList = (PVOID)Teb32;
+        }
+#endif
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

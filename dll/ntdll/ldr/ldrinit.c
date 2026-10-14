@@ -54,6 +54,141 @@ LIST_ENTRY LdrpTlsList;
 ULONG LdrpNumberOfTlsEntries;
 ULONG LdrpNumberOfProcessors;
 PVOID NtDllBase;
+
+/* AddressSanitizer for this program (rtl/asan.c): its AsanFlags */
+ULONG LdrpAsanFlags;
+
+/* The Windows version this program reports, from its Image File Execution
+ * Options (VersionLayer, see LdrpApplyVersionLayer) */
+static WCHAR LdrpVersionLayer[32];
+VOID NTAPI RtlpAsanInitialize(ULONG Flags);
+extern BOOLEAN RtlpAsanEnabled, RtlpAsanCaptureStacks;
+
+#ifdef _WIN64
+/* A 32-bit (WoW64) process: the 64-bit ntdll only sets up the 64-bit side,
+ * then hands every thread over to wow64.dll, which runs the 32-bit ntdll */
+BOOLEAN LdrpIsWow64Process;
+VOID (NTAPI *LdrpWow64LdrpInitialize)(PCONTEXT Context);
+UNICODE_STRING Wow64String = RTL_CONSTANT_STRING(L"wow64.dll");
+extern PVOID Wow64PrepareForException;
+
+/* The process parameters of a 32-bit process (in its 32-bit PEB) */
+typedef struct _RTL_USER_PROCESS_PARAMETERS32
+{
+    ULONG MaximumLength;
+    ULONG Length;
+    ULONG Flags;
+    ULONG DebugFlags;
+    ULONG ConsoleHandle;
+    ULONG ConsoleFlags;
+    ULONG StandardInput;
+    ULONG StandardOutput;
+    ULONG StandardError;
+    UNICODE_STRING32 CurrentDirectoryPath;
+    ULONG CurrentDirectoryHandle;
+    UNICODE_STRING32 DllPath;
+    UNICODE_STRING32 ImagePathName;
+    UNICODE_STRING32 CommandLine;
+    ULONG Environment;
+    ULONG StartingX;
+    ULONG StartingY;
+    ULONG CountX;
+    ULONG CountY;
+    ULONG CountCharsX;
+    ULONG CountCharsY;
+    ULONG FillAttribute;
+    ULONG WindowFlags;
+    ULONG ShowWindowFlags;
+    UNICODE_STRING32 WindowTitle;
+    UNICODE_STRING32 DesktopInfo;
+    UNICODE_STRING32 ShellInfo;
+    UNICODE_STRING32 RuntimeData;
+} RTL_USER_PROCESS_PARAMETERS32, *PRTL_USER_PROCESS_PARAMETERS32;
+
+/*
+ * A 32-bit process started by another 32-bit one: the 32-bit kernel32 of the
+ * parent only wrote 32-bit process parameters, in the 32-bit PEB. Make the
+ * 64-bit ones, which the 64-bit side needs first. (There is no heap yet.)
+ */
+static
+VOID
+LdrpWow64ThunkProcessParameters(PPEB Peb)
+{
+    struct _PEB32 *Peb32 = (struct _PEB32 *)((ULONG_PTR)Peb + ROUND_TO_PAGES(sizeof(PEB)));
+    PRTL_USER_PROCESS_PARAMETERS32 Params32 = ULongToPtr(Peb32->ProcessParameters);
+    PRTL_USER_PROCESS_PARAMETERS Params = NULL;
+    PUNICODE_STRING32 Strings32[8];
+    PUNICODE_STRING Strings[8];
+    ULONG_PTR Base32;
+    SIZE_T Size;
+    PWCHAR Buffer;
+    ULONG i;
+
+    if (!Params32) return;
+    /* Not normalized: the string buffers are offsets from the parameters */
+    Base32 = (Params32->Flags & RTL_USER_PROCESS_PARAMETERS_NORMALIZED) ? 0 : (ULONG_PTR)Params32;
+
+    Strings32[0] = &Params32->CurrentDirectoryPath;
+    Strings32[1] = &Params32->DllPath;
+    Strings32[2] = &Params32->ImagePathName;
+    Strings32[3] = &Params32->CommandLine;
+    Strings32[4] = &Params32->WindowTitle;
+    Strings32[5] = &Params32->DesktopInfo;
+    Strings32[6] = &Params32->ShellInfo;
+    Strings32[7] = &Params32->RuntimeData;
+
+    Size = sizeof(*Params);
+    for (i = 0; i < ARRAYSIZE(Strings32); i++)
+        Size += ALIGN_UP_BY(Strings32[i]->MaximumLength, sizeof(ULONG_PTR));
+    if (!NT_SUCCESS(NtAllocateVirtualMemory(NtCurrentProcess(), (PVOID *)&Params, 0, &Size,
+                                            MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)))
+        return;
+
+    Params->MaximumLength = (ULONG)Size;
+    Params->Length = (ULONG)Size;
+    Params->Flags = Params32->Flags | RTL_USER_PROCESS_PARAMETERS_NORMALIZED;
+    Params->DebugFlags = Params32->DebugFlags;
+    Params->ConsoleHandle = LongToHandle(Params32->ConsoleHandle);
+    Params->ConsoleFlags = Params32->ConsoleFlags;
+    Params->StandardInput = LongToHandle(Params32->StandardInput);
+    Params->StandardOutput = LongToHandle(Params32->StandardOutput);
+    Params->StandardError = LongToHandle(Params32->StandardError);
+    Params->CurrentDirectory.Handle = LongToHandle(Params32->CurrentDirectoryHandle);
+    Params->Environment = ULongToPtr(Params32->Environment);
+    Params->StartingX = Params32->StartingX;
+    Params->StartingY = Params32->StartingY;
+    Params->CountX = Params32->CountX;
+    Params->CountY = Params32->CountY;
+    Params->CountCharsX = Params32->CountCharsX;
+    Params->CountCharsY = Params32->CountCharsY;
+    Params->FillAttribute = Params32->FillAttribute;
+    Params->WindowFlags = Params32->WindowFlags;
+    Params->ShowWindowFlags = Params32->ShowWindowFlags;
+
+    Strings[0] = &Params->CurrentDirectory.DosPath;
+    Strings[1] = &Params->DllPath;
+    Strings[2] = &Params->ImagePathName;
+    Strings[3] = &Params->CommandLine;
+    Strings[4] = &Params->WindowTitle;
+    Strings[5] = &Params->DesktopInfo;
+    Strings[6] = &Params->ShellInfo;
+    Strings[7] = &Params->RuntimeData;
+
+    Buffer = (PWCHAR)(Params + 1);
+    for (i = 0; i < ARRAYSIZE(Strings32); i++)
+    {
+        Strings[i]->Length = Strings32[i]->Length;
+        Strings[i]->MaximumLength = Strings32[i]->MaximumLength;
+        Strings[i]->Buffer = NULL;
+        if (!Strings32[i]->Buffer) continue;
+        RtlCopyMemory(Buffer, (PVOID)(Base32 + Strings32[i]->Buffer), Strings32[i]->MaximumLength);
+        Strings[i]->Buffer = Buffer;
+        Buffer = (PWCHAR)((PBYTE)Buffer + ALIGN_UP_BY(Strings32[i]->MaximumLength, sizeof(ULONG_PTR)));
+    }
+    /* (The environment is a block of its own, at an absolute address) */
+    Peb->ProcessParameters = Params;
+}
+#endif
 extern LARGE_INTEGER RtlpTimeout;
 extern BOOLEAN RtlpTimeoutDisable;
 LIST_ENTRY LdrpHashTable[LDR_HASH_TABLE_ENTRIES];
@@ -2062,6 +2197,15 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     /* Set a NULL SEH Filter */
     RtlSetUnhandledExceptionFilter(NULL);
 
+#ifdef _WIN64
+    /* A 32-bit process started by a 32-bit one has only 32-bit parameters */
+    if (!Peb->ProcessParameters &&
+        RtlImageNtHeader(Peb->ImageBaseAddress)->FileHeader.Machine == IMAGE_FILE_MACHINE_I386)
+    {
+        LdrpWow64ThunkProcessParameters(Peb);
+    }
+#endif
+
     /* Get the image path */
     ImagePath = Peb->ProcessParameters->ImagePathName.Buffer;
 
@@ -2079,6 +2223,12 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     /* Get the NT Headers */
     NtHeader = RtlImageNtHeader(Peb->ImageBaseAddress);
+
+#ifdef _WIN64
+    /* A 32-bit image: its headers are the 32-bit kind, read none of the
+     * fields that moved; the 32-bit ntdll will load it */
+    LdrpIsWow64Process = (NtHeader->FileHeader.Machine == IMAGE_FILE_MACHINE_I386);
+#endif
 
     /* Get the execution options */
     Status = LdrpInitializeExecutionOptions(&ImagePathName, Peb, &OptionsKey);
@@ -2145,6 +2295,9 @@ LdrpInitializeProcess(IN PCONTEXT Context,
                                               TRUE,
                                               IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG,
                                               &ConfigSize);
+#ifdef _WIN64
+    if (LdrpIsWow64Process) LoadConfig = NULL;
+#endif
 
     /* Setup the Heap Parameters */
     RtlZeroMemory(&HeapParameters, sizeof(HeapParameters));
@@ -2281,7 +2434,13 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     RtlInitializeHeapManager();
     Peb->ProcessHeap = RtlCreateHeap(HeapFlags,
                                      NULL,
+#ifdef _WIN64
+                                     LdrpIsWow64Process ? 0 :
+#endif
                                      NtHeader->OptionalHeader.SizeOfHeapReserve,
+#ifdef _WIN64
+                                     LdrpIsWow64Process ? 0 :
+#endif
                                      NtHeader->OptionalHeader.SizeOfHeapCommit,
                                      NULL,
                                      &HeapParameters);
@@ -2583,6 +2742,30 @@ LdrpInitializeProcess(IN PCONTEXT Context,
         DPRINT1("We don't support .NET applications yet\n");
     }
 
+#ifdef _WIN64
+    if (LdrpIsWow64Process)
+    {
+        PVOID Wow64Base, FunctionAddress;
+        ANSI_STRING InitName = RTL_CONSTANT_STRING("Wow64LdrpInitialize");
+        ANSI_STRING ExceptionName = RTL_CONSTANT_STRING("Wow64PrepareForException");
+
+        /* Load the 32-bit environment instead of the image's imports */
+        Status = LdrLoadDll(NULL, NULL, &Wow64String, &Wow64Base);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("LDR: Unable to load %wZ, Status=0x%08lx\n", &Wow64String, Status);
+            return Status;
+        }
+        Status = LdrGetProcedureAddress(Wow64Base, &InitName, 0, &FunctionAddress);
+        if (!NT_SUCCESS(Status)) return Status;
+        LdrpWow64LdrpInitialize = FunctionAddress;
+        if (NT_SUCCESS(LdrGetProcedureAddress(Wow64Base, &ExceptionName, 0, &FunctionAddress)))
+            Wow64PrepareForException = FunctionAddress;
+        ImportStatus = STATUS_SUCCESS;
+        goto Wow64SkipImage;
+    }
+#endif
+
     if (NtHeader->OptionalHeader.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI ||
         NtHeader->OptionalHeader.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_CUI)
     {
@@ -2664,6 +2847,9 @@ LdrpInitializeProcess(IN PCONTEXT Context,
         if (!NT_SUCCESS(Status)) return Status;
     }
 
+#ifdef _WIN64
+Wow64SkipImage:
+#endif
     /* Lock the DLLs */
     ListHead = &Peb->Ldr->InLoadOrderModuleList;
     NextEntry = ListHead->Flink;
@@ -2686,6 +2872,12 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     RtlpInitializeThreadPooling();
 
     /* Initialize TLS */
+#ifdef _WIN64
+    /* (The image's TLS directory is a 32-bit one) */
+    if (LdrpIsWow64Process)
+        Status = STATUS_SUCCESS;
+    else
+#endif
     Status = LdrpInitializeTls();
     if (!NT_SUCCESS(Status))
     {
@@ -2707,7 +2899,11 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     }
 
     /* Validate the Image for MP Usage */
-    if (LdrpNumberOfProcessors > 1) LdrpValidateImageForMp(LdrpImageEntry);
+    if (LdrpNumberOfProcessors > 1
+#ifdef _WIN64
+        && !LdrpIsWow64Process
+#endif
+        ) LdrpValidateImageForMp(LdrpImageEntry);
 
     /* Check NX options and set them */
     if (SharedUserData->NXSupportPolicy == NX_SUPPORT_POLICY_ALWAYSON)
@@ -2959,6 +3155,11 @@ LdrpInit(PCONTEXT Context,
         LdrpInitFailure(LoaderStatus);
         RtlRaiseStatus(LoaderStatus);
     }
+
+#ifdef _WIN64
+    /* A 32-bit process: this thread now runs 32-bit code, for good */
+    if (LdrpWow64LdrpInitialize) LdrpWow64LdrpInitialize(Context);
+#endif
 }
 
 /* EOF */
