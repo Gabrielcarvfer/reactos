@@ -632,12 +632,22 @@ HRESULT WINAPI RevokeDragDrop(HWND hwnd)
   IStream *stream;
   IDropTarget *drop_target;
   HRESULT hr;
+  DWORD pid = 0;
 
   TRACE("(%p)\n", hwnd);
 
   if (!IsWindow(hwnd))
   {
     ERR("invalid hwnd %p\n", hwnd);
+    return DRAGDROP_E_INVALIDHWND;
+  }
+
+  /* The registration of another process's window holds pointers of that
+   * process: like RegisterDragDrop, leave such windows alone */
+  GetWindowThreadProcessId(hwnd, &pid);
+  if (pid != GetCurrentProcessId())
+  {
+    WARN("window %p belongs to another process\n", hwnd);
     return DRAGDROP_E_INVALIDHWND;
   }
 
