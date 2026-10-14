@@ -15,16 +15,16 @@
 @ stub CancelSecurityHealthChangeNotify
 @ stdcall -stub -version=0x600+ ConvertGuidToStringA(ptr ptr long)
 @ stdcall -stub -version=0x600+ ConvertGuidToStringW(ptr ptr long)
-@ stdcall -stub -version=0x600+ ConvertInterfaceAliasToLuid(wstr ptr)
-@ stdcall -stub -version=0x600+ ConvertInterfaceGuidToLuid(ptr ptr)
-@ stdcall -stub -version=0x600+ ConvertInterfaceIndexToLuid(long ptr)
-@ stdcall -stub -version=0x600+ ConvertInterfaceLuidToAlias(ptr ptr long)
-@ stdcall -stub -version=0x600+ ConvertInterfaceLuidToGuid(ptr ptr)
-@ stdcall -stub -version=0x600+ ConvertInterfaceLuidToIndex(ptr ptr)
-@ stdcall -stub -version=0x600+ ConvertInterfaceLuidToNameA(ptr ptr long)
-@ stdcall -stub -version=0x600+ ConvertInterfaceLuidToNameW(ptr ptr long)
-@ stdcall -stub -version=0x600+ ConvertInterfaceNameToLuidA(str ptr)
-@ stdcall -stub -version=0x600+ ConvertInterfaceNameToLuidW(wstr ptr)
+@ stdcall -version=0x600+ ConvertInterfaceAliasToLuid(wstr ptr)
+@ stdcall -version=0x600+ ConvertInterfaceGuidToLuid(ptr ptr)
+@ stdcall -version=0x600+ ConvertInterfaceIndexToLuid(long ptr)
+@ stdcall -version=0x600+ ConvertInterfaceLuidToAlias(ptr ptr long)
+@ stdcall -version=0x600+ ConvertInterfaceLuidToGuid(ptr ptr)
+@ stdcall -version=0x600+ ConvertInterfaceLuidToIndex(ptr ptr)
+@ stdcall -version=0x600+ ConvertInterfaceLuidToNameA(ptr ptr long)
+@ stdcall -version=0x600+ ConvertInterfaceLuidToNameW(ptr ptr long)
+@ stdcall -version=0x600+ ConvertInterfaceNameToLuidA(str ptr)
+@ stdcall -version=0x600+ ConvertInterfaceNameToLuidW(wstr ptr)
 @ stdcall -stub -version=0x600+ ConvertLengthToIpv4Mask(long ptr)
 @ stdcall -stub -version=0x600+ ConvertStringToGuidW(wstr ptr)
 @ stdcall CreateIpForwardEntry(ptr)
@@ -38,7 +38,7 @@
 @ stdcall EnableRouter(ptr ptr)
 @ stdcall FlushIpNetTable(long)
 @ stub FlushIpNetTableFromStack
-@ stdcall -stub -version=0x600+ FreeMibTable(ptr)
+@ stdcall -version=0x600+ FreeMibTable(ptr)
 @ stdcall GetAdapterIndex(wstr ptr)
 @ stdcall GetAdapterOrderMap()
 @ stdcall GetAdaptersAddresses(long long ptr ptr ptr)
@@ -47,6 +47,7 @@
 @ stdcall GetBestInterfaceEx(ptr ptr)
 @ stub GetBestInterfaceFromStack
 @ stdcall GetBestRoute(long long long)
+@ stdcall -version=0x600+ GetBestRoute2(ptr long ptr ptr long ptr ptr)
 @ stub GetBestRouteFromStack
 @ stdcall -stub -version=0x600+ GetCurrentThreadCompartmentId()
 @ stdcall GetExtendedTcpTable(ptr ptr long long long long)
@@ -102,7 +103,7 @@
 @ stdcall GetUdpTable(ptr ptr long)
 @ stub GetUdpTableFromStack
 @ stdcall -stub -version=0x600+ GetUnicastIpAddressEntry(ptr)
-@ stdcall -stub -version=0x600+ GetUnicastIpAddressTable(long ptr)
+@ stdcall -version=0x600+ GetUnicastIpAddressTable(long ptr)
 @ stdcall GetUniDirectionalAdapterInfo(ptr ptr)
 @ stdcall Icmp6CreateFile()
 @ stdcall Icmp6ParseReplies(ptr long)
@@ -112,8 +113,8 @@
 @ stdcall IcmpParseReplies(ptr long)
 @ stdcall IcmpSendEcho2(ptr ptr ptr ptr long ptr long ptr ptr long long)
 @ stdcall IcmpSendEcho(ptr long ptr long ptr ptr long long)
-@ stdcall -stub -version=0x600+ if_indextoname(long ptr)
-@ stdcall -stub -version=0x600+ if_nametoindex(str)
+@ stdcall -version=0x600+ if_indextoname(long ptr)
+@ stdcall -version=0x600+ if_nametoindex(str)
 @ stub InternalCreateIpForwardEntry
 @ stub InternalCreateIpNetEntry
 @ stub InternalDeleteIpForwardEntry
