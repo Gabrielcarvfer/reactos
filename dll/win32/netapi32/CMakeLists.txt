@@ -34,6 +34,7 @@ list(APPEND SOURCE
     srvsvc.c
     user.c
     utils.c
+    webdav.c
     wksta.c
     wksta_new.c)
 
