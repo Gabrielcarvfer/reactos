@@ -1,0 +1,7 @@
+@ stdcall CommitTransaction(ptr)
+@ stdcall CommitTransactionAsync(ptr)
+@ stdcall CreateTransaction(ptr ptr long long long long wstr)
+@ stdcall GetTransactionId(ptr ptr)
+@ stdcall OpenTransaction(long ptr)
+@ stdcall RollbackTransaction(ptr)
+@ stdcall RollbackTransactionAsync(ptr)
