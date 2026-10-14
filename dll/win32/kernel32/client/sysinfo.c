@@ -223,6 +223,20 @@ GetNativeSystemInfo(IN LPSYSTEM_INFO lpSystemInfo)
     if (!NT_SUCCESS(Status)) return;
 
     GetSystemInfoInternal(&BasicInfo, &ProcInfo, lpSystemInfo);
+
+#ifdef _M_IX86
+    {
+        /* A 32-bit program on 64-bit ReactOS (WoW64): the machine is an x64
+         * one (installers of 64-bit programs check this) */
+        BOOL Wow64;
+
+        if (IsWow64Process(NtCurrentProcess(), &Wow64) && Wow64)
+        {
+            lpSystemInfo->wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64;
+            lpSystemInfo->dwProcessorType = PROCESSOR_AMD_X8664;
+        }
+    }
+#endif
 }
 
 /*

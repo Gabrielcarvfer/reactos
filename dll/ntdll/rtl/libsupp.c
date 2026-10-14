@@ -1171,13 +1171,32 @@ LdrpApplyFileNameRedirection(
 /*
  * @implemented
  */
+#ifdef BUILD_WOW6432
+/*
+ * The ntdll of 32-bit programs on 64-bit ReactOS (SysWOW64): whether
+ * wow64.dll redirects System32 to SysWOW64 is in TlsSlots[8]
+ * (WOW64_TLS_FILESYSREDIR) of the thread's 64-bit TEB, which comes 0x2000
+ * bytes before the 32-bit one; TlsSlots is at 0x1480 in a 64-bit TEB.
+ */
+static PULONG64
+RtlpWow64FsRedirectionSlot(VOID)
+{
+    return (PULONG64)((PUCHAR)NtCurrentTeb() - 0x2000 + 0x1480) + 8;
+}
+#endif
+
 NTSYSAPI
 NTSTATUS
 NTAPI
 RtlWow64EnableFsRedirection(IN BOOLEAN Wow64FsEnableRedirection)
 {
+#ifdef BUILD_WOW6432
+    *RtlpWow64FsRedirectionSlot() = !Wow64FsEnableRedirection;
+    return STATUS_SUCCESS;
+#else
     /* This is what Windows returns on x86 */
     return STATUS_NOT_IMPLEMENTED;
+#endif
 }
 
 /*
@@ -1189,8 +1208,25 @@ NTAPI
 RtlWow64EnableFsRedirectionEx(IN PVOID Wow64FsEnableRedirection,
                               OUT PVOID *OldFsRedirectionLevel)
 {
+#ifdef BUILD_WOW6432
+    /* (The value is the "disabled" flag, despite its name) */
+    PULONG64 Slot = RtlpWow64FsRedirectionSlot();
+
+    _SEH2_TRY
+    {
+        *OldFsRedirectionLevel = (PVOID)(ULONG_PTR)*Slot;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+    *Slot = (ULONG_PTR)Wow64FsEnableRedirection;
+    return STATUS_SUCCESS;
+#else
     /* This is what Windows returns on x86 */
     return STATUS_NOT_IMPLEMENTED;
+#endif
 }
 
 /*
