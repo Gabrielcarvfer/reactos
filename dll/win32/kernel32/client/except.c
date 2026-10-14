@@ -737,6 +737,23 @@ RaiseException(
         DPRINT1("Delphi Exception at address: %p\n", ExceptionRecord.ExceptionInformation[0]);
         DPRINT1("Exception-Object: %p\n", ExceptionRecord.ExceptionInformation[1]);
         DPRINT1("Exception text: %lx\n", ExceptionRecord.ExceptionInformation[2]);
+
+        /* The message of the exception object (Exception.FMessage, after the
+           class pointer): a UnicodeString since Delphi 2009, whose header
+           says 2 bytes per character, else an AnsiString */
+        _SEH2_TRY
+        {
+            PUCHAR Object = (PUCHAR)ExceptionRecord.ExceptionInformation[1];
+            PUCHAR Message = Object ? *(PUCHAR *)(Object + sizeof(PVOID)) : NULL;
+            if (Message && *(PUSHORT)(Message - 10) == sizeof(WCHAR))
+                DPRINT1("Exception message: %.300S\n", (PCWSTR)Message);
+            else if (Message)
+                DPRINT1("Exception message: %.300s\n", (PCSTR)Message);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        _SEH2_END;
     }
 
     /* Raise the exception */
