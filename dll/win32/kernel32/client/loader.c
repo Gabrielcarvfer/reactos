@@ -296,6 +296,11 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
     ULONG DllCharacteristics = 0;
     BOOL FreeString = FALSE;
 
+    /* The other ways to load a module only to read its resources: as a data
+     * file too (FindResource works on those) */
+    if (dwFlags & (0x40 /* LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE */ | 0x20 /* LOAD_LIBRARY_AS_IMAGE_RESOURCE */))
+        dwFlags |= LOAD_LIBRARY_AS_DATAFILE;
+
     /* Check for any flags LdrLoadDll might be interested in */
     if (dwFlags & DONT_RESOLVE_DLL_REFERENCES)
     {

@@ -185,6 +185,73 @@ GetQueuedCompletionStatus(IN HANDLE CompletionHandle,
 }
 
 /*
+ * Waits for the first completion packet, then takes the ones that are already
+ * queued, up to ulCount (ReactOS has no NtRemoveIoCompletionEx yet).
+ *
+ * @implemented
+ */
+BOOL
+WINAPI
+GetQueuedCompletionStatusEx(IN HANDLE CompletionPort,
+                            OUT LPOVERLAPPED_ENTRY lpCompletionPortEntries,
+                            IN ULONG ulCount,
+                            OUT PULONG ulNumEntriesRemoved,
+                            IN DWORD dwMilliseconds,
+                            IN BOOL fAlertable)
+{
+    NTSTATUS Status;
+    IO_STATUS_BLOCK IoStatus;
+    LARGE_INTEGER Time;
+    PLARGE_INTEGER TimePtr;
+    ULONG Removed;
+
+    if (!lpCompletionPortEntries || !ulCount || !ulNumEntriesRemoved)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    *ulNumEntriesRemoved = 0;
+
+    /* The wait cannot run APCs: an alertable wait is an ordinary one here */
+    if (fAlertable)
+        DPRINT1("GetQueuedCompletionStatusEx: alertable wait not supported\n");
+
+    TimePtr = BaseFormatTimeOut(&Time, dwMilliseconds);
+    for (Removed = 0; Removed < ulCount; Removed++)
+    {
+        /* Only the first packet is waited for */
+        if (Removed > 0)
+        {
+            Time.QuadPart = 0;
+            TimePtr = &Time;
+        }
+
+        Status = NtRemoveIoCompletion(CompletionPort,
+                                      (PVOID*)&lpCompletionPortEntries[Removed].lpCompletionKey,
+                                      (PVOID*)&lpCompletionPortEntries[Removed].lpOverlapped,
+                                      &IoStatus,
+                                      TimePtr);
+        if (!NT_SUCCESS(Status) || (Status == STATUS_TIMEOUT))
+            break;
+
+        lpCompletionPortEntries[Removed].Internal = IoStatus.Status;
+        lpCompletionPortEntries[Removed].dwNumberOfBytesTransferred = (DWORD)IoStatus.Information;
+    }
+
+    if (Removed == 0)
+    {
+        if (Status == STATUS_TIMEOUT)
+            SetLastError(WAIT_TIMEOUT);
+        else
+            BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    *ulNumEntriesRemoved = Removed;
+    return TRUE;
+}
+
+/*
  * @implemented
  */
 BOOL

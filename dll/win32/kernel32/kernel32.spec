@@ -52,10 +52,10 @@
 @ stdcall BuildCommDCBW(wstr ptr)
 @ stdcall CallNamedPipeA(str ptr long ptr long ptr long)
 @ stdcall CallNamedPipeW(wstr ptr long ptr long ptr long)
-@ stdcall -stub -version=0x600+ CallbackMayRunLong(ptr)
+@ stdcall -version=0x600+ CallbackMayRunLong(ptr)
 @ stdcall CancelDeviceWakeupRequest(long)
 @ stdcall CancelIo(long)
-@ stdcall -stub -version=0x600+ CancelIoEx(ptr ptr)
+@ stdcall -version=0x600+ CancelIoEx(ptr ptr)
 @ stdcall -stub -version=0x600+ CancelSynchronousIo(ptr)
 @ stdcall -version=0x600+ CancelThreadpoolIo(ptr) ntdll.TpCancelAsyncIoOperation
 @ stdcall CancelTimerQueueTimer(long long)
@@ -181,7 +181,7 @@
 @ stdcall CreateToolhelp32Snapshot(long long)
 @ stdcall CreateWaitableTimerA(ptr long str)
 @ stub -version=0x600+ CreateWaitableTimerExA
-@ stub -version=0x600+ CreateWaitableTimerExW
+@ stdcall -version=0x600+ CreateWaitableTimerExW(ptr wstr long long)
 @ stdcall CreateWaitableTimerW(ptr long wstr)
 ;@ stdcall -arch=x86_64 CtrlRoutine()
 @ stdcall DeactivateActCtx(long ptr)
@@ -512,7 +512,7 @@
 @ stdcall GetLogicalDriveStringsW(long ptr)
 @ stdcall GetLogicalDrives()
 @ stdcall GetLogicalProcessorInformation(ptr ptr)
-@ stdcall -stub -version=0x601+ GetLogicalProcessorInformationEx(long ptr ptr)
+@ stdcall -version=0x601+ GetLogicalProcessorInformationEx(long ptr ptr)
 @ stdcall GetLongPathNameA(str long long)
 @ stub -version=0x600+ GetLongPathNameTransactedA
 @ stub -version=0x600+ GetLongPathNameTransactedW
@@ -536,7 +536,7 @@
 @ stdcall GetNamedPipeHandleStateA(long ptr ptr ptr ptr str long)
 @ stdcall GetNamedPipeHandleStateW(long ptr ptr ptr ptr wstr long)
 @ stdcall GetNamedPipeInfo(long ptr ptr ptr ptr)
-@ stub -version=0x600+ GetNamedPipeServerProcessId
+@ stdcall -version=0x600+ GetNamedPipeServerProcessId(ptr ptr)
 @ stub -version=0x600+ GetNamedPipeServerSessionId
 @ stdcall GetNativeSystemInfo(ptr)
 @ stdcall GetNextVDMCommand(long)
@@ -555,7 +555,7 @@
 @ stdcall GetNumberOfConsoleMouseButtons(ptr)
 @ stdcall GetOEMCP()
 @ stdcall GetOverlappedResult(long ptr ptr long)
-@ stdcall -stub -version=0x600+ GetPhysicallyInstalledSystemMemory(ptr)
+@ stdcall -version=0x600+ GetPhysicallyInstalledSystemMemory(ptr)
 @ stdcall GetPriorityClass(long)
 @ stdcall GetPrivateProfileIntA(str str long str)
 @ stdcall GetPrivateProfileIntW(wstr wstr long wstr)
@@ -591,7 +591,7 @@
 @ stdcall GetProfileStringA(str str str ptr long)
 @ stdcall GetProfileStringW(wstr wstr wstr ptr long)
 @ stdcall GetQueuedCompletionStatus(long ptr ptr ptr long)
-@ stub -version=0x600+ GetQueuedCompletionStatusEx
+@ stdcall -version=0x600+ GetQueuedCompletionStatusEx(ptr ptr long ptr long long)
 @ stdcall GetShortPathNameA(str ptr long)
 @ stdcall GetShortPathNameW(wstr ptr long)
 @ stdcall GetStartupInfoA(ptr)
@@ -618,7 +618,7 @@
 @ stdcall GetSystemTime(ptr)
 @ stdcall GetSystemTimeAdjustment(ptr ptr ptr)
 @ stdcall GetSystemTimeAsFileTime(ptr)
-@ stdcall -version=0x602+ GetSystemTimePreciseAsFileTime(ptr)
+@ stdcall -version=0x601+ GetSystemTimePreciseAsFileTime(ptr)
 @ stdcall GetSystemTimes(ptr ptr ptr)
 @ stdcall GetSystemWindowsDirectoryA(ptr long)
 @ stdcall GetSystemWindowsDirectoryW(ptr long)
@@ -649,7 +649,7 @@
 @ stdcall -version=0x600+ GetTimeFormatEx(wstr long ptr wstr wstr long)
 @ stdcall GetTimeFormatW(long long ptr wstr ptr long)
 @ stdcall GetTimeZoneInformation(ptr)
-@ stdcall -stub -version=0x600+ GetTimeZoneInformationForYear(long ptr ptr)
+@ stdcall -version=0x600+ GetTimeZoneInformationForYear(long ptr ptr)
 @ stdcall -version=0x600+ GetUILanguageInfo(long wstr wstr ptr ptr)
 @ stdcall GetUserDefaultLCID()
 @ stdcall GetUserDefaultLangID()
@@ -922,8 +922,8 @@
 @ stdcall QueryPerformanceCounter(ptr)
 @ stdcall QueryPerformanceFrequency(ptr)
 @ stub -version=0x600+ QueryProcessAffinityUpdateMode
-@ stub -version=0x600+ QueryProcessCycleTime
-@ stub -version=0x600+ QueryThreadCycleTime
+@ stdcall -version=0x600+ QueryProcessCycleTime(ptr ptr)
+@ stdcall -version=0x600+ QueryThreadCycleTime(ptr ptr)
 @ stdcall QueueUserAPC(ptr long long)
 @ stdcall QueueUserWorkItem(ptr ptr long)
 @ stdcall -norelay RaiseException(long long long ptr)
@@ -1074,7 +1074,7 @@
 @ stdcall SetFileAttributesW(wstr long)
 @ stdcall -version=0x600+ SetFileBandwidthReservation(ptr long long long ptr ptr)
 @ stdcall SetFileCompletionNotificationModes(ptr long)
-@ stub -version=0x600+ SetFileInformationByHandle
+@ stdcall -version=0x600+ SetFileInformationByHandle(ptr long ptr long)
 @ stub -version=0x600+ SetFileIoOverlappedRange
 @ stdcall SetFilePointer(long long ptr long)
 @ stdcall SetFilePointerEx(long double ptr long)
@@ -1186,7 +1186,7 @@
 @ stdcall UnlockFileEx(long long long long ptr)
 @ stdcall UnmapViewOfFile(ptr)
 @ stub -version=0x600+ UnregisterApplicationRecoveryCallback
-@ stub -version=0x600+ UnregisterApplicationRestart
+@ stdcall -version=0x600+ UnregisterApplicationRestart()
 @ stdcall UnregisterConsoleIME()
 @ stdcall UnregisterWait(long)
 @ stdcall UnregisterWaitEx(long long)
@@ -1252,9 +1252,9 @@
 @ stdcall WinExec(str long)
 @ stdcall Wow64DisableWow64FsRedirection(ptr)
 @ stdcall Wow64EnableWow64FsRedirection(long)
-@ stub -version=0x600+ Wow64GetThreadContext
+@ stdcall -arch=x86_64 -version=0x600+ Wow64GetThreadContext(ptr ptr)
 @ stdcall Wow64RevertWow64FsRedirection(ptr)
-@ stub -version=0x600+ Wow64SetThreadContext
+@ stdcall -arch=x86_64 -version=0x600+ Wow64SetThreadContext(ptr ptr)
 @ stub -version=0x600+ Wow64SuspendThread
 @ stdcall WriteConsoleA(long ptr long ptr ptr)
 @ stdcall WriteConsoleInputA(long ptr long ptr)

@@ -343,6 +343,31 @@ CreateWaitableTimerW(IN LPSECURITY_ATTRIBUTES lpTimerAttributes OPTIONAL,
  */
 HANDLE
 WINAPI
+CreateWaitableTimerExW(IN LPSECURITY_ATTRIBUTES lpTimerAttributes OPTIONAL,
+                       IN LPCWSTR lpTimerName OPTIONAL,
+                       IN DWORD dwFlags,
+                       IN DWORD dwDesiredAccess)
+{
+    /* CREATE_WAITABLE_TIMER_MANUAL_RESET (1) and
+     * CREATE_WAITABLE_TIMER_HIGH_RESOLUTION (2): every timer already has the
+     * resolution of the clock here */
+    if (dwFlags & ~(0x1 | 0x2))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    CreateNtObjectFromWin32Api(WaitableTimer, Timer, dwDesiredAccess,
+                               lpTimerAttributes,
+                               lpTimerName,
+                               (dwFlags & 0x1) ? NotificationTimer : SynchronizationTimer);
+}
+
+/*
+ * @implemented
+ */
+HANDLE
+WINAPI
 OpenWaitableTimerW(IN DWORD dwDesiredAccess,
                    IN BOOL bInheritHandle,
                    IN LPCWSTR lpTimerName)

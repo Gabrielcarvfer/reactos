@@ -440,3 +440,350 @@ GetDynamicTimeZoneInformation(
 
     return Result;
 }
+
+/*
+ * GetTimeZoneInformationForYear: the rules of a time zone for one year, from
+ * its "Dynamic DST" registry key when it has one for that year (the rules
+ * changed over the years), else its usual rules.
+ */
+BOOL
+WINAPI
+GetTimeZoneInformationForYear(
+    _In_ USHORT wYear,
+    _In_opt_ PDYNAMIC_TIME_ZONE_INFORMATION pdtzi,
+    _Out_ LPTIME_ZONE_INFORMATION ptzi)
+{
+    DYNAMIC_TIME_ZONE_INFORMATION Current;
+    WCHAR Path[160], YearName[8];
+    UNICODE_STRING PathString;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    BASEP_TZI Tzi;
+    HANDLE Key;
+
+    if (!ptzi)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!pdtzi)
+    {
+        if (GetDynamicTimeZoneInformation(&Current) == TIME_ZONE_ID_INVALID)
+            return FALSE;
+        pdtzi = &Current;
+    }
+
+    ptzi->Bias = pdtzi->Bias;
+    RtlCopyMemory(ptzi->StandardName, pdtzi->StandardName, sizeof(ptzi->StandardName));
+    ptzi->StandardDate = pdtzi->StandardDate;
+    ptzi->StandardBias = pdtzi->StandardBias;
+    RtlCopyMemory(ptzi->DaylightName, pdtzi->DaylightName, sizeof(ptzi->DaylightName));
+    ptzi->DaylightDate = pdtzi->DaylightDate;
+    ptzi->DaylightBias = pdtzi->DaylightBias;
+
+    if (!pdtzi->TimeZoneKeyName[0] || pdtzi->DynamicDaylightTimeDisabled)
+        return TRUE;
+
+    _snwprintf(Path, RTL_NUMBER_OF(Path) - 1,
+               L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Time Zones\\%s\\Dynamic DST",
+               pdtzi->TimeZoneKeyName);
+    Path[RTL_NUMBER_OF(Path) - 1] = UNICODE_NULL;
+    RtlInitUnicodeString(&PathString, Path);
+    InitializeObjectAttributes(&ObjectAttributes, &PathString, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (NT_SUCCESS(NtOpenKey(&Key, KEY_QUERY_VALUE, &ObjectAttributes)))
+    {
+        _snwprintf(YearName, RTL_NUMBER_OF(YearName) - 1, L"%u", wYear);
+        YearName[RTL_NUMBER_OF(YearName) - 1] = UNICODE_NULL;
+        if (BasepQueryValue(Key, YearName, &Tzi, sizeof(Tzi), NULL))
+        {
+            ptzi->Bias = Tzi.Bias;
+            ptzi->StandardBias = Tzi.StandardBias;
+            ptzi->DaylightBias = Tzi.DaylightBias;
+            ptzi->StandardDate = Tzi.StandardDate;
+            ptzi->DaylightDate = Tzi.DaylightDate;
+        }
+        NtClose(Key);
+    }
+    return TRUE;
+}
+
+/*
+ * CancelIoEx: cancels the I/O of every thread of the process on a file, or
+ * only one request (its OVERLAPPED is its I/O status block)
+ */
+BOOL
+WINAPI
+CancelIoEx(
+    _In_ HANDLE hFile,
+    _In_opt_ LPOVERLAPPED lpOverlapped)
+{
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+
+    Status = NtCancelIoFileEx(hFile, (PIO_STATUS_BLOCK)lpOverlapped, &IoStatusBlock);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+NTSTATUS WINAPI TpCallbackMayRunLong(PTP_CALLBACK_INSTANCE Instance);
+
+BOOL
+WINAPI
+CallbackMayRunLong(
+    _Inout_ PTP_CALLBACK_INSTANCE pci)
+{
+    NTSTATUS Status = TpCallbackMayRunLong(pci);
+
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+BOOL
+WINAPI
+GetPhysicallyInstalledSystemMemory(
+    _Out_ PULONGLONG TotalMemoryInKilobytes)
+{
+    MEMORYSTATUSEX Status;
+
+    if (!TotalMemoryInKilobytes)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    Status.dwLength = sizeof(Status);
+    if (!GlobalMemoryStatusEx(&Status))
+        return FALSE;
+    *TotalMemoryInKilobytes = Status.ullTotalPhys / 1024;
+    return TRUE;
+}
+
+/*
+ * The "cycle time" of a thread or a process: ReactOS does not count CPU cycles,
+ * so this is its CPU time in 100 ns units, which grows the same way.
+ */
+BOOL
+WINAPI
+QueryThreadCycleTime(
+    _In_ HANDLE ThreadHandle,
+    _Out_ PULONG64 CycleTime)
+{
+    KERNEL_USER_TIMES Times;
+    NTSTATUS Status;
+
+    Status = NtQueryInformationThread(ThreadHandle, ThreadTimes, &Times, sizeof(Times), NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+    *CycleTime = Times.KernelTime.QuadPart + Times.UserTime.QuadPart;
+    return TRUE;
+}
+
+BOOL
+WINAPI
+QueryProcessCycleTime(
+    _In_ HANDLE ProcessHandle,
+    _Out_ PULONG64 CycleTime)
+{
+    KERNEL_USER_TIMES Times;
+    NTSTATUS Status;
+
+    Status = NtQueryInformationProcess(ProcessHandle, ProcessTimes, &Times, sizeof(Times), NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+    *CycleTime = Times.KernelTime.QuadPart + Times.UserTime.QuadPart;
+    return TRUE;
+}
+
+HRESULT
+WINAPI
+UnregisterApplicationRestart(VOID)
+{
+    /* Nothing restarts programs here (see RegisterApplicationRestart) */
+    return S_OK;
+}
+
+#ifdef _WIN64
+BOOL
+WINAPI
+Wow64GetThreadContext(
+    _In_ HANDLE hThread,
+    _Inout_ PWOW64_CONTEXT lpContext)
+{
+    NTSTATUS Status = RtlWow64GetThreadContext(hThread, lpContext);
+
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+BOOL
+WINAPI
+Wow64SetThreadContext(
+    _In_ HANDLE hThread,
+    _In_ const WOW64_CONTEXT *lpContext)
+{
+    NTSTATUS Status = RtlWow64SetThreadContext(hThread, (PWOW64_CONTEXT)lpContext);
+
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+    return TRUE;
+}
+#endif
+
+/* (Not declared at every _WIN32_WINNT the headers are used with) */
+BOOL WINAPI GetLogicalProcessorInformation(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Buffer, PDWORD ReturnedLength);
+
+/*
+ * GetLogicalProcessorInformationEx: the same information as
+ * GetLogicalProcessorInformation, in the newer variable-size records (a single
+ * processor group, as ReactOS has).
+ */
+BOOL
+WINAPI
+GetLogicalProcessorInformationEx(
+    _In_ LOGICAL_PROCESSOR_RELATIONSHIP RelationshipType,
+    _Out_writes_bytes_to_opt_(*ReturnedLength, *ReturnedLength) PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Buffer,
+    _Inout_ PDWORD ReturnedLength)
+{
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Info = NULL;
+    DWORD InfoLength = 0, Needed = 0, Count, i, Size;
+    PUCHAR Out = (PUCHAR)Buffer;
+    SYSTEM_INFO SystemInfo;
+    BOOL Fits;
+
+    if (!ReturnedLength)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    GetLogicalProcessorInformation(NULL, &InfoLength);
+    Info = RtlAllocateHeap(RtlGetProcessHeap(), 0, InfoLength);
+    if (!Info)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    if (!GetLogicalProcessorInformation(Info, &InfoLength))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
+        return FALSE;
+    }
+    Count = InfoLength / sizeof(*Info);
+    GetSystemInfo(&SystemInfo);
+
+    /* Two passes: the size, then (if it fits) the records */
+    for (Fits = FALSE; ; Fits = TRUE)
+    {
+        Needed = 0;
+        for (i = 0; i < Count; i++)
+        {
+            PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Ex;
+
+            if (RelationshipType != RelationAll && Info[i].Relationship != RelationshipType)
+                continue;
+
+            switch (Info[i].Relationship)
+            {
+                case RelationProcessorCore:
+                case RelationProcessorPackage:
+                    Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Processor.GroupMask[1]);
+                    break;
+                case RelationNumaNode:
+                    Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, NumaNode) + sizeof(NUMA_NODE_RELATIONSHIP);
+                    break;
+                case RelationCache:
+                    Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Cache) + sizeof(CACHE_RELATIONSHIP);
+                    break;
+                default:
+                    continue;
+            }
+            Size = (Size + 7) & ~7;
+
+            if (Fits)
+            {
+                Ex = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Out + Needed);
+                RtlZeroMemory(Ex, Size);
+                Ex->Relationship = Info[i].Relationship;
+                Ex->Size = Size;
+                switch (Info[i].Relationship)
+                {
+                    case RelationProcessorCore:
+                    case RelationProcessorPackage:
+                        Ex->Processor.Flags = (Info[i].Relationship == RelationProcessorCore) ?
+                                              Info[i].ProcessorCore.Flags : 0;
+                        Ex->Processor.GroupCount = 1;
+                        Ex->Processor.GroupMask[0].Mask = Info[i].ProcessorMask;
+                        break;
+                    case RelationNumaNode:
+                        Ex->NumaNode.NodeNumber = Info[i].NumaNode.NodeNumber;
+                        Ex->NumaNode.GroupMask.Mask = Info[i].ProcessorMask;
+                        break;
+                    case RelationCache:
+                        Ex->Cache.Level = Info[i].Cache.Level;
+                        Ex->Cache.Associativity = Info[i].Cache.Associativity;
+                        Ex->Cache.LineSize = Info[i].Cache.LineSize;
+                        Ex->Cache.CacheSize = Info[i].Cache.Size;
+                        Ex->Cache.Type = Info[i].Cache.Type;
+                        Ex->Cache.GroupMask.Mask = Info[i].ProcessorMask;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            Needed += Size;
+        }
+
+        /* The one processor group */
+        if (RelationshipType == RelationAll || RelationshipType == RelationGroup)
+        {
+            Size = (FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Group.GroupInfo[1]) + 7) & ~7;
+            if (Fits)
+            {
+                PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Ex =
+                    (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Out + Needed);
+                RtlZeroMemory(Ex, Size);
+                Ex->Relationship = RelationGroup;
+                Ex->Size = Size;
+                Ex->Group.MaximumGroupCount = 1;
+                Ex->Group.ActiveGroupCount = 1;
+                Ex->Group.GroupInfo[0].MaximumProcessorCount = (BYTE)SystemInfo.dwNumberOfProcessors;
+                Ex->Group.GroupInfo[0].ActiveProcessorCount = (BYTE)SystemInfo.dwNumberOfProcessors;
+                Ex->Group.GroupInfo[0].ActiveProcessorMask = SystemInfo.dwActiveProcessorMask;
+            }
+            Needed += Size;
+        }
+
+        if (Fits)
+            break;
+        if (!Buffer || *ReturnedLength < Needed)
+        {
+            *ReturnedLength = Needed;
+            RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return FALSE;
+        }
+    }
+
+    *ReturnedLength = Needed;
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
+    return TRUE;
+}

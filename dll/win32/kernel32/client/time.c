@@ -136,13 +136,50 @@ GetSystemTimeAsFileTime(OUT PFILETIME lpFileTime)
 }
 
 /*
- * @unimplemented
+ * The system time only moves on clock ticks: between two ticks, add the time
+ * the performance counter measured since the first call that saw the
+ * current tick (at most one tick, so that the time never goes backwards).
+ */
+static LONG PreciseTimeLock; /* A spin lock: held for a few instructions */
+static LARGE_INTEGER PreciseTimeTick, PreciseTimeCounter, PreciseTimeFrequency;
+
+/*
+ * @implemented
  */
 VOID
 WINAPI
 GetSystemTimePreciseAsFileTime(OUT PFILETIME lpFileTime)
 {
-    STUB;
+    LARGE_INTEGER SystemTime, Counter, TickCounter;
+    LONGLONG Elapsed, Frequency;
+
+    NtQueryPerformanceCounter(&Counter, NULL);
+    SystemTime = KiReadSystemTime(&SharedUserData->SystemTime);
+
+    while (InterlockedCompareExchange(&PreciseTimeLock, 1, 0))
+        YieldProcessor();
+    if (!PreciseTimeFrequency.QuadPart)
+        NtQueryPerformanceCounter(&TickCounter, &PreciseTimeFrequency);
+    if (PreciseTimeTick.QuadPart != SystemTime.QuadPart)
+    {
+        PreciseTimeTick = SystemTime;
+        PreciseTimeCounter = Counter;
+    }
+    TickCounter = PreciseTimeCounter;
+    Frequency = PreciseTimeFrequency.QuadPart;
+    InterlockedExchange(&PreciseTimeLock, 0);
+
+    Elapsed = Counter.QuadPart - TickCounter.QuadPart;
+    if (Elapsed > 0 && Frequency > 0)
+    {
+        Elapsed = (Elapsed / Frequency) * 10000000 + (Elapsed % Frequency) * 10000000 / Frequency;
+        if (Elapsed >= 156250) /* The longest clock tick, 15.625 ms */
+            Elapsed = 156249;
+        SystemTime.QuadPart += Elapsed;
+    }
+
+    lpFileTime->dwLowDateTime = SystemTime.LowPart;
+    lpFileTime->dwHighDateTime = SystemTime.HighPart;
 }
 
 /*
