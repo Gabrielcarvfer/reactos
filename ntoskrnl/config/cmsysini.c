@@ -2322,11 +2322,22 @@ CmpSetVersionData(VOID)
 
 #ifdef _WIN64
     /* 64-bit ReactOS offers the functions of Windows 10, and says so in the
-     * shared user data (see ExpInitializeExecutive). These two values only
-     * exist since Windows 10, and installers check them (LibreOffice's MSI:
-     * "Windows 10 or newer is required") */
+     * shared user data (see ExpInitializeExecutive). Say it here too, the
+     * way Windows 10 does, for installers that read it here: the major and
+     * minor numbers (new in Windows 10; LibreOffice's MSI checks them), and
+     * the build, after "CurrentVersion", which stays at 6.3 since
+     * Windows 8.1 (Notepad++'s setup took "5.2" for Windows Server 2003) */
     {
+        static const WCHAR Build[] = L"19045";
+        static const WCHAR Version[] = L"6.3";
         ULONG Number;
+
+        RtlInitUnicodeString(&ValueName, L"CurrentVersion");
+        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_SZ, (PVOID)Version, sizeof(Version));
+        RtlInitUnicodeString(&ValueName, L"CurrentBuildNumber");
+        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_SZ, (PVOID)Build, sizeof(Build));
+        RtlInitUnicodeString(&ValueName, L"CurrentBuild");
+        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_SZ, (PVOID)Build, sizeof(Build));
 
         RtlInitUnicodeString(&ValueName, L"CurrentMajorVersionNumber");
         Number = 10;
