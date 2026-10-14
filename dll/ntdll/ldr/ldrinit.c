@@ -1992,6 +1992,32 @@ LdrpInitializeProcessCompat(PVOID pProcessActctx, PVOID* pOldShimData)
     if (ContextCompatInfo->ElementCount == 0)
         return;
 
+    /* With a version layer, ReactOS reports a newer Windows: do as that
+       Windows does, and take the newest version of the manifest that is not
+       newer than the reported one (Firefox needs the Windows 10 API sets) */
+    {
+        PPEB Peb = NtCurrentPeb();
+        DWORD Reported = (Peb->OSMajorVersion << 8) | Peb->OSMinorVersion;
+
+        if (Reported > _WIN32_WINNT_WS03)
+        {
+            for (cur = 0; cur < RTL_NUMBER_OF(KnownCompatGuids); ++cur)
+            {
+                if (KnownCompatGuids[cur].Version > Reported)
+                    continue;
+                for (n = 0; n < ContextCompatInfo->ElementCount; ++n)
+                {
+                    if (ContextCompatInfo->Elements[n].Type == ACTCTX_COMPATIBILITY_ELEMENT_TYPE_OS &&
+                        RtlCompareMemory(&ContextCompatInfo->Elements[n].Id, KnownCompatGuids[cur].Guid, sizeof(GUID)) == sizeof(GUID))
+                    {
+                        goto Found;
+                    }
+                }
+            }
+            /* None of them: the oldest one, as below */
+        }
+    }
+
     /* Search for known GUIDs, starting from oldest to newest.
        Note that on Windows it is somewhat reversed, starting from the latest known
        version, going down. But we are not Windows, trying to allow a lower version,
@@ -2005,6 +2031,7 @@ LdrpInitializeProcessCompat(PVOID pProcessActctx, PVOID* pOldShimData)
             if (ContextCompatInfo->Elements[n].Type == ACTCTX_COMPATIBILITY_ELEMENT_TYPE_OS &&
                 RtlCompareMemory(&ContextCompatInfo->Elements[n].Id, KnownCompatGuids[cur].Guid, sizeof(GUID)) == sizeof(GUID))
             {
+Found:
                 if (LdrpDisableProcessCompatGuidDetection())
                 {
                     DPRINT1("LdrpInitializeProcessCompat: Not applying automatic fix for winver 0x%x due to policy\n", KnownCompatGuids[cur].Version);
@@ -2036,7 +2063,7 @@ LdrpInitializeProcessCompat(PVOID pProcessActctx, PVOID* pOldShimData)
                     *pOldShimData = pShimData;
                 }
 
-                /* Store the lowest found version, and bail out. */
+                /* Store the version found, and bail out. */
                 pShimData->dwRosProcessCompatVersion = KnownCompatGuids[cur].Version;
                 DPRINT1("LdrpInitializeProcessCompat: Found guid for winver 0x%x in manifest from %wZ\n",
                         KnownCompatGuids[cur].Version,
