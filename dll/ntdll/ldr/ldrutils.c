@@ -1196,8 +1196,6 @@ SkipCheck:
         return STATUS_INVALID_IMAGE_FORMAT;
     }
 
-    // FIXME: .NET support is missing
-
     /* Allocate an entry */
     if (!(LdrEntry = LdrpAllocateDataTableEntry(ViewBase)))
     {
@@ -1214,6 +1212,30 @@ SkipCheck:
     LdrEntry->FullDllName = FullDllName;
     LdrEntry->BaseDllName = BaseDllName;
     LdrEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(LdrEntry->DllBase);
+
+    /* A .NET image of IL code only belongs to the .NET runtime, which reads
+     * it itself. Like Windows, neither load its imports nor call its entry
+     * point: only a stub for mscoree.dll, and in an "AnyCPU" (32-bit format)
+     * image loaded by a 64-bit process, 32-bit code. (.NET Core programs
+     * load their assemblies this way: Paint.NET's setup crashed in one.)
+     * In a 32-bit process, the .NET Framework relies on that stub. */
+#ifdef _WIN64
+    {
+        PIMAGE_COR20_HEADER CorHeader;
+        ULONG CorSize;
+
+        CorHeader = RtlImageDirectoryEntryToData(ViewBase,
+                                                 TRUE,
+                                                 IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR,
+                                                 &CorSize);
+        if (CorHeader && CorSize >= sizeof(*CorHeader) &&
+            (CorHeader->Flags & COMIMAGE_FLAGS_ILONLY))
+        {
+            LdrEntry->Flags |= LDRP_COR_IMAGE;
+            LdrEntry->EntryPoint = NULL;
+        }
+    }
+#endif
 
     /* Show debug message */
     if (ShowSnaps)
