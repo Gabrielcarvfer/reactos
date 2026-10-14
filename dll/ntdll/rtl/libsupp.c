@@ -743,6 +743,63 @@ NTSTATUS find_actctx_dll( PUNICODE_STRING pnameW, LPWSTR *fullname, PUNICODE_STR
         return status;
     }
 
+    /* <file name="x.dll" loadFrom="%SystemRoot%\system32\"/>: the manifest
+       says where the DLL is (Inno Setup uses it against DLL hijacking) */
+    if (data.lpData &&
+        ((const ACTIVATION_CONTEXT_DATA_DLL_REDIRECTION *)data.lpData)->PathSegmentCount)
+    {
+        const ACTIVATION_CONTEXT_DATA_DLL_REDIRECTION *dll = data.lpData;
+        const ACTIVATION_CONTEXT_DATA_DLL_REDIRECTION_PATH_SEGMENT *seg =
+            (const void *)((const BYTE *)data.lpSectionBase + dll->PathSegmentOffset);
+        UNICODE_STRING From, Expanded;
+        ULONG ExpandedLength = 0;
+        BOOLEAN AddName;
+
+        From.Buffer = (PWSTR)((const BYTE *)data.lpSectionBase + seg->Offset);
+        From.Length = From.MaximumLength = (USHORT)seg->Length;
+        Expanded.Buffer = NULL;
+        if (dll->Flags & ACTIVATION_CONTEXT_DATA_DLL_REDIRECTION_PATH_EXPAND)
+        {
+            Expanded.Length = Expanded.MaximumLength = 0;
+            RtlExpandEnvironmentStrings_U(NULL, &From, &Expanded, &ExpandedLength);
+            Expanded.MaximumLength = (USHORT)ExpandedLength;
+            Expanded.Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, ExpandedLength);
+            if (!Expanded.Buffer)
+            {
+                RtlReleaseActivationContext(data.hActCtx);
+                return STATUS_NO_MEMORY;
+            }
+            status = RtlExpandEnvironmentStrings_U(NULL, &From, &Expanded, &ExpandedLength);
+            if (!NT_SUCCESS(status))
+            {
+                RtlFreeHeap(RtlGetProcessHeap(), 0, Expanded.Buffer);
+                RtlReleaseActivationContext(data.hActCtx);
+                return status;
+            }
+            From = Expanded;
+        }
+
+        /* A folder (ends with a backslash) or the full file name */
+        AddName = From.Length && From.Buffer[From.Length / sizeof(WCHAR) - 1] == L'\\';
+        needed = From.Length + (AddName ? pnameW->Length : 0) + sizeof(WCHAR);
+        status = get_buffer(fullname, needed, CallerBuffer, bAllocateBuffer);
+        if (NT_SUCCESS(status))
+        {
+            p = *fullname;
+            memcpy(p, From.Buffer, From.Length);
+            p += From.Length / sizeof(WCHAR);
+            if (AddName)
+            {
+                memcpy(p, pnameW->Buffer, pnameW->Length);
+                p += pnameW->Length / sizeof(WCHAR);
+            }
+            *p = UNICODE_NULL;
+        }
+        if (Expanded.Buffer) RtlFreeHeap(RtlGetProcessHeap(), 0, Expanded.Buffer);
+        RtlReleaseActivationContext(data.hActCtx);
+        return status;
+    }
+
     for (;;)
     {
         if (!(info = RtlAllocateHeap( RtlGetProcessHeap(), 0, size )))
