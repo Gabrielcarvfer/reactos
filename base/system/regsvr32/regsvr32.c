@@ -244,6 +244,61 @@ void DisplayMessage(BOOL bConsole, BOOL bSilent, LPCTSTR lpMessage, LPCTSTR lpTi
 		_tprintf(_T("%s: %s\n\n"),lpTitle,lpMessage);
 }
 
+/*
+ * The DLL is of the other bitness (64-bit for this 32-bit regsvr32, or
+ * 32-bit for this 64-bit one): like Windows, hand the whole command line to
+ * the regsvr32 of that bitness, and return its exit code. FALSE: no such
+ * regsvr32 (a 32-bit system).
+ */
+static BOOL RunOtherRegsvr32(LPCTSTR lpCmdLine, int *pExitCode)
+{
+	TCHAR szPath[MAX_PATH];
+	LPTSTR lpCommand;
+	STARTUPINFO si = { sizeof(si) };
+	PROCESS_INFORMATION pi;
+	DWORD dwExitCode = EXITCODE_LOADERROR;
+	BOOL bStarted;
+#ifdef _WIN64
+	if (!GetSystemWow64Directory(szPath, MAX_PATH))
+		return FALSE;
+#else
+	BOOL bWow64 = FALSE;
+	PVOID pOldRedirection;
+
+	if (!IsWow64Process(GetCurrentProcess(), &bWow64) || !bWow64)
+		return FALSE;
+	/* The 64-bit system32 (redirection is turned off below) */
+	if (!GetSystemDirectory(szPath, MAX_PATH))
+		return FALSE;
+#endif
+	if (_tcslen(szPath) + _tcslen(_T("\\regsvr32.exe")) >= MAX_PATH)
+		return FALSE;
+	_tcscat(szPath, _T("\\regsvr32.exe"));
+
+	lpCommand = (LPTSTR)malloc((_tcslen(szPath) + _tcslen(lpCmdLine) + 4) * sizeof(TCHAR));
+	if (!lpCommand)
+		return FALSE;
+	_stprintf(lpCommand, _T("\"%s\" %s"), szPath, lpCmdLine);
+
+#ifndef _WIN64
+	Wow64DisableWow64FsRedirection(&pOldRedirection);
+#endif
+	bStarted = CreateProcess(szPath, lpCommand, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+#ifndef _WIN64
+	Wow64RevertWow64FsRedirection(pOldRedirection);
+#endif
+	free(lpCommand);
+	if (!bStarted)
+		return FALSE;
+
+	WaitForSingleObject(pi.hProcess, INFINITE);
+	GetExitCodeProcess(pi.hProcess, &dwExitCode);
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+	*pExitCode = (int)dwExitCode;
+	return TRUE;
+}
+
 int WINAPI _tWinMain(
   HINSTANCE hInstance,
   HINSTANCE hPrevInstance,
@@ -466,6 +521,10 @@ int WINAPI _tWinMain(
 				// The dll could not be loaded; display an error message
 				dwErr = GetLastError();
 				SetErrorMode(fuOldErrorMode);
+				if (dwErr == ERROR_BAD_EXE_FORMAT && RunOtherRegsvr32(lpCmdLine, &nRetValue)) {
+					// The other regsvr32 did everything (and showed its messages)
+					break;
+				}
 				lptMsgBuffer = (LPTSTR)malloc((_tcslen(DllNotLoaded) + 2 + _tcslen(lptDllName) + 1) * sizeof(TCHAR));
 				_stprintf(lptMsgBuffer,DllNotLoaded,lptDllName,dwErr);
 				DisplayMessage(bConsole,bSilent,lptMsgBuffer,ModuleTitle,MB_ICONEXCLAMATION);
