@@ -122,6 +122,12 @@ def syscalls():
     return out
 
 
+# GDI object handles (the others: window manager handles, sign-extended)
+GDI_HANDLES = {'HDC', 'HBITMAP', 'HBRUSH', 'HPEN', 'HFONT', 'HRGN', 'HPALETTE',
+               'HMETAFILE', 'HENHMETAFILE', 'HCOLORSPACE', 'HGDIOBJ', 'HSURF',
+               'HDEV', 'DHPDEV', 'DHSURF', 'HSEMAPHORE', 'HUMPD', 'HLSURF'}
+
+
 class Thunks:
     def __init__(self, parser):
         self.p = parser
@@ -199,6 +205,12 @@ class Thunks:
             elif kind == 'scalar64':
                 lines.append('    ULONG64 %s = get_ulong64( &args );' % pname)
                 call_args.append('*(%s *)&%s' % (self.ctype(f), pname))
+            elif kind == 'handle' and f.base in GDI_HANDLES:
+                # GDI handles are 32 bits wide and win32k compares them with the
+                # ones it keeps (NtGdiSelectBitmap: "is it already selected?"):
+                # zero-extended, like the kernel hands them out
+                lines.append('    HANDLE %s = ULongToHandle( get_ulong( &args ) );' % pname)
+                call_args.append('(%s)%s' % (self.ctype(f), pname))
             elif kind == 'handle':
                 lines.append('    HANDLE %s = get_handle( &args );' % pname)
                 call_args.append('(%s)%s' % (self.ctype(f), pname))

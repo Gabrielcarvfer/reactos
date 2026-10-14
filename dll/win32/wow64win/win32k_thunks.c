@@ -19,7 +19,7 @@ extern NTSTATUS WINAPI wow64_NtUserSetWindowLong( UINT *args ); /* wow64win.c */
 
 NTSTATUS WINAPI wow64_NtGdiAbortDoc( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -29,7 +29,7 @@ NTSTATUS WINAPI wow64_NtGdiAbortDoc( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiAbortPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -54,7 +54,7 @@ NTSTATUS WINAPI wow64_NtGdiAddFontResourceW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiAddRemoteFontToDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -81,7 +81,7 @@ NTSTATUS WINAPI wow64_NtGdiAddFontMemResourceEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiRemoveMergeFont( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -92,7 +92,7 @@ NTSTATUS WINAPI wow64_NtGdiRemoveMergeFont( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiAddRemoteMMInstanceToDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -104,12 +104,12 @@ NTSTATUS WINAPI wow64_NtGdiAddRemoteMMInstanceToDC( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiAlphaBlend( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
-    HANDLE p5 = get_handle( &args );
+    HANDLE p5 = ULongToHandle( get_ulong( &args ) );
     ULONG p6 = get_ulong( &args );
     ULONG p7 = get_ulong( &args );
     ULONG p8 = get_ulong( &args );
@@ -126,7 +126,7 @@ NTSTATUS WINAPI wow64_NtGdiAlphaBlend( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiAngleArc( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -149,7 +149,7 @@ NTSTATUS WINAPI wow64_NtGdiAnyLinkedFonts( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiFontIsLinked( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -160,7 +160,7 @@ NTSTATUS WINAPI wow64_NtGdiFontIsLinked( UINT *args )
 NTSTATUS WINAPI wow64_NtGdiArcInternal( UINT *args )
 {
     ULONG p0 = get_ulong( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
@@ -178,7 +178,7 @@ NTSTATUS WINAPI wow64_NtGdiArcInternal( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiBeginPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -188,12 +188,12 @@ NTSTATUS WINAPI wow64_NtGdiBeginPath( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiBitBlt( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
-    HANDLE p5 = get_handle( &args );
+    HANDLE p5 = ULongToHandle( get_ulong( &args ) );
     ULONG p6 = get_ulong( &args );
     ULONG p7 = get_ulong( &args );
     ULONG p8 = get_ulong( &args );
@@ -208,7 +208,7 @@ NTSTATUS WINAPI wow64_NtGdiBitBlt( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCancelDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -218,7 +218,7 @@ NTSTATUS WINAPI wow64_NtGdiCancelDC( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCheckBitmapBits( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     HANDLE p1 = get_handle( &args );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
@@ -235,7 +235,7 @@ NTSTATUS WINAPI wow64_NtGdiCheckBitmapBits( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCloseFigure( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -245,7 +245,7 @@ NTSTATUS WINAPI wow64_NtGdiCloseFigure( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiClearBitmapAttributes( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     HBITMAP ret;
@@ -256,7 +256,7 @@ NTSTATUS WINAPI wow64_NtGdiClearBitmapAttributes( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiClearBrushAttributes( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     HBRUSH ret;
@@ -267,8 +267,8 @@ NTSTATUS WINAPI wow64_NtGdiClearBrushAttributes( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiColorCorrectPalette( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     void *p4 = get_ptr( &args );
@@ -282,9 +282,9 @@ NTSTATUS WINAPI wow64_NtGdiColorCorrectPalette( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCombineRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
-    HANDLE p2 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p2 = ULongToHandle( get_ulong( &args ) );
     ULONG p3 = get_ulong( &args );
 
     INT ret;
@@ -307,7 +307,7 @@ NTSTATUS WINAPI wow64_NtGdiCombineTransform( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiComputeXformCoefficients( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -317,7 +317,7 @@ NTSTATUS WINAPI wow64_NtGdiComputeXformCoefficients( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiConsoleTextOut( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     POLYTEXTW_32 *p1 = get_ptr( &args );
     POLYTEXTW *p1_64 = NULL;
     ULONG p1_count = 0, p1_i;
@@ -339,7 +339,7 @@ NTSTATUS WINAPI wow64_NtGdiConsoleTextOut( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiConvertMetafileRect( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     LONG ret;
@@ -384,7 +384,7 @@ NTSTATUS WINAPI wow64_NtGdiCreateColorSpace( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCreateColorTransform( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
@@ -401,7 +401,7 @@ NTSTATUS WINAPI wow64_NtGdiCreateColorTransform( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCreateCompatibleBitmap( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -413,7 +413,7 @@ NTSTATUS WINAPI wow64_NtGdiCreateCompatibleBitmap( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCreateCompatibleDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     HDC ret;
 
@@ -438,7 +438,7 @@ NTSTATUS WINAPI wow64_NtGdiCreateDIBBrush( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCreateDIBitmapInternal( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -458,7 +458,7 @@ NTSTATUS WINAPI wow64_NtGdiCreateDIBitmapInternal( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCreateDIBSection( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     HANDLE p1 = get_handle( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -492,7 +492,7 @@ NTSTATUS WINAPI wow64_NtGdiCreateEllipticRgn( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCreateHalftonePalette( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     HPALETTE ret;
 
@@ -514,7 +514,7 @@ NTSTATUS WINAPI wow64_NtGdiCreateHatchBrushInternal( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCreateMetafileDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     HDC ret;
 
@@ -535,7 +535,7 @@ NTSTATUS WINAPI wow64_NtGdiCreatePaletteInternal( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiCreatePatternBrushInternal( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -550,7 +550,7 @@ NTSTATUS WINAPI wow64_NtGdiCreatePen( UINT *args )
     ULONG p0 = get_ulong( &args );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
-    HANDLE p3 = get_handle( &args );
+    HANDLE p3 = ULongToHandle( get_ulong( &args ) );
 
     HPEN ret;
 
@@ -604,7 +604,7 @@ NTSTATUS WINAPI wow64_NtGdiCreateServerMetaFile( UINT *args )
 NTSTATUS WINAPI wow64_NtGdiCreateSolidBrush( UINT *args )
 {
     ULONG p0 = get_ulong( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
 
     HBRUSH ret;
 
@@ -816,7 +816,7 @@ NTSTATUS WINAPI wow64_NtGdiDdColorControl( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiDdCreateDirectDrawObject( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     HANDLE ret;
 
@@ -1192,7 +1192,7 @@ NTSTATUS WINAPI wow64_NtGdiDdLock( UINT *args )
     HANDLE p0 = get_handle( &args );
     DD_LOCKDATA_32 *p1 = get_ptr( &args );
     DD_LOCKDATA p1_64;
-    HANDLE p2 = get_handle( &args );
+    HANDLE p2 = ULongToHandle( get_ulong( &args ) );
 
     DWORD ret;
 
@@ -1345,7 +1345,7 @@ NTSTATUS WINAPI wow64_NtGdiDdSetExclusiveMode( UINT *args )
 NTSTATUS WINAPI wow64_NtGdiDdSetGammaRamp( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     void *p2 = get_ptr( &args );
 
     BOOL ret;
@@ -1738,7 +1738,7 @@ NTSTATUS WINAPI wow64_NtGdiDeleteColorSpace( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiDeleteColorTransform( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     HANDLE p1 = get_handle( &args );
 
     BOOL ret;
@@ -1759,7 +1759,7 @@ NTSTATUS WINAPI wow64_NtGdiDeleteObjectApp( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiDescribePixelFormat( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -1772,7 +1772,7 @@ NTSTATUS WINAPI wow64_NtGdiDescribePixelFormat( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetPerBandInfo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     ULONG ret;
@@ -1783,7 +1783,7 @@ NTSTATUS WINAPI wow64_NtGdiGetPerBandInfo( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiDoBanding( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
     void *p3 = get_ptr( &args );
@@ -1796,7 +1796,7 @@ NTSTATUS WINAPI wow64_NtGdiDoBanding( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiDoPalette( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -1811,7 +1811,7 @@ NTSTATUS WINAPI wow64_NtGdiDoPalette( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiDrawEscape( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -1824,7 +1824,7 @@ NTSTATUS WINAPI wow64_NtGdiDrawEscape( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEllipse( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -1848,7 +1848,7 @@ NTSTATUS WINAPI wow64_NtGdiEnableEudc( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEndDoc( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -1858,7 +1858,7 @@ NTSTATUS WINAPI wow64_NtGdiEndDoc( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEndPage( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -1868,7 +1868,7 @@ NTSTATUS WINAPI wow64_NtGdiEndPage( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEndPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -1878,7 +1878,7 @@ NTSTATUS WINAPI wow64_NtGdiEndPath( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEnumFontChunk( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG_PTR p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -1902,7 +1902,7 @@ NTSTATUS WINAPI wow64_NtGdiEnumFontClose( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEnumFontOpen( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -1918,7 +1918,7 @@ NTSTATUS WINAPI wow64_NtGdiEnumFontOpen( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEnumObjects( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -1931,8 +1931,8 @@ NTSTATUS WINAPI wow64_NtGdiEnumObjects( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEqualRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -1958,7 +1958,7 @@ NTSTATUS WINAPI wow64_NtGdiEudcLoadUnloadLink( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiExcludeClipRect( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -1982,7 +1982,7 @@ NTSTATUS WINAPI wow64_NtGdiExtCreatePen( UINT *args )
     void *p7 = get_ptr( &args );
     ULONG p8 = get_ulong( &args );
     ULONG p9 = get_ulong( &args );
-    HANDLE p10 = get_handle( &args );
+    HANDLE p10 = ULongToHandle( get_ulong( &args ) );
 
     HPEN ret;
 
@@ -2004,7 +2004,7 @@ NTSTATUS WINAPI wow64_NtGdiExtCreateRegion( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiExtEscape( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -2021,7 +2021,7 @@ NTSTATUS WINAPI wow64_NtGdiExtEscape( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiExtFloodFill( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -2035,8 +2035,8 @@ NTSTATUS WINAPI wow64_NtGdiExtFloodFill( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiExtSelectClipRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     INT ret;
@@ -2047,7 +2047,7 @@ NTSTATUS WINAPI wow64_NtGdiExtSelectClipRgn( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiExtTextOutW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -2065,7 +2065,7 @@ NTSTATUS WINAPI wow64_NtGdiExtTextOutW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiFillPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -2075,9 +2075,9 @@ NTSTATUS WINAPI wow64_NtGdiFillPath( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiFillRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
-    HANDLE p2 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p2 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -2087,7 +2087,7 @@ NTSTATUS WINAPI wow64_NtGdiFillRgn( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiFlattenPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -2105,7 +2105,7 @@ NTSTATUS WINAPI wow64_NtGdiFlush( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiForceUFIMapping( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -2116,9 +2116,9 @@ NTSTATUS WINAPI wow64_NtGdiForceUFIMapping( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiFrameRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
-    HANDLE p2 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p2 = ULongToHandle( get_ulong( &args ) );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
 
@@ -2144,7 +2144,7 @@ NTSTATUS WINAPI wow64_NtGdiFullscreenControl( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetAndSetDCDword( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2157,7 +2157,7 @@ NTSTATUS WINAPI wow64_NtGdiGetAndSetDCDword( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetAppClipBox( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     INT ret;
@@ -2168,7 +2168,7 @@ NTSTATUS WINAPI wow64_NtGdiGetAppClipBox( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetBitmapBits( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -2180,7 +2180,7 @@ NTSTATUS WINAPI wow64_NtGdiGetBitmapBits( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetBitmapDimension( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -2191,7 +2191,7 @@ NTSTATUS WINAPI wow64_NtGdiGetBitmapDimension( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetBoundsRect( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -2203,7 +2203,7 @@ NTSTATUS WINAPI wow64_NtGdiGetBoundsRect( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetCharABCWidthsW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2218,7 +2218,7 @@ NTSTATUS WINAPI wow64_NtGdiGetCharABCWidthsW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetCharacterPlacementW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -2236,7 +2236,7 @@ NTSTATUS WINAPI wow64_NtGdiGetCharacterPlacementW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetCharSet( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     DWORD ret;
 
@@ -2246,7 +2246,7 @@ NTSTATUS WINAPI wow64_NtGdiGetCharSet( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetCharWidthW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2261,7 +2261,7 @@ NTSTATUS WINAPI wow64_NtGdiGetCharWidthW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetCharWidthInfo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -2272,7 +2272,7 @@ NTSTATUS WINAPI wow64_NtGdiGetCharWidthInfo( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetColorAdjustment( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -2283,7 +2283,7 @@ NTSTATUS WINAPI wow64_NtGdiGetColorAdjustment( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetColorSpaceforBitmap( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     ULONG_PTR ret;
 
@@ -2293,7 +2293,7 @@ NTSTATUS WINAPI wow64_NtGdiGetColorSpaceforBitmap( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDCDword( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -2305,7 +2305,7 @@ NTSTATUS WINAPI wow64_NtGdiGetDCDword( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDCforBitmap( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     HDC ret;
 
@@ -2315,7 +2315,7 @@ NTSTATUS WINAPI wow64_NtGdiGetDCforBitmap( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDCObject( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     HANDLE ret;
@@ -2326,7 +2326,7 @@ NTSTATUS WINAPI wow64_NtGdiGetDCObject( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDCPoint( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -2338,7 +2338,7 @@ NTSTATUS WINAPI wow64_NtGdiGetDCPoint( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDeviceCaps( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     INT ret;
@@ -2349,7 +2349,7 @@ NTSTATUS WINAPI wow64_NtGdiGetDeviceCaps( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDeviceGammaRamp( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -2360,7 +2360,7 @@ NTSTATUS WINAPI wow64_NtGdiGetDeviceGammaRamp( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDeviceCapsAll( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -2371,8 +2371,8 @@ NTSTATUS WINAPI wow64_NtGdiGetDeviceCapsAll( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDIBitsInternal( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     void *p4 = get_ptr( &args );
@@ -2389,7 +2389,7 @@ NTSTATUS WINAPI wow64_NtGdiGetDIBitsInternal( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetETM( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -2412,7 +2412,7 @@ NTSTATUS WINAPI wow64_NtGdiGetEudcTimeStampEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetFontData( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2442,7 +2442,7 @@ NTSTATUS WINAPI wow64_NtGdiGetFontResourceInfoInternalW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetGlyphIndicesW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2456,7 +2456,7 @@ NTSTATUS WINAPI wow64_NtGdiGetGlyphIndicesW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetGlyphIndicesWInternal( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2471,7 +2471,7 @@ NTSTATUS WINAPI wow64_NtGdiGetGlyphIndicesWInternal( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetGlyphOutline( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2488,7 +2488,7 @@ NTSTATUS WINAPI wow64_NtGdiGetGlyphOutline( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetKerningPairs( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -2500,7 +2500,7 @@ NTSTATUS WINAPI wow64_NtGdiGetKerningPairs( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetLinkedUFIs( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -2512,7 +2512,7 @@ NTSTATUS WINAPI wow64_NtGdiGetLinkedUFIs( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetMiterLimit( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -2523,7 +2523,7 @@ NTSTATUS WINAPI wow64_NtGdiGetMiterLimit( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetMonitorID( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -2535,7 +2535,7 @@ NTSTATUS WINAPI wow64_NtGdiGetMonitorID( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetNearestColor( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     COLORREF ret;
@@ -2546,7 +2546,7 @@ NTSTATUS WINAPI wow64_NtGdiGetNearestColor( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetNearestPaletteIndex( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     UINT ret;
@@ -2557,7 +2557,7 @@ NTSTATUS WINAPI wow64_NtGdiGetNearestPaletteIndex( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetObjectBitmapHandle( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     HBITMAP ret;
@@ -2568,7 +2568,7 @@ NTSTATUS WINAPI wow64_NtGdiGetObjectBitmapHandle( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
@@ -2581,7 +2581,7 @@ NTSTATUS WINAPI wow64_NtGdiGetPath( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetPixel( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -2593,8 +2593,8 @@ NTSTATUS WINAPI wow64_NtGdiGetPixel( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetRandomRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     INT ret;
@@ -2616,7 +2616,7 @@ NTSTATUS WINAPI wow64_NtGdiGetRasterizerCaps( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetRegionData( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -2628,7 +2628,7 @@ NTSTATUS WINAPI wow64_NtGdiGetRegionData( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetRgnBox( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     INT ret;
@@ -2692,7 +2692,7 @@ NTSTATUS WINAPI wow64_NtGdiGetStockObject( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetStringBitmapW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2706,7 +2706,7 @@ NTSTATUS WINAPI wow64_NtGdiGetStringBitmapW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetSystemPaletteUse( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     UINT ret;
 
@@ -2716,7 +2716,7 @@ NTSTATUS WINAPI wow64_NtGdiGetSystemPaletteUse( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetTextCharsetInfo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -2728,7 +2728,7 @@ NTSTATUS WINAPI wow64_NtGdiGetTextCharsetInfo( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetTextExtent( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2742,7 +2742,7 @@ NTSTATUS WINAPI wow64_NtGdiGetTextExtent( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetTextExtentExW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -2759,7 +2759,7 @@ NTSTATUS WINAPI wow64_NtGdiGetTextExtentExW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetTextFaceW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
@@ -2772,7 +2772,7 @@ NTSTATUS WINAPI wow64_NtGdiGetTextFaceW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetTextMetricsW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -2784,7 +2784,7 @@ NTSTATUS WINAPI wow64_NtGdiGetTextMetricsW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetTransform( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -2796,7 +2796,7 @@ NTSTATUS WINAPI wow64_NtGdiGetTransform( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetUFI( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     void *p3 = get_ptr( &args );
@@ -2811,7 +2811,7 @@ NTSTATUS WINAPI wow64_NtGdiGetUFI( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetEmbUFI( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     void *p3 = get_ptr( &args );
@@ -2871,7 +2871,7 @@ NTSTATUS WINAPI wow64_NtGdiChangeGhostFont( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiAddEmbFontToDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG *p1 = get_ptr( &args );
     ULONG64 p1_64 = 0;
 
@@ -2885,7 +2885,7 @@ NTSTATUS WINAPI wow64_NtGdiAddEmbFontToDC( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetFontUnicodeRanges( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     DWORD ret;
@@ -2896,7 +2896,7 @@ NTSTATUS WINAPI wow64_NtGdiGetFontUnicodeRanges( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetWidthTable( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
@@ -2912,7 +2912,7 @@ NTSTATUS WINAPI wow64_NtGdiGetWidthTable( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGradientFill( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -2941,8 +2941,8 @@ NTSTATUS WINAPI wow64_NtGdiHfontCreate( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiIcmBrushInfo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     void *p2 = get_ptr( &args );
     void *p3 = get_ptr( &args );
     void *p4 = get_ptr( &args );
@@ -2974,7 +2974,7 @@ NTSTATUS WINAPI wow64_NtGdiInitSpool( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiIntersectClipRect( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -2988,8 +2988,8 @@ NTSTATUS WINAPI wow64_NtGdiIntersectClipRect( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiInvertRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -2999,7 +2999,7 @@ NTSTATUS WINAPI wow64_NtGdiInvertRgn( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiLineTo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3025,7 +3025,7 @@ NTSTATUS WINAPI wow64_NtGdiMakeFontDir( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiMakeInfoDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     BOOL ret;
@@ -3036,15 +3036,15 @@ NTSTATUS WINAPI wow64_NtGdiMakeInfoDC( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiMaskBlt( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
-    HANDLE p5 = get_handle( &args );
+    HANDLE p5 = ULongToHandle( get_ulong( &args ) );
     ULONG p6 = get_ulong( &args );
     ULONG p7 = get_ulong( &args );
-    HANDLE p8 = get_handle( &args );
+    HANDLE p8 = ULongToHandle( get_ulong( &args ) );
     ULONG p9 = get_ulong( &args );
     ULONG p10 = get_ulong( &args );
     ULONG p11 = get_ulong( &args );
@@ -3058,7 +3058,7 @@ NTSTATUS WINAPI wow64_NtGdiMaskBlt( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiModifyWorldTransform( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3070,7 +3070,7 @@ NTSTATUS WINAPI wow64_NtGdiModifyWorldTransform( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiMonoBitmap( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -3080,7 +3080,7 @@ NTSTATUS WINAPI wow64_NtGdiMonoBitmap( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiMoveTo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -3093,7 +3093,7 @@ NTSTATUS WINAPI wow64_NtGdiMoveTo( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiOffsetClipRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3105,7 +3105,7 @@ NTSTATUS WINAPI wow64_NtGdiOffsetClipRgn( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiOffsetRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3139,7 +3139,7 @@ NTSTATUS WINAPI wow64_NtGdiOpenDCW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPatBlt( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3154,7 +3154,7 @@ NTSTATUS WINAPI wow64_NtGdiPatBlt( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPolyPatBlt( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     POLYPATBLT_32 *p2 = get_ptr( &args );
     POLYPATBLT *p2_64 = NULL;
@@ -3177,7 +3177,7 @@ NTSTATUS WINAPI wow64_NtGdiPolyPatBlt( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPathToRegion( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     HRGN ret;
 
@@ -3187,14 +3187,14 @@ NTSTATUS WINAPI wow64_NtGdiPathToRegion( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPlgBlt( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
-    HANDLE p2 = get_handle( &args );
+    HANDLE p2 = ULongToHandle( get_ulong( &args ) );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
     ULONG p5 = get_ulong( &args );
     ULONG p6 = get_ulong( &args );
-    HANDLE p7 = get_handle( &args );
+    HANDLE p7 = ULongToHandle( get_ulong( &args ) );
     ULONG p8 = get_ulong( &args );
     ULONG p9 = get_ulong( &args );
     ULONG p10 = get_ulong( &args );
@@ -3207,7 +3207,7 @@ NTSTATUS WINAPI wow64_NtGdiPlgBlt( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPolyDraw( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
@@ -3220,7 +3220,7 @@ NTSTATUS WINAPI wow64_NtGdiPolyDraw( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPolyPolyDraw( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
@@ -3234,7 +3234,7 @@ NTSTATUS WINAPI wow64_NtGdiPolyPolyDraw( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPolyTextOutW( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     POLYTEXTW_32 *p1 = get_ptr( &args );
     POLYTEXTW *p1_64 = NULL;
     ULONG p1_count = 0, p1_i;
@@ -3256,7 +3256,7 @@ NTSTATUS WINAPI wow64_NtGdiPolyTextOutW( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPtInRegion( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3268,7 +3268,7 @@ NTSTATUS WINAPI wow64_NtGdiPtInRegion( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiPtVisible( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3292,7 +3292,7 @@ NTSTATUS WINAPI wow64_NtGdiQueryFonts( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiQueryFontAssocInfo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     ULONG ret;
 
@@ -3302,7 +3302,7 @@ NTSTATUS WINAPI wow64_NtGdiQueryFontAssocInfo( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiRectangle( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3316,7 +3316,7 @@ NTSTATUS WINAPI wow64_NtGdiRectangle( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiRectInRegion( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -3327,7 +3327,7 @@ NTSTATUS WINAPI wow64_NtGdiRectInRegion( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiRectVisible( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -3363,7 +3363,7 @@ NTSTATUS WINAPI wow64_NtGdiRemoveFontMemResourceEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiResetDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     DRIVER_INFO_2W_32 *p3 = get_ptr( &args );
@@ -3380,7 +3380,7 @@ NTSTATUS WINAPI wow64_NtGdiResetDC( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiResizePalette( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     BOOL ret;
@@ -3391,7 +3391,7 @@ NTSTATUS WINAPI wow64_NtGdiResizePalette( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiRestoreDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     BOOL ret;
@@ -3402,7 +3402,7 @@ NTSTATUS WINAPI wow64_NtGdiRestoreDC( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiRoundRect( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3418,7 +3418,7 @@ NTSTATUS WINAPI wow64_NtGdiRoundRect( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSaveDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     INT ret;
 
@@ -3428,7 +3428,7 @@ NTSTATUS WINAPI wow64_NtGdiSaveDC( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiScaleViewportExtEx( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3443,7 +3443,7 @@ NTSTATUS WINAPI wow64_NtGdiScaleViewportExtEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiScaleWindowExtEx( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3458,8 +3458,8 @@ NTSTATUS WINAPI wow64_NtGdiScaleWindowExtEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSelectBitmap( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
 
     HBITMAP ret;
 
@@ -3469,8 +3469,8 @@ NTSTATUS WINAPI wow64_NtGdiSelectBitmap( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSelectBrush( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
 
     HBRUSH ret;
 
@@ -3480,7 +3480,7 @@ NTSTATUS WINAPI wow64_NtGdiSelectBrush( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSelectClipPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     BOOL ret;
@@ -3491,8 +3491,8 @@ NTSTATUS WINAPI wow64_NtGdiSelectClipPath( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSelectFont( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
 
     HFONT ret;
 
@@ -3502,8 +3502,8 @@ NTSTATUS WINAPI wow64_NtGdiSelectFont( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSelectPen( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
 
     HPEN ret;
 
@@ -3513,7 +3513,7 @@ NTSTATUS WINAPI wow64_NtGdiSelectPen( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetBitmapAttributes( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     HBITMAP ret;
@@ -3524,7 +3524,7 @@ NTSTATUS WINAPI wow64_NtGdiSetBitmapAttributes( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetBitmapBits( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -3536,7 +3536,7 @@ NTSTATUS WINAPI wow64_NtGdiSetBitmapBits( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetBitmapDimension( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -3549,7 +3549,7 @@ NTSTATUS WINAPI wow64_NtGdiSetBitmapDimension( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetBoundsRect( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3561,7 +3561,7 @@ NTSTATUS WINAPI wow64_NtGdiSetBoundsRect( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetBrushAttributes( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     HBRUSH ret;
@@ -3572,7 +3572,7 @@ NTSTATUS WINAPI wow64_NtGdiSetBrushAttributes( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetBrushOrg( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -3585,7 +3585,7 @@ NTSTATUS WINAPI wow64_NtGdiSetBrushOrg( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetColorAdjustment( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -3596,8 +3596,8 @@ NTSTATUS WINAPI wow64_NtGdiSetColorAdjustment( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetColorSpace( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -3607,7 +3607,7 @@ NTSTATUS WINAPI wow64_NtGdiSetColorSpace( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetDeviceGammaRamp( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
@@ -3618,7 +3618,7 @@ NTSTATUS WINAPI wow64_NtGdiSetDeviceGammaRamp( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetDIBitsToDeviceInternal( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3653,7 +3653,7 @@ NTSTATUS WINAPI wow64_NtGdiSetFontEnumeration( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetFontXform( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3665,7 +3665,7 @@ NTSTATUS WINAPI wow64_NtGdiSetFontXform( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetIcmMode( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3677,7 +3677,7 @@ NTSTATUS WINAPI wow64_NtGdiSetIcmMode( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetLinkedUFIs( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3689,7 +3689,7 @@ NTSTATUS WINAPI wow64_NtGdiSetLinkedUFIs( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetMagicColors( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     PALETTEENTRY p1;
     memcpy( &p1, args, sizeof(p1) ); args += (sizeof(p1) + 3) / 4;
     ULONG p2 = get_ulong( &args );
@@ -3702,7 +3702,7 @@ NTSTATUS WINAPI wow64_NtGdiSetMagicColors( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetMetaRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     INT ret;
 
@@ -3712,7 +3712,7 @@ NTSTATUS WINAPI wow64_NtGdiSetMetaRgn( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetMiterLimit( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -3724,7 +3724,7 @@ NTSTATUS WINAPI wow64_NtGdiSetMiterLimit( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDeviceWidth( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     LONG ret;
 
@@ -3734,7 +3734,7 @@ NTSTATUS WINAPI wow64_NtGdiGetDeviceWidth( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiMirrorWindowOrg( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -3744,7 +3744,7 @@ NTSTATUS WINAPI wow64_NtGdiMirrorWindowOrg( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetLayout( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3756,7 +3756,7 @@ NTSTATUS WINAPI wow64_NtGdiSetLayout( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetPixel( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3769,7 +3769,7 @@ NTSTATUS WINAPI wow64_NtGdiSetPixel( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetPixelFormat( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     BOOL ret;
@@ -3780,7 +3780,7 @@ NTSTATUS WINAPI wow64_NtGdiSetPixelFormat( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetRectRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3794,7 +3794,7 @@ NTSTATUS WINAPI wow64_NtGdiSetRectRgn( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetSystemPaletteUse( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
 
     UINT ret;
@@ -3805,7 +3805,7 @@ NTSTATUS WINAPI wow64_NtGdiSetSystemPaletteUse( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetTextJustification( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3817,8 +3817,8 @@ NTSTATUS WINAPI wow64_NtGdiSetTextJustification( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetupPublicCFONT( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     INT ret;
@@ -3829,7 +3829,7 @@ NTSTATUS WINAPI wow64_NtGdiSetupPublicCFONT( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetVirtualResolution( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3843,7 +3843,7 @@ NTSTATUS WINAPI wow64_NtGdiSetVirtualResolution( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetSizeDevice( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
 
@@ -3855,7 +3855,7 @@ NTSTATUS WINAPI wow64_NtGdiSetSizeDevice( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiStartDoc( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     DOCINFOW_32 *p1 = get_ptr( &args );
     DOCINFOW p1_64;
     void *p2 = get_ptr( &args );
@@ -3871,7 +3871,7 @@ NTSTATUS WINAPI wow64_NtGdiStartDoc( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiStartPage( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -3881,12 +3881,12 @@ NTSTATUS WINAPI wow64_NtGdiStartPage( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiStretchBlt( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
-    HANDLE p5 = get_handle( &args );
+    HANDLE p5 = ULongToHandle( get_ulong( &args ) );
     ULONG p6 = get_ulong( &args );
     ULONG p7 = get_ulong( &args );
     ULONG p8 = get_ulong( &args );
@@ -3902,7 +3902,7 @@ NTSTATUS WINAPI wow64_NtGdiStretchBlt( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiStretchDIBitsInternal( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -3927,7 +3927,7 @@ NTSTATUS WINAPI wow64_NtGdiStretchDIBitsInternal( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiStrokeAndFillPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -3937,7 +3937,7 @@ NTSTATUS WINAPI wow64_NtGdiStrokeAndFillPath( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiStrokePath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -3947,7 +3947,7 @@ NTSTATUS WINAPI wow64_NtGdiStrokePath( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSwapBuffers( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -3957,7 +3957,7 @@ NTSTATUS WINAPI wow64_NtGdiSwapBuffers( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiTransformPoints( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
@@ -3971,12 +3971,12 @@ NTSTATUS WINAPI wow64_NtGdiTransformPoints( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiTransparentBlt( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
-    HANDLE p5 = get_handle( &args );
+    HANDLE p5 = ULongToHandle( get_ulong( &args ) );
     ULONG p6 = get_ulong( &args );
     ULONG p7 = get_ulong( &args );
     ULONG p8 = get_ulong( &args );
@@ -4022,7 +4022,7 @@ NTSTATUS WINAPI wow64_NtGdiUnrealizeObject( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiUpdateColors( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -4032,7 +4032,7 @@ NTSTATUS WINAPI wow64_NtGdiUpdateColors( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiWidenPath( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -4103,7 +4103,7 @@ NTSTATUS WINAPI wow64_NtUserBeginPaint( UINT *args )
 
 NTSTATUS WINAPI wow64_NtUserBitBltSysBmp( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
@@ -4429,7 +4429,7 @@ NTSTATUS WINAPI wow64_NtUserCreateAcceleratorTable( UINT *args )
 NTSTATUS WINAPI wow64_NtUserCreateCaret( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
 
@@ -4731,7 +4731,7 @@ NTSTATUS WINAPI wow64_NtUserDrawAnimatedRects( UINT *args )
 NTSTATUS WINAPI wow64_NtUserDrawCaption( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     void *p2 = get_ptr( &args );
     ULONG p3 = get_ulong( &args );
 
@@ -4744,9 +4744,9 @@ NTSTATUS WINAPI wow64_NtUserDrawCaption( UINT *args )
 NTSTATUS WINAPI wow64_NtUserDrawCaptionTemp( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     void *p2 = get_ptr( &args );
-    HANDLE p3 = get_handle( &args );
+    HANDLE p3 = ULongToHandle( get_ulong( &args ) );
     HANDLE p4 = get_handle( &args );
     UNICODE_STRING_32 *p5 = get_ptr( &args );
     UNICODE_STRING p5_64;
@@ -4762,14 +4762,14 @@ NTSTATUS WINAPI wow64_NtUserDrawCaptionTemp( UINT *args )
 
 NTSTATUS WINAPI wow64_NtUserDrawIconEx( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     HANDLE p3 = get_handle( &args );
     ULONG p4 = get_ulong( &args );
     ULONG p5 = get_ulong( &args );
     ULONG p6 = get_ulong( &args );
-    HANDLE p7 = get_handle( &args );
+    HANDLE p7 = ULongToHandle( get_ulong( &args ) );
     ULONG p8 = get_ulong( &args );
     ULONG p9 = get_ulong( &args );
     void *p10 = get_ptr( &args );
@@ -4783,10 +4783,10 @@ NTSTATUS WINAPI wow64_NtUserDrawIconEx( UINT *args )
 NTSTATUS WINAPI wow64_NtUserDrawMenuBarTemp( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     void *p2 = get_ptr( &args );
     HANDLE p3 = get_handle( &args );
-    HANDLE p4 = get_handle( &args );
+    HANDLE p4 = ULongToHandle( get_ulong( &args ) );
 
     DWORD ret;
 
@@ -4903,7 +4903,7 @@ NTSTATUS WINAPI wow64_NtUserEvent( UINT *args )
 
 NTSTATUS WINAPI wow64_NtUserExcludeUpdateRgn( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     HANDLE p1 = get_handle( &args );
 
     INT ret;
@@ -4916,8 +4916,8 @@ NTSTATUS WINAPI wow64_NtUserFillWindow( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
     HANDLE p1 = get_handle( &args );
-    HANDLE p2 = get_handle( &args );
-    HANDLE p3 = get_handle( &args );
+    HANDLE p2 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p3 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -5156,7 +5156,7 @@ NTSTATUS WINAPI wow64_NtUserGetComboBoxInfo( UINT *args )
 NTSTATUS WINAPI wow64_NtUserGetControlBrush( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     HBRUSH ret;
@@ -5169,7 +5169,7 @@ NTSTATUS WINAPI wow64_NtUserGetControlColor( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
     HANDLE p1 = get_handle( &args );
-    HANDLE p2 = get_handle( &args );
+    HANDLE p2 = ULongToHandle( get_ulong( &args ) );
     ULONG p3 = get_ulong( &args );
 
     HBRUSH ret;
@@ -5693,7 +5693,7 @@ NTSTATUS WINAPI wow64_NtUserGetUpdateRect( UINT *args )
 NTSTATUS WINAPI wow64_NtUserGetUpdateRgn( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     INT ret;
@@ -5856,7 +5856,7 @@ NTSTATUS WINAPI wow64_NtUserInvalidateRect( UINT *args )
 NTSTATUS WINAPI wow64_NtUserInvalidateRgn( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     BOOL ret;
@@ -6106,7 +6106,7 @@ NTSTATUS WINAPI wow64_NtUserOpenWindowStation( UINT *args )
 
 NTSTATUS WINAPI wow64_NtUserPaintDesktop( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -6160,7 +6160,7 @@ NTSTATUS WINAPI wow64_NtUserPostThreadMessage( UINT *args )
 NTSTATUS WINAPI wow64_NtUserPrintWindow( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     BOOL ret;
@@ -6271,7 +6271,7 @@ NTSTATUS WINAPI wow64_NtUserRedrawWindow( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
     void *p1 = get_ptr( &args );
-    HANDLE p2 = get_handle( &args );
+    HANDLE p2 = ULongToHandle( get_ulong( &args ) );
     ULONG p3 = get_ulong( &args );
 
     BOOL ret;
@@ -6424,12 +6424,12 @@ NTSTATUS WINAPI wow64_NtUserSBGetParms( UINT *args )
 
 NTSTATUS WINAPI wow64_NtUserScrollDC( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
     void *p4 = get_ptr( &args );
-    HANDLE p5 = get_handle( &args );
+    HANDLE p5 = ULongToHandle( get_ulong( &args ) );
     void *p6 = get_ptr( &args );
 
     BOOL ret;
@@ -6445,7 +6445,7 @@ NTSTATUS WINAPI wow64_NtUserScrollWindowEx( UINT *args )
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
     void *p4 = get_ptr( &args );
-    HANDLE p5 = get_handle( &args );
+    HANDLE p5 = ULongToHandle( get_ulong( &args ) );
     void *p6 = get_ptr( &args );
     ULONG p7 = get_ulong( &args );
 
@@ -6457,8 +6457,8 @@ NTSTATUS WINAPI wow64_NtUserScrollWindowEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtUserSelectPalette( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     HPALETTE ret;
@@ -6980,7 +6980,7 @@ NTSTATUS WINAPI wow64_NtUserSetWindowPos( UINT *args )
 NTSTATUS WINAPI wow64_NtUserSetWindowRgn( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     INT ret;
@@ -7245,7 +7245,7 @@ NTSTATUS WINAPI wow64_NtUserCalcMenuBar( UINT *args )
 NTSTATUS WINAPI wow64_NtUserPaintMenuBar( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
     ULONG p3 = get_ulong( &args );
     ULONG p4 = get_ulong( &args );
@@ -7390,10 +7390,10 @@ NTSTATUS WINAPI wow64_NtUserUpdateInstance( UINT *args )
 NTSTATUS WINAPI wow64_NtUserUpdateLayeredWindow( UINT *args )
 {
     HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     void *p2 = get_ptr( &args );
     void *p3 = get_ptr( &args );
-    HANDLE p4 = get_handle( &args );
+    HANDLE p4 = ULongToHandle( get_ulong( &args ) );
     void *p5 = get_ptr( &args );
     ULONG p6 = get_ulong( &args );
     void *p7 = get_ptr( &args );
@@ -7617,8 +7617,8 @@ NTSTATUS WINAPI wow64_NtUserCtxDisplayIOCtl( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEngAssociateSurface( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
-    HANDLE p1 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
+    HANDLE p1 = ULongToHandle( get_ulong( &args ) );
     ULONG p2 = get_ulong( &args );
 
     BOOL ret;
@@ -7644,7 +7644,7 @@ NTSTATUS WINAPI wow64_NtGdiEngCreateBitmap( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEngCreateDeviceSurface( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     SIZEL p1;
     memcpy( &p1, args, sizeof(p1) ); args += (sizeof(p1) + 3) / 4;
     ULONG p2 = get_ulong( &args );
@@ -7657,7 +7657,7 @@ NTSTATUS WINAPI wow64_NtGdiEngCreateDeviceSurface( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEngCreateDeviceBitmap( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     SIZEL p1;
     memcpy( &p1, args, sizeof(p1) ); args += (sizeof(p1) + 3) / 4;
     ULONG p2 = get_ulong( &args );
@@ -7721,7 +7721,7 @@ NTSTATUS WINAPI wow64_NtGdiEngCopyBits( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEngDeletePalette( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -7731,7 +7731,7 @@ NTSTATUS WINAPI wow64_NtGdiEngDeletePalette( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEngDeleteSurface( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -7769,7 +7769,7 @@ NTSTATUS WINAPI wow64_NtGdiEngUnlockSurface( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEngLockSurface( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     SURFOBJ * ret;
 
@@ -7878,7 +7878,7 @@ NTSTATUS WINAPI wow64_NtGdiEngPlgBlt( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiEngMarkBandingSurface( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -8603,7 +8603,7 @@ NTSTATUS WINAPI wow64_NtGdiPATHOBJ_bEnumClipLines( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetDhpdev( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     DHPDEV ret;
 
@@ -8654,7 +8654,7 @@ NTSTATUS WINAPI wow64_NtGdiHT_Get8BPPMaskPalette( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiUpdateTransform( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
 
     BOOL ret;
 
@@ -8664,7 +8664,7 @@ NTSTATUS WINAPI wow64_NtGdiUpdateTransform( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetPUMPDOBJ( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG *p2 = get_ptr( &args );
     ULONG64 p2_64 = 0;
@@ -8710,7 +8710,7 @@ NTSTATUS WINAPI wow64_NtGdiUMPDEngFreeUserMem( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiDrawStream( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     void *p2 = get_ptr( &args );
 
@@ -8786,7 +8786,7 @@ NTSTATUS WINAPI wow64_NtGdiMakeObjectXferable( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetViewportOrgEx( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -8799,7 +8799,7 @@ NTSTATUS WINAPI wow64_NtGdiSetViewportOrgEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiSetWindowOrgEx( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -8812,7 +8812,7 @@ NTSTATUS WINAPI wow64_NtGdiSetWindowOrgEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetFontFamilyInfo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
     void *p2 = get_ptr( &args );
     void *p3 = get_ptr( &args );
@@ -8825,7 +8825,7 @@ NTSTATUS WINAPI wow64_NtGdiGetFontFamilyInfo( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiOffsetViewportOrgEx( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -8838,7 +8838,7 @@ NTSTATUS WINAPI wow64_NtGdiOffsetViewportOrgEx( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiOffsetWindowOrgEx( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     ULONG p1 = get_ulong( &args );
     ULONG p2 = get_ulong( &args );
     void *p3 = get_ptr( &args );
@@ -9599,7 +9599,7 @@ NTSTATUS WINAPI wow64_NtGdiGetFontFileInfo( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiGetFontRealizationInfo( UINT *args )
 {
-    HANDLE p0 = get_handle( &args );
+    HANDLE p0 = ULongToHandle( get_ulong( &args ) );
     void *p1 = get_ptr( &args );
 
     BOOL ret;
