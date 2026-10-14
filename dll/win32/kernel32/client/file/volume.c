@@ -460,6 +460,79 @@ CleanAndQuit:
  */
 BOOL
 WINAPI
+GetVolumeInformationByHandleW(IN HANDLE hFile,
+                              OUT LPWSTR lpVolumeNameBuffer OPTIONAL,
+                              IN DWORD nVolumeNameSize,
+                              OUT LPDWORD lpVolumeSerialNumber OPTIONAL,
+                              OUT LPDWORD lpMaximumComponentLength OPTIONAL,
+                              OUT LPDWORD lpFileSystemFlags OPTIONAL,
+                              OUT LPWSTR lpFileSystemNameBuffer OPTIONAL,
+                              IN DWORD nFileSystemNameSize)
+{
+    /* The volume of any open file or directory, as GetVolumeInformationW */
+    UCHAR InfoBuffer[sizeof(FILE_FS_VOLUME_INFORMATION) + MAX_PATH * sizeof(WCHAR)];
+    UCHAR AttrBuffer[sizeof(FILE_FS_ATTRIBUTE_INFORMATION) + MAX_PATH * sizeof(WCHAR)];
+    PFILE_FS_VOLUME_INFORMATION VolumeInfo = (PVOID)InfoBuffer;
+    PFILE_FS_ATTRIBUTE_INFORMATION VolumeAttr = (PVOID)AttrBuffer;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+
+    if (lpVolumeNameBuffer || lpVolumeSerialNumber)
+    {
+        Status = NtQueryVolumeInformationFile(hFile, &IoStatusBlock, VolumeInfo,
+                                              sizeof(InfoBuffer), FileFsVolumeInformation);
+        if (!NT_SUCCESS(Status))
+        {
+            BaseSetLastNTError(Status);
+            return FALSE;
+        }
+        if (lpVolumeNameBuffer)
+        {
+            if (VolumeInfo->VolumeLabelLength >= nVolumeNameSize * sizeof(WCHAR))
+            {
+                SetLastError(ERROR_BAD_LENGTH);
+                return FALSE;
+            }
+            RtlCopyMemory(lpVolumeNameBuffer, VolumeInfo->VolumeLabel, VolumeInfo->VolumeLabelLength);
+            lpVolumeNameBuffer[VolumeInfo->VolumeLabelLength / sizeof(WCHAR)] = UNICODE_NULL;
+        }
+        if (lpVolumeSerialNumber)
+            *lpVolumeSerialNumber = VolumeInfo->VolumeSerialNumber;
+    }
+
+    if (lpFileSystemNameBuffer || lpMaximumComponentLength || lpFileSystemFlags)
+    {
+        Status = NtQueryVolumeInformationFile(hFile, &IoStatusBlock, VolumeAttr,
+                                              sizeof(AttrBuffer), FileFsAttributeInformation);
+        if (!NT_SUCCESS(Status))
+        {
+            BaseSetLastNTError(Status);
+            return FALSE;
+        }
+        if (lpFileSystemNameBuffer)
+        {
+            if (VolumeAttr->FileSystemNameLength >= nFileSystemNameSize * sizeof(WCHAR))
+            {
+                SetLastError(ERROR_BAD_LENGTH);
+                return FALSE;
+            }
+            RtlCopyMemory(lpFileSystemNameBuffer, VolumeAttr->FileSystemName, VolumeAttr->FileSystemNameLength);
+            lpFileSystemNameBuffer[VolumeAttr->FileSystemNameLength / sizeof(WCHAR)] = UNICODE_NULL;
+        }
+        if (lpMaximumComponentLength)
+            *lpMaximumComponentLength = VolumeAttr->MaximumComponentNameLength;
+        if (lpFileSystemFlags)
+            *lpFileSystemFlags = VolumeAttr->FileSystemAttributes;
+    }
+
+    return TRUE;
+}
+
+/*
+ * @implemented
+ */
+BOOL
+WINAPI
 SetVolumeLabelA(IN LPCSTR lpRootPathName,
                 IN LPCSTR lpVolumeName OPTIONAL) /* NULL if deleting label */
 {

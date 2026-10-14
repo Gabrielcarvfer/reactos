@@ -126,6 +126,219 @@ WerUnregisterRuntimeExceptionModule(
 }
 
 /*
+ * SetWaitableTimerEx: SetWaitableTimer with power management hints (wake
+ * context, tolerable delay), which ReactOS does not use.
+ */
+BOOL
+WINAPI
+SetWaitableTimerEx(
+    _In_ HANDLE hTimer,
+    _In_ const LARGE_INTEGER *lpDueTime,
+    _In_ LONG lPeriod,
+    _In_opt_ PTIMERAPCROUTINE pfnCompletionRoutine,
+    _In_opt_ LPVOID lpArgToCompletionRoutine,
+    _In_opt_ PVOID WakeContext,
+    _In_ ULONG TolerableDelay)
+{
+    UNREFERENCED_PARAMETER(WakeContext);
+    UNREFERENCED_PARAMETER(TolerableDelay);
+    return SetWaitableTimer(hTimer, lpDueTime, lPeriod, pfnCompletionRoutine,
+                            lpArgToCompletionRoutine, FALSE);
+}
+
+/*
+ * The ideal processor of a thread, as a group and a number: ReactOS has one
+ * processor group.
+ */
+BOOL
+WINAPI
+SetThreadIdealProcessorEx(
+    _In_ HANDLE hThread,
+    _In_ PPROCESSOR_NUMBER lpIdealProcessor,
+    _Out_opt_ PPROCESSOR_NUMBER lpPreviousIdealProcessor)
+{
+    DWORD Previous;
+
+    if (!lpIdealProcessor || lpIdealProcessor->Group != 0)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    Previous = SetThreadIdealProcessor(hThread, lpIdealProcessor->Number);
+    if (Previous == (DWORD)-1)
+        return FALSE;
+
+    if (lpPreviousIdealProcessor)
+    {
+        lpPreviousIdealProcessor->Group = 0;
+        lpPreviousIdealProcessor->Number = (BYTE)Previous;
+        lpPreviousIdealProcessor->Reserved = 0;
+    }
+    return TRUE;
+}
+
+BOOL
+WINAPI
+GetThreadIdealProcessorEx(
+    _In_ HANDLE hThread,
+    _Out_ PPROCESSOR_NUMBER lpIdealProcessor)
+{
+    /* MAXIMUM_PROCESSORS asks for the current one without changing it */
+    DWORD Current = SetThreadIdealProcessor(hThread, MAXIMUM_PROCESSORS);
+
+    if (Current == (DWORD)-1)
+        return FALSE;
+    lpIdealProcessor->Group = 0;
+    lpIdealProcessor->Number = (BYTE)Current;
+    lpIdealProcessor->Reserved = 0;
+    return TRUE;
+}
+
+/*
+ * GetNumaProcessorNodeEx: the NUMA node of a processor given as a group and
+ * a number. ReactOS has one processor group and one node.
+ */
+BOOL
+WINAPI
+GetNumaProcessorNodeEx(
+    _In_ PPROCESSOR_NUMBER Processor,
+    _Out_ PUSHORT NodeNumber)
+{
+    SYSTEM_INFO SystemInfo;
+
+    if (!Processor || !NodeNumber)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    GetSystemInfo(&SystemInfo);
+    if (Processor->Group != 0 || Processor->Number >= SystemInfo.dwNumberOfProcessors)
+    {
+        *NodeNumber = 0xFFFF;
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    *NodeNumber = 0;
+    return TRUE;
+}
+
+/*
+ * FindStringOrdinal: where one string is in another, comparing code points
+ * (no locale). Returns the index of the first character, or -1.
+ */
+INT
+WINAPI
+FindStringOrdinal(
+    _In_ DWORD dwFindStringOrdinalFlags,
+    _In_reads_(cchSource) LPCWSTR lpStringSource,
+    _In_ INT cchSource,
+    _In_reads_(cchValue) LPCWSTR lpStringValue,
+    _In_ INT cchValue,
+    _In_ BOOL bIgnoreCase)
+{
+    DWORD Flags = dwFindStringOrdinalFlags;
+    BOOL Forward = (Flags == FIND_FROMSTART || Flags == FIND_STARTSWITH);
+    INT Offset, Count;
+
+    if (!lpStringSource || !lpStringValue)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return -1;
+    }
+    if (Flags != FIND_FROMSTART && Flags != FIND_FROMEND &&
+        Flags != FIND_STARTSWITH && Flags != FIND_ENDSWITH)
+    {
+        SetLastError(ERROR_INVALID_FLAGS);
+        return -1;
+    }
+    if (cchSource == -1) cchSource = lstrlenW(lpStringSource);
+    if (cchValue == -1) cchValue = lstrlenW(lpStringValue);
+
+    SetLastError(ERROR_SUCCESS);
+    if (cchSource < cchValue)
+        return -1;
+
+    /* FROMSTART/FROMEND look everywhere, STARTSWITH/ENDSWITH at one place */
+    Count = (Flags == FIND_FROMSTART || Flags == FIND_FROMEND) ? cchSource - cchValue + 1 : 1;
+    Offset = Forward ? 0 : cchSource - cchValue;
+    while (Count--)
+    {
+        if (CompareStringOrdinal(lpStringSource + Offset, cchValue, lpStringValue, cchValue, bIgnoreCase) == CSTR_EQUAL)
+            return Offset;
+        Offset += Forward ? 1 : -1;
+    }
+    return -1;
+}
+
+/* The other things a program can give WER for its crash reports: kept nowhere */
+HRESULT
+WINAPI
+WerSetFlags(
+    _In_ DWORD dwFlags)
+{
+    UNREFERENCED_PARAMETER(dwFlags);
+    return S_OK;
+}
+
+HRESULT
+WINAPI
+WerGetFlags(
+    _In_ HANDLE hProcess,
+    _Out_ PDWORD pdwFlags)
+{
+    UNREFERENCED_PARAMETER(hProcess);
+    if (!pdwFlags)
+        return E_INVALIDARG;
+    *pdwFlags = 0;
+    return S_OK;
+}
+
+HRESULT
+WINAPI
+WerRegisterMemoryBlock(
+    _In_ PVOID pvAddress,
+    _In_ DWORD dwSize)
+{
+    UNREFERENCED_PARAMETER(pvAddress);
+    UNREFERENCED_PARAMETER(dwSize);
+    return S_OK;
+}
+
+HRESULT
+WINAPI
+WerUnregisterMemoryBlock(
+    _In_ PVOID pvAddress)
+{
+    UNREFERENCED_PARAMETER(pvAddress);
+    return S_OK;
+}
+
+HRESULT
+WINAPI
+WerRegisterFile(
+    _In_ PCWSTR pwzFile,
+    _In_ DWORD regFileType,
+    _In_ DWORD dwFlags)
+{
+    UNREFERENCED_PARAMETER(pwzFile);
+    UNREFERENCED_PARAMETER(regFileType);
+    UNREFERENCED_PARAMETER(dwFlags);
+    return S_OK;
+}
+
+HRESULT
+WINAPI
+WerUnregisterFile(
+    _In_ PCWSTR pwzFilePath)
+{
+    UNREFERENCED_PARAMETER(pwzFilePath);
+    return S_OK;
+}
+
+/*
  * RaiseFailFastException: terminate at once, without running exception
  * handlers (used by applications on fatal internal errors).
  */

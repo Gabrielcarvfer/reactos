@@ -620,3 +620,70 @@ GetCurrentPackageId(UINT32 *BufferLength,
     STUB;
     return APPMODEL_ERROR_NO_PACKAGE;
 }
+
+/*
+ * The other package questions: no ReactOS process runs from an app package,
+ * which is what Windows answers for a desktop program.
+ */
+LONG
+WINAPI
+GetCurrentPackageFullName(UINT32 *PackageFullNameLength,
+                          PWSTR PackageFullName)
+{
+    if (!PackageFullNameLength)
+        return ERROR_INVALID_PARAMETER;
+    return APPMODEL_ERROR_NO_PACKAGE;
+}
+
+LONG
+WINAPI
+GetCurrentPackageFamilyName(UINT32 *PackageFamilyNameLength,
+                            PWSTR PackageFamilyName)
+{
+    if (!PackageFamilyNameLength)
+        return ERROR_INVALID_PARAMETER;
+    return APPMODEL_ERROR_NO_PACKAGE;
+}
+
+LONG
+WINAPI
+GetCurrentApplicationUserModelId(UINT32 *ApplicationUserModelIdLength,
+                                 PWSTR ApplicationUserModelId)
+{
+    if (!ApplicationUserModelIdLength)
+        return ERROR_INVALID_PARAMETER;
+    return APPMODEL_ERROR_NO_APPLICATION;
+}
+
+LONG
+WINAPI
+GetPackageFullName(HANDLE hProcess,
+                   UINT32 *PackageFullNameLength,
+                   PWSTR PackageFullName)
+{
+    if (!PackageFullNameLength)
+        return ERROR_INVALID_PARAMETER;
+    return APPMODEL_ERROR_NO_PACKAGE;
+}
+
+LONG
+WINAPI
+GetPackageFamilyName(HANDLE hProcess,
+                     UINT32 *PackageFamilyNameLength,
+                     PWSTR PackageFamilyName)
+{
+    if (!PackageFamilyNameLength)
+        return ERROR_INVALID_PARAMETER;
+    return APPMODEL_ERROR_NO_PACKAGE;
+}
+
+LONG
+WINAPI
+GetApplicationUserModelId(HANDLE hProcess,
+                          UINT32 *ApplicationUserModelIdLength,
+                          PWSTR ApplicationUserModelId)
+{
+    if (!ApplicationUserModelIdLength)
+        return ERROR_INVALID_PARAMETER;
+    return APPMODEL_ERROR_NO_APPLICATION;
+}
