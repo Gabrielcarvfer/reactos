@@ -15,3 +15,9 @@ HRESULT WINAPI MFCreateSourceReaderFromMediaSource(void *Source, void *Attribute
     if (Reader) *Reader = NULL;
     return MF_E_PLATFORM_NOT_INITIALIZED;
 }
+
+HRESULT WINAPI MFCreateSourceReaderFromURL(const WCHAR *Url, void *Attributes, void **Reader)
+{
+    if (Reader) *Reader = NULL;
+    return MF_E_PLATFORM_NOT_INITIALIZED;
+}
