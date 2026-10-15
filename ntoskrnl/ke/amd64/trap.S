@@ -613,9 +613,12 @@ PUBLIC KiApcInterrupt
     /* Enable interrupts  */
     sti
 
-    /* Call the worker routine */
-    mov cl, [rbp + KTRAP_FRAME_SegCs] // ProcessorMode
-    and cl, 1
+    /* Call the worker routine, for the kernel APCs only: a user APC needs
+       the non-volatile registers in the context it saves (they are not in
+       the trap frame), so it is delivered on the way out to user mode, by
+       KiInitiateUserApc, which saves them. (With none, NtContinue at the end
+       of the APC put garbage in rbx, rsi, rdi and r12-r15.) */
+    xor ecx, ecx                      // KernelMode
     mov rdx, 0                        // ExceptionFrame
     mov r8, rbp                       // TrapFrame
     call KiDeliverApc
@@ -628,7 +631,7 @@ PUBLIC KiApcInterrupt
     mov cr8, rax
 
     /* Return */
-    ExitTrap (TF_SAVE_ALL or TF_IRQL)
+    ExitTrap (TF_SAVE_ALL or TF_IRQL or TF_CHECKUSERAPC)
 .ENDP
 
 /*
@@ -833,6 +836,14 @@ PUBLIC KiSystemCallEntry64
     /* Store user stack pointer in the trap frame */
     mov rax, gs:[PcUserRsp]
     mov [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rsp], rax
+
+    /* The caller was 64-bit user code (syscall). The selectors must be set:
+       what is in these slots otherwise is left from an earlier trap, e.g. the
+       32-bit CS of an interrupt in WoW64 code, and a context taken from this
+       trap frame (for a user APC, GetThreadContext) would then resume 64-bit
+       code in 32-bit mode */
+    mov word ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_SegCs], (KGDT64_R3_CODE or RPL_MASK)
+    mov word ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_SegSs], (KGDT64_R3_DATA or RPL_MASK)
 
     /* Set sane segments */
     mov ax, (KGDT64_R3_DATA or RPL_MASK)
