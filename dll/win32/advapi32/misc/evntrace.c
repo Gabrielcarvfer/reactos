@@ -41,3 +41,11 @@ ProcessTrace(IN PTRACEHANDLE HandleArray,
     return ERROR_NOACCESS;
 }
 
+
+/* OpenTrace opens none (see above): no handle can be closed */
+ULONG
+WINAPI
+CloseTrace(IN TRACEHANDLE TraceHandle)
+{
+    return ERROR_INVALID_HANDLE;
+}
