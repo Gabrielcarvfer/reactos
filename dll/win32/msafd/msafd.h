@@ -420,6 +420,17 @@ WSPConnectEx(
 
 BOOL
 WSPAPI
+WSPTransmitFile(
+    IN SOCKET hSocket,
+    IN HANDLE hFile,
+    IN DWORD nNumberOfBytesToWrite,
+    IN DWORD nNumberOfBytesPerSend,
+    IN LPOVERLAPPED lpOverlapped,
+    IN LPTRANSMIT_FILE_BUFFERS lpTransmitBuffers,
+    IN DWORD dwFlags);
+
+BOOL
+WSPAPI
 WSPDisconnectEx(
     IN SOCKET hSocket,
     IN LPOVERLAPPED lpOverlapped,

@@ -1069,4 +1069,110 @@ WSPSendDisconnect(IN  SOCKET s,
     return 0;
 }
 
+
+/* Send one buffer completely, with blocking sends */
+static
+BOOL
+TransmitBuffer(SOCKET hSocket, PVOID Buffer, DWORD Length)
+{
+    while (Length)
+    {
+        WSABUF WsaBuf;
+        DWORD Sent = 0;
+        INT Errno;
+
+        WsaBuf.buf = Buffer;
+        WsaBuf.len = Length;
+        if (WSPSend(hSocket, &WsaBuf, 1, &Sent, 0, NULL, NULL, NULL, &Errno) == SOCKET_ERROR)
+        {
+            WSASetLastError(Errno);
+            return FALSE;
+        }
+        Buffer = (PCHAR)Buffer + Sent;
+        Length -= Sent;
+    }
+    return TRUE;
+}
+
+/*
+ * TransmitFile (mswsock extension): the head buffer, the file from its
+ * current position, then the tail buffer, sent synchronously. The
+ * overlapped form is not supported.
+ */
+BOOL
+WSPAPI
+WSPTransmitFile(
+    IN SOCKET hSocket,
+    IN HANDLE hFile,
+    IN DWORD nNumberOfBytesToWrite,
+    IN DWORD nNumberOfBytesPerSend,
+    IN LPOVERLAPPED lpOverlapped,
+    IN LPTRANSMIT_FILE_BUFFERS lpTransmitBuffers,
+    IN DWORD dwFlags)
+{
+    DWORD ChunkSize = nNumberOfBytesPerSend ? nNumberOfBytesPerSend : 0x10000;
+    PCHAR Chunk;
+    BOOL Success = TRUE;
+
+    if (lpOverlapped)
+    {
+        WSASetLastError(WSAEOPNOTSUPP);
+        return FALSE;
+    }
+
+    if (lpTransmitBuffers && lpTransmitBuffers->Head &&
+        !TransmitBuffer(hSocket, lpTransmitBuffers->Head, lpTransmitBuffers->HeadLength))
+    {
+        return FALSE;
+    }
+
+    if (hFile)
+    {
+        Chunk = HeapAlloc(GlobalHeap, 0, ChunkSize);
+        if (!Chunk)
+        {
+            WSASetLastError(WSAENOBUFS);
+            return FALSE;
+        }
+        while (Success)
+        {
+            DWORD ToRead = ChunkSize, Read = 0;
+
+            if (nNumberOfBytesToWrite && nNumberOfBytesToWrite < ToRead)
+                ToRead = nNumberOfBytesToWrite;
+            if (!ReadFile(hFile, Chunk, ToRead, &Read, NULL))
+            {
+                WSASetLastError(GetLastError());
+                Success = FALSE;
+                break;
+            }
+            if (!Read)
+                break;
+            Success = TransmitBuffer(hSocket, Chunk, Read);
+            if (nNumberOfBytesToWrite)
+            {
+                nNumberOfBytesToWrite -= Read;
+                if (!nNumberOfBytesToWrite)
+                    break;
+            }
+        }
+        HeapFree(GlobalHeap, 0, Chunk);
+        if (!Success)
+            return FALSE;
+    }
+
+    if (lpTransmitBuffers && lpTransmitBuffers->Tail &&
+        !TransmitBuffer(hSocket, lpTransmitBuffers->Tail, lpTransmitBuffers->TailLength))
+    {
+        return FALSE;
+    }
+
+    if (dwFlags & (TF_DISCONNECT | TF_REUSE_SOCKET))
+    {
+        INT Errno;
+        WSPShutdown(hSocket, SD_SEND, &Errno);
+    }
+    return TRUE;
+}
+
 /* EOF */
