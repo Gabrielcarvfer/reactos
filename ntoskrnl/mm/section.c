@@ -2004,9 +2004,12 @@ MmAccessFaultSectionView(PMMSUPPORT AddressSpace,
             NewProtect |= PAGE_EXECUTE_READWRITE;
         else
             NewProtect |= PAGE_READWRITE;
+        /* Only this page: from its start (the fault can be in its middle,
+         * and a page from there reaches into the next one, which then lost
+         * its execute access; Chromium's sandbox patches ntdll this way) */
         MmAlterRegion(AddressSpace, (PVOID)MA_GetStartingAddress(MemoryArea),
                 &MemoryArea->SectionData.RegionListHead,
-                Address, PAGE_SIZE, Region->Type, NewProtect,
+                MM_ROUND_DOWN(Address, PAGE_SIZE), PAGE_SIZE, Region->Type, NewProtect,
                 MmAlterViewAttributes);
     }
 
