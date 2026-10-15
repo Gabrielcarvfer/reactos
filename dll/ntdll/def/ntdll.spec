@@ -633,6 +633,7 @@
 @ stdcall RtlAddAuditAccessObjectAce(ptr long long long ptr ptr ptr long long)
 @ stdcall -stub RtlAddCompoundAce(ptr long long long ptr ptr)
 @ stdcall -arch=x86_64 RtlAddFunctionTable(ptr long long)
+@ stdcall -arch=x86_64 -version=0x602+ RtlAddGrowableFunctionTable(ptr ptr long long ptr ptr)
 @ stdcall -stub -version=0x600+ RtlAddMandatoryAce(ptr long long long long ptr) ; not present in Win11
 @ stdcall RtlAddRefActivationContext(ptr)
 @ stdcall RtlAddRefMemoryStream(ptr)
@@ -765,6 +766,7 @@
 @ stdcall RtlDeleteElementGenericTable(ptr ptr)
 @ stdcall RtlDeleteElementGenericTableAvl(ptr ptr)
 @ cdecl -arch=x86_64 RtlDeleteFunctionTable(ptr)
+@ stdcall -arch=x86_64 -version=0x602+ RtlDeleteGrowableFunctionTable(ptr)
 @ stdcall RtlDeleteNoSplay(ptr ptr)
 @ stdcall RtlDeleteRegistryValue(long ptr ptr)
 @ stdcall RtlDeleteResource(ptr)
@@ -869,6 +871,7 @@
 @ stdcall -stub -version=0x600+ RtlFreeUserStack(long)
 @ stdcall -version=0x502 RtlFreeUserThreadStack(ptr ptr)
 @ stdcall RtlGUIDFromString(ptr ptr)
+@ stdcall -arch=x86_64 -version=0x602+ RtlGrowFunctionTable(ptr long)
 @ stdcall RtlGenerate8dot3Name(ptr ptr long ptr)
 @ stdcall RtlGetAce(ptr long ptr)
 @ stdcall RtlGetActiveActivationContext(ptr)

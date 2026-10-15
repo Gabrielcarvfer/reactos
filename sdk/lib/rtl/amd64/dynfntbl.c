@@ -270,6 +270,72 @@ RtlDeleteFunctionTable(
     return removed;
 }
 
+/*
+ * Growable function tables (Windows 8): for code generated over time in one
+ * address range (JIT compilers: Firefox's JavaScript engine). The caller owns
+ * the array, sorted by address, and appends entries to it; the range is known
+ * from the start.
+ */
+DWORD
+NTAPI
+RtlAddGrowableFunctionTable(
+    _Out_ PVOID *DynamicTable,
+    _In_reads_(MaximumEntryCount) PRUNTIME_FUNCTION FunctionTable,
+    _In_ DWORD EntryCount,
+    _In_ DWORD MaximumEntryCount,
+    _In_ ULONG_PTR RangeBase,
+    _In_ ULONG_PTR RangeEnd)
+{
+    PDYNAMIC_FUNCTION_TABLE dynamicTable;
+
+    if (!DynamicTable || EntryCount > MaximumEntryCount || RangeEnd <= RangeBase)
+        return STATUS_INVALID_PARAMETER;
+
+    dynamicTable = RtlpAllocateMemory(sizeof(*dynamicTable), TAG_RTLDYNFNTBL);
+    if (dynamicTable == NULL)
+        return STATUS_NO_MEMORY;
+
+    dynamicTable->FunctionTable = FunctionTable;
+    dynamicTable->EntryCount = EntryCount;
+    dynamicTable->BaseAddress = RangeBase;
+    dynamicTable->MinimumAddress = RangeBase;
+    dynamicTable->MaximumAddress = RangeEnd;
+    dynamicTable->Callback = NULL;
+    dynamicTable->Context = NULL;
+    dynamicTable->Type = RF_SORTED;
+
+    RtlpInsertDynamicFunctionTable(dynamicTable);
+    *DynamicTable = dynamicTable;
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+RtlGrowFunctionTable(
+    _Inout_ PVOID DynamicTable,
+    _In_ DWORD NewEntryCount)
+{
+    PDYNAMIC_FUNCTION_TABLE dynamicTable = DynamicTable;
+
+    AcquireDynamicFunctionTableLockExclusive();
+    dynamicTable->EntryCount = NewEntryCount;
+    ReleaseDynamicFunctionTableLockExclusive();
+}
+
+VOID
+NTAPI
+RtlDeleteGrowableFunctionTable(
+    _In_ PVOID DynamicTable)
+{
+    PDYNAMIC_FUNCTION_TABLE dynamicTable = DynamicTable;
+
+    AcquireDynamicFunctionTableLockExclusive();
+    RemoveEntryList(&dynamicTable->ListEntry);
+    ReleaseDynamicFunctionTableLockExclusive();
+
+    RtlpFreeMemory(dynamicTable, TAG_RTLDYNFNTBL);
+}
+
 PRUNTIME_FUNCTION
 NTAPI
 RtlpLookupDynamicFunctionEntry(
