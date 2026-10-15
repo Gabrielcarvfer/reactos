@@ -88,6 +88,7 @@
 @ stdcall ClearCommError(long ptr ptr)
 @ stdcall CloseConsoleHandle(long)
 @ stdcall CloseHandle(long)
+@ stdcall -version=0x602+ ClosePackageInfo(ptr)
 @ stdcall -stub -version=0x600+ ClosePrivateNamespace(ptr long)
 @ stdcall CloseProfileUserMapping()
 @ stdcall -version=0x600+ CloseThreadpool(ptr) ntdll.TpReleasePool
@@ -464,6 +465,7 @@
 @ stdcall -version=0x602+ GetCurrentPackageFamilyName(ptr ptr)
 @ stdcall -version=0x602+ GetCurrentPackageFullName(ptr ptr)
 @ stdcall -version=0x602+ GetCurrentPackageId(ptr ptr)
+@ stdcall -version=0x602+ GetCurrentPackageInfo(long ptr ptr ptr)
 @ stdcall -norelay GetCurrentProcess()
 @ stdcall -norelay GetCurrentProcessId()
 @ stdcall GetCurrentProcessorNumber() ntdll.RtlGetCurrentProcessorNumber
@@ -538,9 +540,15 @@
 @ stdcall GetLocaleInfoA(long long ptr long)
 @ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long)
 @ stdcall GetLocaleInfoW(long long ptr long)
+@ stdcall -version=0x602+ GetOverlappedResultEx(ptr ptr ptr long long)
 @ stdcall -version=0x602+ GetPackageFamilyName(ptr ptr ptr)
 @ stdcall -version=0x602+ GetPackageFullName(ptr ptr ptr)
+@ stdcall -version=0x602+ GetPackageInfo(ptr long ptr ptr ptr)
+@ stdcall -version=0x602+ GetPackagePathByFullName(wstr ptr ptr)
 @ stdcall -version=0x602+ GetPackagesByPackageFamily(wstr ptr ptr ptr ptr)
+@ stdcall -version=0x602+ GetProcessInformation(ptr long ptr long)
+@ stdcall -version=0x602+ GetProcessMitigationPolicy(ptr long ptr long)
+@ stdcall -version=0xA00+ GetSystemCpuSetInformation(ptr long ptr ptr long)
 @ stdcall -version=0x602+ GetThreadInformation(ptr long ptr long)
 @ stdcall -version=0x602+ IsCharAlphaA(long) user32.IsCharAlphaA
 @ stdcall -version=0x602+ IsCharAlphaNumericA(long) user32.IsCharAlphaNumericA
@@ -819,6 +827,7 @@
 @ stdcall IsValidLocale(long long)
 @ stdcall -version=0x501-0x502 IsValidUILanguage(long)
 @ stdcall IsWow64Process(ptr ptr)
+@ stdcall -version=0xA00+ IsWow64Process2(ptr ptr ptr)
 @ stdcall -version=0x601+ K32EmptyWorkingSet(long) EmptyWorkingSet
 @ stdcall -version=0x601+ K32EnumDeviceDrivers(ptr long ptr) EnumDeviceDrivers
 @ stdcall -version=0x601+ K32EnumPageFilesA(ptr ptr) EnumPageFilesA
@@ -937,6 +946,7 @@
 @ stdcall OpenJobObjectW(long long wstr)
 @ stdcall OpenMutexA(long long str)
 @ stdcall OpenMutexW(long long wstr)
+@ stdcall -version=0x602+ OpenPackageInfoByFullName(wstr long ptr)
 @ stub -version=0x600+ OpenPrivateNamespaceA
 @ stub -version=0x600+ OpenPrivateNamespaceW
 @ stdcall OpenProcess(long long long)
@@ -958,6 +968,7 @@
 @ stdcall -version=0x601+ PowerClearRequest(ptr long)
 @ stdcall -version=0x601+ PowerCreateRequest(ptr)
 @ stdcall -version=0x601+ PowerSetRequest(ptr long)
+@ stdcall -version=0x602+ PrefetchVirtualMemory(ptr long ptr long)
 @ stdcall PrepareTape(ptr long long)
 @ stdcall PrivCopyFileExW(wstr wstr ptr ptr long long)
 @ stdcall PrivMoveFileIdentityW(long long long)
@@ -1174,6 +1185,8 @@
 @ stdcall SetProcessAffinityMask(long long)
 @ stub -version=0x600+ SetProcessAffinityUpdateMode
 @ stdcall SetProcessDEPPolicy(long)
+@ stdcall -version=0x602+ SetProcessInformation(ptr long ptr long)
+@ stdcall -version=0x602+ SetProcessMitigationPolicy(long ptr long)
 @ stdcall -version=0x601+ SetProcessPreferredUILanguages(long ptr ptr)
 @ stdcall SetProcessPriorityBoost(long long)
 @ stdcall SetProcessShutdownParameters(long long)
@@ -1254,6 +1267,7 @@
 @ stdcall TryEnterCriticalSection(ptr) ntdll.RtlTryEnterCriticalSection
 @ stdcall -version=0x600+ TrySubmitThreadpoolCallback(ptr ptr ptr)
 @ stdcall TzSpecificLocalTimeToSystemTime(ptr ptr ptr)
+@ stdcall -version=0x602+ UnmapViewOfFileEx(ptr long)
 @ stdcall UTRegister(long str str str ptr ptr ptr)
 @ stdcall UTUnRegister(long)
 @ stdcall UnhandledExceptionFilter(ptr)
