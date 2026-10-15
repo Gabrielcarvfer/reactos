@@ -27,6 +27,7 @@ REDIRECT_APISETS = {
     # kernelbase has the registry, security, event tracing and shlwapi
     # functions on Windows; they are only in these modules of ours
     'api-ms-win-core-registry-': 'advapi32.dll',
+    'api-ms-win-core-localregistry-': 'advapi32.dll',
     'api-ms-win-core-registryuserspecific-': 'advapi32.dll',
     'api-ms-win-security-base-': 'advapi32.dll',
     'api-ms-win-eventing-': 'advapi32.dll',
