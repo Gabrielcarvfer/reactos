@@ -171,10 +171,32 @@ INT WINAPI wglDescribePixelFormat(HDC hdc, INT format, UINT size, PIXELFORMATDES
     return ret;
 }
 
+static INT choose_pixel_format(HDC hdc, const PIXELFORMATDESCRIPTOR* ppfd, int count);
+
 INT WINAPI wglChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR* ppfd)
 {
+    struct wgl_dc_data* dc_data = get_dc_data(hdc);
+    int count, ret;
+
+    count = wglDescribePixelFormat( hdc, 0, 0, NULL );
+    if (!count) return 0;
+
+    /* Like Windows, take a format of the display driver's ICD when one
+       matches, and the generic (software) formats only otherwise. With Mesa
+       installed, wined3d's format request matched one of our OpenGL 1.1
+       software formats better than Mesa's, and Direct3D found no OpenGL 2.0 */
+    if (dc_data && dc_data->nb_icd_formats && dc_data->nb_icd_formats < count)
+    {
+        ret = choose_pixel_format( hdc, ppfd, dc_data->nb_icd_formats );
+        if (ret) return ret;
+    }
+    return choose_pixel_format( hdc, ppfd, count );
+}
+
+static INT choose_pixel_format(HDC hdc, const PIXELFORMATDESCRIPTOR* ppfd, int count)
+{
     PIXELFORMATDESCRIPTOR format, best;
-    int i, count, best_format;
+    int i, best_format;
     int bestDBuffer = -1, bestStereo = -1;
 
     TRACE_(wgl)( "%p %p: size %u version %u flags %u type %u color %u %u,%u,%u,%u "
@@ -182,9 +204,6 @@ INT WINAPI wglChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR* ppfd)
                  hdc, ppfd, ppfd->nSize, ppfd->nVersion, ppfd->dwFlags, ppfd->iPixelType,
                  ppfd->cColorBits, ppfd->cRedBits, ppfd->cGreenBits, ppfd->cBlueBits, ppfd->cAlphaBits,
                  ppfd->cAccumBits, ppfd->cDepthBits, ppfd->cStencilBits, ppfd->cAuxBuffers );
-
-    count = wglDescribePixelFormat( hdc, 0, 0, NULL );
-    if (!count) return 0;
 
     best_format = 0;
     best.dwFlags = PFD_GENERIC_FORMAT;
