@@ -187,3 +187,4 @@
 @ stdcall getnameinfo(ptr long ptr long ptr long long)
 @ stdcall -version=0x600+ inet_ntop(long ptr ptr long)
 @ stdcall -version=0x600+ inet_pton(long str ptr)
+@ stdcall -version=0x602+ GetHostNameW(ptr long)

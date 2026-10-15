@@ -425,6 +425,38 @@ gethostname(OUT char FAR * name,
 
 /*
  * @implemented
+ *
+ * gethostname, as a wide string (Windows 8)
+ */
+INT
+WSAAPI
+GetHostNameW(OUT PWSTR name,
+             IN INT namelen)
+{
+    CHAR Name[MAX_HOSTNAME_LEN + 1] = "";
+
+    if (!name || namelen < 1)
+    {
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+    if (gethostname(Name, sizeof(Name)) == SOCKET_ERROR)
+        return SOCKET_ERROR;
+    if ((INT)strlen(Name) >= namelen)
+    {
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+    if (!MultiByteToWideChar(CP_ACP, 0, Name, -1, name, namelen))
+    {
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+    return ERROR_SUCCESS;
+}
+
+/*
+ * @implemented
  */
 PSERVENT
 WSAAPI
