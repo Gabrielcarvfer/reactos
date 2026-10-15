@@ -457,19 +457,40 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
         FreeString = TRUE;
     }
 
-    /* LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: also next to the DLL, which is what
-       LOAD_WITH_ALTERED_SEARCH_PATH does (the other LOAD_LIBRARY_SEARCH_*
-       flags only narrow the search, which stays the usual one) */
+    /* Compute the load path */
     if ((dwFlags & 0x00000100 /* LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR */) &&
+        !(dwFlags & LOAD_WITH_ALTERED_SEARCH_PATH) &&
         RtlDetermineDosPathNameType_U(DllName.Buffer) != RtlPathTypeRelative)
     {
-        dwFlags |= LOAD_WITH_ALTERED_SEARCH_PATH;
-    }
+        /* LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: the DLL's folder first, then the
+           usual search, which has the program's folder (OBS loads its plugins
+           this way, and they use DLLs next to obs64.exe). LOAD_WITH_ALTERED_SEARCH_PATH
+           would put the DLL's folder in place of the program's. (The other
+           LOAD_LIBRARY_SEARCH_* flags only narrow the search) */
+        PWSTR DllDirPath = BaseComputeProcessDllPath(DllName.Buffer, NULL);
+        PWSTR UsualPath = BaseComputeProcessDllPath(NULL, NULL);
 
-    /* Compute the load path */
-    SearchPath = BaseComputeProcessDllPath((dwFlags & LOAD_WITH_ALTERED_SEARCH_PATH) ?
-                                           DllName.Buffer : NULL,
-                                           NULL);
+        SearchPath = NULL;
+        if (DllDirPath && UsualPath)
+        {
+            SIZE_T Length = (wcslen(DllDirPath) + 1 + wcslen(UsualPath) + 1) * sizeof(WCHAR);
+            SearchPath = RtlAllocateHeap(RtlGetProcessHeap(), 0, Length);
+            if (SearchPath)
+            {
+                wcscpy(SearchPath, DllDirPath);
+                wcscat(SearchPath, L";");
+                wcscat(SearchPath, UsualPath);
+            }
+        }
+        if (DllDirPath) RtlFreeHeap(RtlGetProcessHeap(), 0, DllDirPath);
+        if (UsualPath) RtlFreeHeap(RtlGetProcessHeap(), 0, UsualPath);
+    }
+    else
+    {
+        SearchPath = BaseComputeProcessDllPath((dwFlags & LOAD_WITH_ALTERED_SEARCH_PATH) ?
+                                               DllName.Buffer : NULL,
+                                               NULL);
+    }
     if (!SearchPath)
     {
         /* Getting DLL path failed, so set last error, free mem and return */
