@@ -29,6 +29,9 @@
 #include "precomp.h"
 
 #include "lmerr.h"
+#include <stdlib.h>
+#include <objbase.h>
+#include "schrpc_s.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(schedsvc);
 
@@ -56,6 +59,35 @@ RpcThreadRoutine(
         return 0;
     }
 
+    /* Task Scheduler 2.0 (taskschd.dll), on a local endpoint that its client
+       finds through the endpoint mapper. Its tasks are files in
+       system32\Tasks, its root folder, which must exist */
+    {
+        WCHAR TasksDir[MAX_PATH];
+        UINT Length = GetSystemDirectoryW(TasksDir, MAX_PATH - 6);
+        if (Length && Length < MAX_PATH - 6)
+        {
+            wcscat(TasksDir, L"\\tasks");
+            CreateDirectoryW(TasksDir, NULL);
+        }
+    }
+    Status = RpcServerRegisterIf(ITaskSchedulerService_v1_0_s_ifspec, NULL, NULL);
+    if (Status == RPC_S_OK)
+        Status = RpcServerUseProtseqEpW(L"ncalrpc", RPC_C_PROTSEQ_MAX_REQS_DEFAULT, L"atsvc", NULL);
+    if (Status == RPC_S_OK)
+    {
+        RPC_BINDING_VECTOR *Bindings;
+
+        Status = RpcServerInqBindings(&Bindings);
+        if (Status == RPC_S_OK)
+        {
+            Status = RpcEpRegisterW(ITaskSchedulerService_v1_0_s_ifspec, Bindings, NULL, NULL);
+            RpcBindingVectorFree(&Bindings);
+        }
+    }
+    if (Status != RPC_S_OK)
+        ERR("Task Scheduler 2.0 interface not available (Status %lx)\n", Status);
+
     Status = RpcServerListen(1, RPC_C_LISTEN_MAX_CALLS_DEFAULT, FALSE);
     if (Status != RPC_S_OK)
     {
@@ -66,15 +98,23 @@ RpcThreadRoutine(
 }
 
 
+/* The C runtime heap: the Task Scheduler 2.0 server (schrpc.c, from Wine)
+ * returns buffers from malloc */
 void __RPC_FAR * __RPC_USER midl_user_allocate(SIZE_T len)
 {
-    return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, len);
+    return calloc(1, len);
 }
 
 
 void __RPC_USER midl_user_free(void __RPC_FAR * ptr)
 {
-    HeapFree(GetProcessHeap(), 0, ptr);
+    free(ptr);
+}
+
+
+/* Called when a task is registered: the service already starts with the system */
+void schedsvc_auto_start(void)
+{
 }
 
 
