@@ -76,6 +76,10 @@ struct ICD_Data* IntGetIcdData(HDC hdc)
      * It checks HKCU\Software\ReactOS\OpenGL for a custom ICD and will always load it
      * no matter what driver the DC is associated with. It can also force using the
      * built-in Software Implementation*/
+    /* Under the lock: another thread must not see the state before it is
+       known (it would take the display driver, which may have no ICD, and
+       its window would get the software implementation) */
+    EnterCriticalSection(&icdload_cs);
     if(CustomDriverState == OGL_CD_NOT_QUERIED)
     {
         /* Only do this once so there's not any significant performance penalty */
@@ -98,7 +102,7 @@ struct ICD_Data* IntGetIcdData(HDC hdc)
             /* Always announce the fact that we're forcing ROSSWI */
             ERR("Forcing ReactOS Software Implementation\n");
             CustomDriverState = OGL_CD_ROSSWI;
-            return NULL;
+            goto custom_end;
         }
 
         ret = RegOpenKeyExW(HKEY_LOCAL_MACHINE, OpenGLDrivers_Key, 0, KEY_READ, &OglKey);
@@ -126,6 +130,7 @@ custom_end:
             RegCloseKey(OglKey);
         RegCloseKey(CustomKey);
     }
+    LeaveCriticalSection(&icdload_cs);
 
     /* If there's a custom ICD or ROSSWI was requested use it, otherwise proceed as usual */
     if(CustomDriverState == OGL_CD_CUSTOM_ICD)
