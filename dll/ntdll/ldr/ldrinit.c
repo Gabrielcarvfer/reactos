@@ -1956,6 +1956,48 @@ LdrpDisableProcessCompatGuidDetection(VOID)
 }
 
 
+/* Windows versions a program can be shown (LdrpApplyVersionLayer) */
+static const struct
+{
+    PCWSTR Layer;
+    USHORT Major, Minor, Build, ServicePack;
+    PCWSTR CSDVersion;
+} LdrpVersionLayers[] =
+{
+    { L"VISTARTM", 6, 0, 6000, 0x000, L"" },
+    { L"VISTASP1", 6, 0, 6001, 0x100, L"Service Pack 1" },
+    { L"VISTASP2", 6, 0, 6002, 0x200, L"Service Pack 2" },
+    { L"WIN7RTM",  6, 1, 7600, 0x000, L"" },
+    { L"WIN7SP1",  6, 1, 7601, 0x100, L"Service Pack 1" },
+    { L"WIN8RTM",  6, 2, 9200, 0x000, L"" },
+    { L"WIN81RTM", 6, 3, 9600, 0x000, L"" },
+    /* (Not compatibility layers on Windows: the versions themselves) */
+    { L"WIN10",   10, 0, 19045, 0x000, L"" },
+    { L"WIN11",   10, 0, 22631, 0x000, L"" },
+};
+#define LDRP_VERSION_LAYER_WIN10 7
+
+/* A version was asked for (Image File Execution Options or ROS_COMPAT_WINVER) */
+static BOOLEAN LdrpVersionLayerApplied;
+
+/* Report that Windows version through the PEB, which every version API
+ * (RtlGetVersion, GetVersionEx, VerifyVersionInfo) reads */
+static
+VOID
+LdrpReportVersionLayer(ULONG i, PCSTR Why)
+{
+    PPEB Peb = NtCurrentPeb();
+
+    Peb->OSMajorVersion = LdrpVersionLayers[i].Major;
+    Peb->OSMinorVersion = LdrpVersionLayers[i].Minor;
+    Peb->OSBuildNumber = LdrpVersionLayers[i].Build;
+    Peb->OSCSDVersion = LdrpVersionLayers[i].ServicePack;
+    RtlInitUnicodeString(&Peb->CSDVersion, LdrpVersionLayers[i].CSDVersion);
+    DPRINT1("LdrpApplyVersionLayer: %wZ reports Windows %u.%u.%u (%S, %s)\n",
+            &Peb->ProcessParameters->ImagePathName, LdrpVersionLayers[i].Major,
+            LdrpVersionLayers[i].Minor, LdrpVersionLayers[i].Build, LdrpVersionLayers[i].Layer, Why);
+}
+
 VOID
 NTAPI
 LdrpInitializeProcessCompat(PVOID pProcessActctx, PVOID* pOldShimData)
@@ -2023,6 +2065,24 @@ LdrpInitializeProcessCompat(PVOID pProcessActctx, PVOID* pOldShimData)
     /* No Compatibility elements present, bail out */
     if (ContextCompatInfo->ElementCount == 0)
         return;
+
+    /* Compatibility appraisal: a program whose manifest says it supports
+       Windows 10 is shown Windows 10, as Windows does (ReactOS otherwise
+       reports build 3790, which installers like VS Code's refuse), unless a
+       version was asked for */
+    if (!LdrpVersionLayerApplied)
+    {
+        for (n = 0; n < ContextCompatInfo->ElementCount; ++n)
+        {
+            if (ContextCompatInfo->Elements[n].Type == ACTCTX_COMPATIBILITY_ELEMENT_TYPE_OS &&
+                RtlCompareMemory(&ContextCompatInfo->Elements[n].Id, &COMPAT_GUID_WIN10, sizeof(GUID)) == sizeof(GUID))
+            {
+                LdrpReportVersionLayer(LDRP_VERSION_LAYER_WIN10, "manifest");
+                LdrpVersionLayerApplied = TRUE;
+                break;
+            }
+        }
+    }
 
     /* With a version layer, ReactOS reports a newer Windows: do as that
        Windows does, and take the newest version of the manifest that is not
@@ -2176,33 +2236,18 @@ LdrpInitializeDotLocalSupport(PRTL_USER_PROCESS_PARAMETERS ProcessParameters)
  * which every version API (RtlGetVersion, GetVersionEx, VerifyVersionInfo)
  * reads. Lets programs that refuse to run before a given Windows version, like
  * Chromium, start when asked to.
+ * Without one, a compatibility appraisal picks it: Windows 10 for a program
+ * built for it (image header here, manifest in LdrpInitializeProcessCompat).
  */
 static
 VOID
 LdrpApplyVersionLayer(VOID)
 {
-    static const struct
-    {
-        PCWSTR Layer;
-        USHORT Major, Minor, Build, ServicePack;
-        PCWSTR CSDVersion;
-    } Layers[] =
-    {
-        { L"VISTARTM", 6, 0, 6000, 0x000, L"" },
-        { L"VISTASP1", 6, 0, 6001, 0x100, L"Service Pack 1" },
-        { L"VISTASP2", 6, 0, 6002, 0x200, L"Service Pack 2" },
-        { L"WIN7RTM",  6, 1, 7600, 0x000, L"" },
-        { L"WIN7SP1",  6, 1, 7601, 0x100, L"Service Pack 1" },
-        { L"WIN8RTM",  6, 2, 9200, 0x000, L"" },
-        { L"WIN81RTM", 6, 3, 9600, 0x000, L"" },
-        /* (Not compatibility layers on Windows: the versions themselves) */
-        { L"WIN10",   10, 0, 19045, 0x000, L"" },
-        { L"WIN11",   10, 0, 22631, 0x000, L"" },
-    };
     static const UNICODE_STRING VarName = RTL_CONSTANT_STRING(L"ROS_COMPAT_WINVER");
     PPEB Peb = NtCurrentPeb();
     WCHAR Buffer[128];
     UNICODE_STRING Value;
+    PIMAGE_NT_HEADERS NtHeaders;
     ULONG i;
 
     /* Pass the environment explicitly: with NULL the PEB lock would be taken,
@@ -2218,7 +2263,7 @@ LdrpApplyVersionLayer(VOID)
     {
         RtlInitEmptyUnicodeString(&Value, Buffer, sizeof(Buffer) - sizeof(WCHAR));
         if (!NT_SUCCESS(RtlQueryEnvironmentVariable_U(Peb->ProcessParameters->Environment, &VarName, &Value)))
-            return;
+            Value.Length = 0;
         Buffer[Value.Length / sizeof(WCHAR)] = UNICODE_NULL;
     }
 
@@ -2229,26 +2274,30 @@ LdrpApplyVersionLayer(VOID)
             Buffer[i] -= L'a' - L'A';
     }
 
-    for (i = 0; i < RTL_NUMBER_OF(Layers); i++)
+    for (i = 0; i < RTL_NUMBER_OF(LdrpVersionLayers); i++)
     {
         /* The variable is a space separated list of names */
-        PCWSTR Found = wcsstr(Buffer, Layers[i].Layer);
-        SIZE_T Len = wcslen(Layers[i].Layer);
+        PCWSTR Found = wcsstr(Buffer, LdrpVersionLayers[i].Layer);
+        SIZE_T Len = wcslen(LdrpVersionLayers[i].Layer);
         if (!Found || (Found != Buffer && Found[-1] != L' ') ||
             (Found[Len] != UNICODE_NULL && Found[Len] != L' '))
         {
             continue;
         }
 
-        Peb->OSMajorVersion = Layers[i].Major;
-        Peb->OSMinorVersion = Layers[i].Minor;
-        Peb->OSBuildNumber = Layers[i].Build;
-        Peb->OSCSDVersion = Layers[i].ServicePack;
-        RtlInitUnicodeString(&Peb->CSDVersion, Layers[i].CSDVersion);
-        DPRINT1("LdrpApplyVersionLayer: %wZ reports Windows %u.%u.%u (%S)\n",
-                &Peb->ProcessParameters->ImagePathName, Layers[i].Major,
-                Layers[i].Minor, Layers[i].Build, Layers[i].Layer);
+        LdrpReportVersionLayer(i, LdrpVersionLayer[0] ? "Image File Execution Options" : "ROS_COMPAT_WINVER");
+        LdrpVersionLayerApplied = TRUE;
         return;
+    }
+
+    /* Compatibility appraisal (the manifest is looked at later, in
+       LdrpInitializeProcessCompat): a program built for Windows 10 or later
+       according to its header is shown Windows 10 */
+    NtHeaders = RtlImageNtHeader(Peb->ImageBaseAddress);
+    if (NtHeaders && NtHeaders->OptionalHeader.MajorOperatingSystemVersion >= 10)
+    {
+        LdrpReportVersionLayer(LDRP_VERSION_LAYER_WIN10, "image header");
+        LdrpVersionLayerApplied = TRUE;
     }
 }
 
