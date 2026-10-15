@@ -81,3 +81,17 @@ long int lrintf(float x)
     __debugbreak();
     return 0;
 }
+
+/* FLT_ROUNDS: the current rounding mode (0 toward zero, 1 to nearest,
+   2 up, 3 down); Python reads it */
+#include <float.h>
+int __cdecl __fpe_flt_rounds(void)
+{
+    switch (_controlfp(0, 0) & _MCW_RC)
+    {
+        case _RC_CHOP: return 0;
+        case _RC_NEAR: return 1;
+        case _RC_UP: return 2;
+        default: return 3;
+    }
+}

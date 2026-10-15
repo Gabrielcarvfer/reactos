@@ -121,7 +121,7 @@
 @ cdecl __dcrt_initial_narrow_environment()
 @ cdecl __doserrno()
 @ cdecl __dstbias()
-@ cdecl -stub __fpe_flt_rounds()
+@ cdecl __fpe_flt_rounds()
 @ cdecl __fpecode()
 @ cdecl __initialize_lconv_for_unsigned_char()
 @ cdecl __intrinsic_abnormal_termination()
