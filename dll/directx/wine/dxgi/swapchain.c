@@ -240,6 +240,10 @@ static ULONG STDMETHODCALLTYPE d3d11_swapchain_Release(IDXGISwapChain4 *iface)
             IDXGIOutput_Release(swapchain->target);
         }
         IWineDXGIFactory_Release(swapchain->factory);
+#ifdef __REACTOS__
+        if (swapchain->frame_latency_event)
+            CloseHandle(swapchain->frame_latency_event);
+#endif
         wined3d_swapchain_decref(swapchain->wined3d_swapchain);
         IWineDXGIDevice_Release(device);
     }
@@ -325,6 +329,11 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
 
     if (SUCCEEDED(hr = wined3d_swapchain_present(swapchain->wined3d_swapchain, NULL, NULL, NULL, sync_interval, 0)))
         InterlockedIncrement(&swapchain->present_count);
+#ifdef __REACTOS__
+    /* The frame is on its way: the application may prepare the next one */
+    if (swapchain->frame_latency_event)
+        ReleaseSemaphore(swapchain->frame_latency_event, 1, NULL);
+#endif
     return hr;
 }
 
@@ -781,23 +790,62 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_GetSourceSize(IDXGISwapChain4 *
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetMaximumFrameLatency(IDXGISwapChain4 *iface, UINT max_latency)
 {
+#ifdef __REACTOS__
+    struct d3d11_swapchain *swapchain = d3d11_swapchain_from_IDXGISwapChain4(iface);
+
+    TRACE("iface %p, max_latency %u.\n", iface, max_latency);
+
+    if (!swapchain->frame_latency_event || !max_latency || max_latency > DXGI_MAX_SWAP_CHAIN_BUFFERS)
+        return DXGI_ERROR_INVALID_CALL;
+    /* More frames may be queued: let the application start them */
+    if (max_latency > swapchain->frame_latency)
+        ReleaseSemaphore(swapchain->frame_latency_event, max_latency - swapchain->frame_latency, NULL);
+    swapchain->frame_latency = max_latency;
+    return S_OK;
+#else
     FIXME("iface %p, max_latency %u stub!\n", iface, max_latency);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_GetMaximumFrameLatency(IDXGISwapChain4 *iface, UINT *max_latency)
 {
+#ifdef __REACTOS__
+    struct d3d11_swapchain *swapchain = d3d11_swapchain_from_IDXGISwapChain4(iface);
+
+    TRACE("iface %p, max_latency %p.\n", iface, max_latency);
+
+    if (!swapchain->frame_latency_event || !max_latency)
+        return DXGI_ERROR_INVALID_CALL;
+    *max_latency = swapchain->frame_latency;
+    return S_OK;
+#else
     FIXME("iface %p, max_latency %p stub!\n", iface, max_latency);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HANDLE STDMETHODCALLTYPE d3d11_swapchain_GetFrameLatencyWaitableObject(IDXGISwapChain4 *iface)
 {
+#ifdef __REACTOS__
+    struct d3d11_swapchain *swapchain = d3d11_swapchain_from_IDXGISwapChain4(iface);
+    HANDLE event;
+
+    TRACE("iface %p.\n", iface);
+
+    /* The application closes the handle it gets (OBS does) */
+    if (!swapchain->frame_latency_event ||
+        !DuplicateHandle(GetCurrentProcess(), swapchain->frame_latency_event, GetCurrentProcess(), &event,
+                         0, FALSE, DUPLICATE_SAME_ACCESS))
+        return NULL;
+    return event;
+#else
     FIXME("iface %p stub!\n", iface);
 
     return NULL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetMatrixTransform(IDXGISwapChain4 *iface,

@@ -183,6 +183,12 @@ struct d3d11_swapchain
     IDXGIOutput *target;
     LONG present_count;
     LONG in_set_fullscreen_state;
+#ifdef __REACTOS__
+    /* DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT: released after each
+       present, the application waits on it before the next frame */
+    HANDLE frame_latency_event;
+    UINT frame_latency;
+#endif
 };
 
 HRESULT d3d11_swapchain_init(struct d3d11_swapchain *swapchain, struct dxgi_device *device,

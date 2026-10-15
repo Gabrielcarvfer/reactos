@@ -468,6 +468,14 @@ static HRESULT STDMETHODCALLTYPE dxgi_swapchain_factory_create_swapchain(IWineDX
         return hr;
     }
 
+#ifdef __REACTOS__
+    if (desc->Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT)
+    {
+        object->frame_latency = 1;
+        object->frame_latency_event = CreateSemaphoreW(NULL, 1, DXGI_MAX_SWAP_CHAIN_BUFFERS, NULL);
+    }
+#endif
+
     TRACE("Created swapchain %p.\n", object);
 
     *swapchain = (IDXGISwapChain1 *)&object->IDXGISwapChain4_iface;

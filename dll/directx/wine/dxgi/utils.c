@@ -562,6 +562,11 @@ static unsigned int wined3d_swapchain_flags_from_dxgi(unsigned int flags)
         wined3d_flags |= WINED3D_SWAPCHAIN_GDI_COMPATIBLE;
     }
 
+#ifdef __REACTOS__
+    /* (handled by the d3d11 swap chain) */
+    flags &= ~DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+#endif
+
     if (flags)
         FIXME("Unhandled flags %#x.\n", flags);
 
