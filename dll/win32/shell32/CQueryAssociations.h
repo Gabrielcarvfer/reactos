@@ -73,13 +73,17 @@ private:
     HRESULT ReturnString(ASSOCF flags, LPWSTR out, DWORD *outlen, LPCWSTR data, DWORD datalen);
     HRESULT ReturnAndFreeString(ASSOCF flags, LPWSTR out, DWORD *outlen, LPWSTR data, DWORD datalen)
     {
+        /* Nothing found (a query can succeed without a string): no association,
+           not a copy from NULL (Wireshark crashed on it) */
+        if (!data)
+            return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
         HRESULT hr = ReturnString(flags, out, outlen, data, datalen);
         SHFree(data);
         return hr;
     }
     HRESULT ReturnAndFreeString(ASSOCF flags, LPWSTR out, DWORD *outlen, LPWSTR data)
     {
-        return ReturnAndFreeString(flags, out, outlen, data, lstrlenW(data) + 1);
+        return ReturnAndFreeString(flags, out, outlen, data, data ? lstrlenW(data) + 1 : 0);
     }
 
 public:
