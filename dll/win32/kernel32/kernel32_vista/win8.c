@@ -420,3 +420,41 @@ PssFreeSnapshot(
     RtlFreeHeap(RtlGetProcessHeap(), 0, Snapshot);
     return ERROR_SUCCESS;
 }
+
+/* THREAD POOL (Windows 8) *************************************************/
+
+/* (ntdll's thread pool, where SetThreadpoolTimer and the like go) */
+BOOL NTAPI TpIsTimerSet(PTP_TIMER Timer);
+VOID NTAPI TpSetTimer(PTP_TIMER Timer, PLARGE_INTEGER DueTime, LONG Period, LONG WindowLength);
+VOID NTAPI TpSetWait(PTP_WAIT Wait, HANDLE Handle, PLARGE_INTEGER Timeout);
+
+/* Like SetThreadpoolTimer, and tell whether a pending timer was replaced
+ * (Spotify) */
+BOOL
+WINAPI
+SetThreadpoolTimerEx(
+    _Inout_ PTP_TIMER Timer,
+    _In_opt_ PFILETIME DueTime,
+    _In_ DWORD Period,
+    _In_opt_ DWORD WindowLength)
+{
+    BOOL WasSet = TpIsTimerSet(Timer);
+
+    TpSetTimer(Timer, (PLARGE_INTEGER)DueTime, Period, WindowLength);
+    return WasSet;
+}
+
+/* Like SetThreadpoolWait. Whether a pending wait was replaced is not known
+ * here: say none was */
+BOOL
+WINAPI
+SetThreadpoolWaitEx(
+    _Inout_ PTP_WAIT Wait,
+    _In_opt_ HANDLE Handle,
+    _In_opt_ PFILETIME Timeout,
+    _Reserved_ PVOID Reserved)
+{
+    UNREFERENCED_PARAMETER(Reserved);
+    TpSetWait(Wait, Handle, (PLARGE_INTEGER)Timeout);
+    return FALSE;
+}
