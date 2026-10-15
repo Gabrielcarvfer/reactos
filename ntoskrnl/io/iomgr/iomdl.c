@@ -39,10 +39,12 @@ IoAllocateMdl(IN PVOID VirtualAddress,
     Size = ADDRESS_AND_SIZE_TO_SPAN_PAGES(VirtualAddress, Length);
     if (Size > 23)
     {
-        /* This is bigger then our fixed-size MDLs. Calculate real size */
+        /* This is bigger then our fixed-size MDLs. Calculate real size.
+           (No limit of MAXUSHORT, the range of its Size field, as before
+           Windows Vista: up to 2 GB, as since then. An unbuffered 64 MB write,
+           which Chrome's installer does, failed on 64-bit, past 32 MB.) */
         Size *= sizeof(PFN_NUMBER);
         Size += sizeof(MDL);
-        if (Size > MAXUSHORT) return NULL;
     }
     else
     {
