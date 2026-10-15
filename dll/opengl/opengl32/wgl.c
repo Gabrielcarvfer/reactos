@@ -699,10 +699,21 @@ BOOL WINAPI wglMakeCurrent(HDC hdc, HGLRC hglrc)
         if(InterlockedCompareExchange(&ctx->thread_id, thread_id, 0) != 0)
         {
             /* Already current for a thread. Maybe it's us ? */
-            release_dc_data(dc_data);
             if(ctx->thread_id != thread_id)
+            {
+                release_dc_data(dc_data);
                 SetLastError(ERROR_BUSY);
-            return (ctx->thread_id == thread_id);
+                return FALSE;
+            }
+            /* It is: nothing to do for the same DC. For another DC, the
+             * context draws to that one from now on (wined3d makes its
+             * context current on its hidden setup window, then on the swap
+             * chain's window: Direct3D drew into the hidden window) */
+            if(IntGetCurrentDC() == hdc)
+            {
+                release_dc_data(dc_data);
+                return TRUE;
+            }
         }
 
         if(old_ctx)
@@ -713,6 +724,9 @@ BOOL WINAPI wglMakeCurrent(HDC hdc, HGLRC hglrc)
             else
                 sw_ReleaseContext(old_ctx->dhglrc);
             InterlockedExchange(&old_ctx->thread_id, 0);
+            /* (the same context, made current on another DC) */
+            if(old_ctx == ctx)
+                InterlockedExchange(&ctx->thread_id, thread_id);
         }
 
         /* Call the ICD or SW implementation */
