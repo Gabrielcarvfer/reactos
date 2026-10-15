@@ -2230,22 +2230,22 @@
 @ cdecl abs(long)
 @ cdecl acos(double)
 @ cdecl -arch=!i386 acosf(float)
-@ cdecl -stub acosh(double)
-@ cdecl -stub acoshf(float)
+@ cdecl acosh(double)
+@ cdecl acoshf(float)
 @ cdecl -stub acoshl(double)
 @ cdecl asctime(ptr)
 @ cdecl asctime_s(ptr long ptr)
 @ cdecl asin(double)
 @ cdecl -arch=!i386 asinf(float)
-@ cdecl -stub asinh(double)
-@ cdecl -stub asinhf(float)
+@ cdecl asinh(double)
+@ cdecl asinhf(float)
 @ cdecl -stub asinhl(double) asinh
 @ cdecl atan(double)
 @ cdecl atan2(double double)
 @ cdecl -arch=!i386 atan2f(float float)
 @ cdecl -arch=!i386 atanf(float)
-@ cdecl -stub atanh(double)
-@ cdecl -stub atanhf(float)
+@ cdecl atanh(double)
+@ cdecl atanhf(float)
 @ cdecl -stub atanhl(double)
 @ cdecl atof(str)
 @ cdecl atoi(str)
@@ -2281,8 +2281,8 @@
 @ stub catanhf
 @ stub catanhl
 @ stub catanl
-@ cdecl -stub cbrt(double)
-@ cdecl -stub cbrtf(float)
+@ cdecl cbrt(double)
+@ cdecl cbrtf(float)
 @ cdecl -stub cbrtl(double) cbrt
 @ stub ccos
 @ stub ccosf
@@ -2342,11 +2342,11 @@
 @ stub ctanhl
 @ stub ctanl
 @ cdecl -ret64 div(long long)
-@ cdecl -stub erf(double)
-@ cdecl -stub erfc(double)
-@ cdecl -stub erfcf(float)
+@ cdecl erf(double)
+@ cdecl erfc(double)
+@ cdecl erfcf(float)
 @ cdecl -stub erfcl(double) erfc
-@ cdecl -stub erff(float)
+@ cdecl erff(float)
 @ cdecl -stub erfl(double) erf
 @ cdecl exit(long)
 @ cdecl exp(double)
@@ -2454,37 +2454,37 @@
 @ cdecl labs(long)
 @ cdecl ldexp(double long)
 @ cdecl -ret64 ldiv(long long)
-@ cdecl -stub lgamma(double)
-@ cdecl -stub lgammaf(float)
+@ cdecl lgamma(double)
+@ cdecl lgammaf(float)
 @ cdecl lgammal(double) lgamma
 @ cdecl -ret64 llabs(int64)
 @ cdecl -norelay lldiv(int64 int64)
-@ cdecl -stub -ret64 llrint(double)
-@ cdecl -stub -ret64 llrintf(float)
+@ cdecl -ret64 llrint(double)
+@ cdecl -ret64 llrintf(float)
 @ cdecl -ret64 llrintl(double) llrint
-@ cdecl -stub -ret64 llround(double)
-@ cdecl -stub -ret64 llroundf(float)
+@ cdecl -ret64 llround(double)
+@ cdecl -ret64 llroundf(float)
 @ cdecl -ret64 llroundl(double) llround
 @ cdecl localeconv()
 @ cdecl log(double)
 @ cdecl log10(double)
 @ cdecl -arch=!i386 log10f(float)
-@ cdecl -stub log1p(double)
-@ cdecl -stub log1pf(float)
+@ cdecl log1p(double)
+@ cdecl log1pf(float)
 @ cdecl log1pl(double) log1p
 @ cdecl log2(double)
 @ cdecl log2f(float)
 @ cdecl log2l(double) log2
-@ cdecl -stub logb(double)
-@ cdecl -stub logbf(float)
+@ cdecl logb(double)
+@ cdecl logbf(float)
 @ cdecl logbl(double) logb
 @ cdecl -arch=!i386 logf(float)
 @ cdecl longjmp(ptr long)
 @ cdecl lrint(double)
 @ cdecl lrintf(float)
 @ cdecl lrintl(double) lrint
-@ cdecl -stub lround(double)
-@ cdecl -stub lroundf(float)
+@ cdecl lround(double)
+@ cdecl lroundf(float)
 @ cdecl lroundl(double) lround
 @ cdecl malloc(long)
 @ cdecl mblen(ptr long)
@@ -2506,11 +2506,11 @@
 @ cdecl memset(ptr long long)
 @ cdecl modf(double ptr)
 @ cdecl -stub -arch=!i386 modff(float ptr)
-@ cdecl -stub nan(str)
-@ cdecl -stub nanf(str)
+@ cdecl nan(str)
+@ cdecl nanf(str)
 @ cdecl nanl(str) nan
-@ cdecl -stub nearbyint(double)
-@ cdecl -stub nearbyintf(float)
+@ cdecl nearbyint(double)
+@ cdecl nearbyintf(float)
 @ cdecl nearbyintl(double) nearbyint
 @ cdecl nextafter(double double)
 @ cdecl nextafterf(float float)
@@ -2536,17 +2536,17 @@
 @ cdecl rand()
 @ cdecl rand_s(ptr)
 @ cdecl realloc(ptr long)
-@ cdecl -stub remainder(double double)
-@ cdecl -stub remainderf(float float)
+@ cdecl remainder(double double)
+@ cdecl remainderf(float float)
 @ cdecl remainderl(double double) remainder
 @ cdecl remove(str)
-@ cdecl -stub remquo(double double ptr)
-@ cdecl -stub remquof(float float ptr)
+@ cdecl remquo(double double ptr)
+@ cdecl remquof(float float ptr)
 @ cdecl remquol(double double ptr) remquo
 @ cdecl rename(str str)
 @ cdecl rewind(ptr)
-@ cdecl -stub rint(double)
-@ cdecl -stub rintf(float)
+@ cdecl rint(double)
+@ cdecl rintf(float)
 @ cdecl rintl(double) rint
 @ cdecl round(double)
 @ cdecl roundf(float)
@@ -2611,8 +2611,8 @@
 @ cdecl tanh(double)
 @ cdecl -arch=!i386 tanhf(float)
 @ cdecl terminate()
-@ cdecl -stub tgamma(double)
-@ cdecl -stub tgammaf(float)
+@ cdecl tgamma(double)
+@ cdecl tgammaf(float)
 @ cdecl tgammal(double) tgamma
 @ cdecl tmpfile()
 @ cdecl tmpfile_s(ptr)
