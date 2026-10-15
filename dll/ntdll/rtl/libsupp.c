@@ -1147,12 +1147,14 @@ LdrpApplyFileNameRedirection(
 
     DWORD ApisetVersion = LdrpApisetVersion();
 
-    /* The Universal CRT (api-ms-win-crt-*) is there for every program, also
-       one without a manifest: Windows 7 and 8 have these names as real DLLs
-       (the UCRT update), and programs built with Visual C++ 2015 or later
-       import them */
-    if (!ApisetVersion && OriginalName->Length > 15 * sizeof(WCHAR) &&
-        !_wcsnicmp(OriginalName->Buffer, L"api-ms-win-crt-", 15))
+    /* API sets are there for every program, also one without a manifest or
+       with a Vista one: Windows resolves them with the schema of the running
+       system, whatever the program declares (Spotify.exe declares Vista and
+       imports api-ms-win-core-processenvironment-l1-1-0). The Universal CRT
+       (api-ms-win-crt-*) is also there on Windows 7 and 8 (the UCRT update) */
+    if (!ApisetVersion && OriginalName->Length > 11 * sizeof(WCHAR) &&
+        (!_wcsnicmp(OriginalName->Buffer, L"api-ms-win-", 11) ||
+         !_wcsnicmp(OriginalName->Buffer, L"ext-ms-win-", 11)))
     {
         ApisetVersion = APISET_WIN10;
     }
