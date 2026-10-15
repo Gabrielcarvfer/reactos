@@ -44,19 +44,15 @@ FPIND		EQU	0ffc00000h		; indefinite
 FPSNAN		EQU	07fbfffffh		; SNAN
 FPQNAN		EQU	07fffffffh		; QNAN
 
-X87SW		RECORD	X87SW_B: 1,
-			X87SW_C3: 1,
-			X87SW_TOP: 3,
-			X87SW_C: 3,
-			X87SW_ES: 1,
-			X87SW_SF: 1,
-			X87SW_PE: 1,
-			X87SW_E: 5
-
-X87XAM		EQU	MASK X87SW_C3 OR MASK X87SW_C AND NOT (1 SHL (X87SW_C + 1))
-X87XAM_INF	EQU	5 SHL X87SW_C
-X87XAM_NAN	EQU	1 SHL X87SW_C
-X87XAM_BAD	EQU	MASK X87SW_E AND NOT 2
+; The x87 status word: B (15), C3 (14), TOP (11-13), C2-C0 (8-10), ES (7),
+; SF (6), PE (5), exception flags (0-4). (Written out: GAS, with the ML
+; compatibility macros, put the fields of the RECORD this used at the wrong
+; places, and every result came out as an error.)
+X87SW_C		EQU	8			; C0, C1, C2
+X87XAM		EQU	4500h			; C3, C2, C0 (FXAM's class)
+X87XAM_INF	EQU	500h			; C2, C0
+X87XAM_NAN	EQU	100h			; C0
+X87XAM_BAD	EQU	1dh			; the exception flags but DE
 
 		EXTRN	_handle_errorf: PROC	; float _handle_error (char *fname, int opcode, unsigned long  value, int type, int flags, int error, float arg1, float arg2, int nargs)
 
