@@ -1293,6 +1293,24 @@ co_MsqSendMessage(PTHREADINFO ptirec,
      // The current thread is dying!
      TRACE("User APC\n");
 
+     /* If the receiver has not taken the message yet, take it back, as
+        on a timeout: its parameters may point to this thread's kernel
+        stack, which goes away with the thread (the receiver read them from
+        there later, and the system crashed in co_IntCallWindowProc) */
+     Entry = ptirec->SentMessagesListHead.Flink;
+     while (Entry != &ptirec->SentMessagesListHead)
+     {
+        if (CONTAINING_RECORD(Entry, USER_SENT_MESSAGE, ListEntry) == Message)
+        {
+           Message->pkCompletionEvent = NULL;
+           RemoveEntryList(&Message->ListEntry);
+           ClearMsgBitsMask(ptirec, Message->QS_Flags);
+           InsertTailList(&usmList, &Message->ListEntry);
+           break;
+        }
+        Entry = Entry->Flink;
+     }
+
      // The Message will be on the Trouble list until Thread cleanup.
      Message->flags |= SMF_SENDERDIED;
 
