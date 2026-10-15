@@ -236,7 +236,7 @@
 #@ stdcall CreateTimerQueue()
 #@ stdcall CreateTimerQueueTimer(ptr long ptr ptr long long long)
 @ stdcall CreateWaitableTimerExW(ptr wstr long long) kernel32.CreateWaitableTimerExW
-#@ stdcall CreateWaitableTimerW(ptr long wstr)
+@ stdcall CreateWaitableTimerW(ptr long wstr) kernel32.CreateWaitableTimerW
 #@ stdcall CreateWellKnownSid(long ptr ptr ptr)
 #@ stdcall CtrlRoutine(ptr)
 # #@ stub CveEventWrite
