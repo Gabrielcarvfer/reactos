@@ -1168,6 +1168,39 @@ void WINAPI Wow64ApcRoutine( ULONG_PTR arg1, ULONG_PTR arg2, ULONG_PTR arg3, CON
     switch (current_machine)
     {
     case IMAGE_FILE_MACHINE_I386:
+#ifdef __REACTOS__
+        {
+            /* ReactOS's 32-bit KiUserApcDispatcher takes the routine, its
+             * three arguments, then the context to continue with (no
+             * "alertable" field before it, unlike Wine's) */
+            struct
+            {
+                ULONG        func;
+                ULONG        arg1;
+                ULONG        arg2;
+                ULONG        arg3;
+                I386_CONTEXT context;
+                ULONG        seh_frame[2];  /* for KiUserApcDispatcher */
+            } *stack;
+            I386_CONTEXT ctx = { CONTEXT_I386_FULL };
+
+            pBTCpuGetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
+
+            stack = (void *)( (ULONG_PTR)( ctx.Esp & ~3 ) - sizeof(*stack) );
+            stack->func    = arg1 >> 32;
+            stack->arg1    = arg1;
+            stack->arg2    = arg2;
+            stack->arg3    = arg3;
+            stack->context = ctx;
+
+            ctx.Esp = PtrToUlong( stack );
+            ctx.Eip = pLdrSystemDllInitBlock->pKiUserApcDispatcher;
+            frame.wow_context = &stack->context;
+            pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
+            cpu_simulate();
+        }
+        break;
+#else
         {
             /* stack layout when calling 32-bit KiUserApcDispatcher */
             struct apc_stack_layout32
@@ -1209,6 +1242,7 @@ void WINAPI Wow64ApcRoutine( ULONG_PTR arg1, ULONG_PTR arg2, ULONG_PTR arg3, CON
             cpu_simulate();
         }
         break;
+#endif
 
     case IMAGE_FILE_MACHINE_ARMNT:
         {
