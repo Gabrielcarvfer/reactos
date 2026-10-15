@@ -1224,3 +1224,57 @@ HRESULT WINAPI VariantToPropVariant(const VARIANT *var, PROPVARIANT *propvar)
 
     return S_OK;
 }
+
+#ifdef __REACTOS__
+HRESULT WINAPI InitPropVariantFromFileTime(const FILETIME *pftIn, PROPVARIANT *ppropvar)
+{
+    TRACE("(%p %p)\n", pftIn, ppropvar);
+
+    if (!pftIn || !ppropvar)
+        return E_INVALIDARG;
+    ppropvar->vt = VT_FILETIME;
+    ppropvar->filetime = *pftIn;
+    return S_OK;
+}
+
+/* -1, 0 or 1, like the comparison of the values (an empty or NULL value
+ * comes first) */
+INT WINAPI VariantCompare(REFVARIANT var1, REFVARIANT var2)
+{
+    HRESULT hr;
+
+    TRACE("(%p %p)\n", var1, var2);
+
+    hr = VarCmp((VARIANT *)var1, (VARIANT *)var2, LOCALE_USER_DEFAULT, 0);
+    switch (hr)
+    {
+        case VARCMP_LT: return -1;
+        case VARCMP_EQ: return 0;
+        case VARCMP_GT: return 1;
+        default:
+        {
+            /* VARCMP_NULL or not comparable: by type, then empty first */
+            BOOL Empty1 = V_VT(var1) == VT_EMPTY || V_VT(var1) == VT_NULL;
+            BOOL Empty2 = V_VT(var2) == VT_EMPTY || V_VT(var2) == VT_NULL;
+            if (Empty1 != Empty2)
+                return Empty1 ? -1 : 1;
+            if (V_VT(var1) != V_VT(var2))
+                return V_VT(var1) < V_VT(var2) ? -1 : 1;
+            return 0;
+        }
+    }
+}
+
+/*
+ * Make a value the type of its property. Without the property schema
+ * system there is no type to coerce to: the value is kept as it is.
+ */
+HRESULT WINAPI PSCoerceToCanonicalValue(REFPROPERTYKEY key, PROPVARIANT *ppropvar)
+{
+    TRACE("(%p %p)\n", key, ppropvar);
+
+    if (!key || !ppropvar)
+        return E_INVALIDARG;
+    return S_OK;
+}
+#endif

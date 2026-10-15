@@ -32,7 +32,7 @@
 @ stdcall InitPropVariantFromBuffer(ptr long ptr)
 @ stdcall InitPropVariantFromCLSID(ptr ptr)
 @ stub InitPropVariantFromDoubleVector
-@ stub InitPropVariantFromFileTime
+@ stdcall InitPropVariantFromFileTime(ptr ptr)
 @ stub InitPropVariantFromFileTimeVector
 @ stdcall InitPropVariantFromGUIDAsString(ptr ptr)
 @ stub InitPropVariantFromInt16Vector
@@ -63,7 +63,7 @@
 @ stub InitVariantFromUInt32Array
 @ stub InitVariantFromUInt64Array
 @ stub InitVariantFromVariantArrayElem
-@ stub PSCoerceToCanonicalValue
+@ stdcall PSCoerceToCanonicalValue(ptr ptr)
 @ stub PSCreateAdapterFromPropertyStore
 @ stub PSCreateDelayedMultiplexPropertyStore
 @ stdcall PSCreateMemoryPropertyStore(ptr ptr)
@@ -154,7 +154,7 @@
 @ stdcall PropVariantToVariant(ptr ptr)
 @ stub StgDeserializePropVariant
 @ stub StgSerializePropVariant
-@ stub VariantCompare
+@ stdcall VariantCompare(ptr ptr)
 @ stub VariantGetBooleanElem
 @ stub VariantGetDoubleElem
 @ stub VariantGetElementCount
