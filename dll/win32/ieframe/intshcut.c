@@ -631,6 +631,13 @@ static HRESULT WINAPI PersistFile_Save(IPersistFile *pFile, LPCOLESTR pszFileNam
             else
             {
                TRACE("Unable to get the IPropertyStorage.\n");
+#ifdef __REACTOS__
+               /* The shortcut is saved, without its icon: the caller may
+                  still have the properties open (WiX's custom action, which
+                  sets the icon, has), and the save failed with
+                  STG_E_ACCESSDENIED (Node.js's setup) */
+               hr = S_OK;
+#endif
             }
 
             CloseHandle(file);
