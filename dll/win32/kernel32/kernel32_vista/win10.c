@@ -543,3 +543,39 @@ PackageFamilyNameFromFullName(
     *packageFamilyNameLength = Needed;
     return ERROR_SUCCESS;
 }
+
+/* GEOGRAPHIC LOCATION (Windows 10 1709) ************************************/
+
+/* The two-letter ISO 3166 name of the user's location (UWP programs,
+ * Windows.Globalization) */
+int
+WINAPI
+GetUserDefaultGeoName(
+    _Out_writes_opt_(geoNameCount) LPWSTR geoName,
+    _In_ int geoNameCount)
+{
+    WCHAR Name[16];
+    int Length;
+
+    if (geoNameCount < 0 || (geoNameCount && !geoName))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    Length = GetGeoInfoW(GetUserGeoID(GEOCLASS_NATION), GEO_ISO2, Name, ARRAYSIZE(Name), 0);
+    if (!Length)
+    {
+        /* No location set: Windows answers "world" */
+        wcscpy(Name, L"001");
+        Length = 4;
+    }
+    if (!geoNameCount)
+        return Length;
+    if (geoNameCount < Length)
+    {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return 0;
+    }
+    RtlCopyMemory(geoName, Name, Length * sizeof(WCHAR));
+    return Length;
+}

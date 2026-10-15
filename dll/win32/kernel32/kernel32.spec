@@ -710,6 +710,7 @@
 @ stdcall GetUserDefaultLangID()
 @ stdcall -version=0x600+ GetUserDefaultLocaleName(wstr long)
 @ stdcall GetUserDefaultUILanguage()
+@ stdcall -version=0xA00+ GetUserDefaultGeoName(ptr long)
 @ stdcall GetUserGeoID(long)
 @ stdcall -version=0x600+ GetUserPreferredUILanguages(long ptr wstr ptr)
 @ stdcall GetVDMCurrentDirectories(long long)

@@ -1022,6 +1022,15 @@ GetUserDefaultLocaleName(
 LCID WINAPI GetUserDefaultLCID(void);
 GEOID WINAPI GetUserGeoID(_In_ GEOCLASS);
 
+#if (WINVER >= 0x0A00)
+WINBASEAPI
+int
+WINAPI
+GetUserDefaultGeoName(
+    _Out_writes_opt_(geoNameCount) LPWSTR geoName,
+    _In_ int geoNameCount);
+#endif
+
 #if (WINVER >= 0x0600) || defined(__REACTOS__)
 
 int
