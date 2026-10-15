@@ -651,8 +651,61 @@ GetProcessPreferredUILanguages(
 }
 
 /*
-* @unimplemented
-*/
+ * The preferred UI languages: the one UI language of the user (or of the
+ * system), as a name ("en-US") or an id ("0409"), in a list ending with an
+ * empty string. ReactOS has no other language lists (no language packs).
+ */
+static
+BOOL
+GetPreferredUILanguagesList(
+    LANGID LangId,
+    DWORD dwFlags,
+    PULONG pulNumLanguages,
+    PZZWSTR pwszLanguagesBuffer,
+    PULONG pcchLanguagesBuffer)
+{
+    WCHAR Name[LOCALE_NAME_MAX_LENGTH];
+    ULONG Needed;
+
+    if (!pulNumLanguages || !pcchLanguagesBuffer ||
+        ((dwFlags & MUI_LANGUAGE_ID) && (dwFlags & MUI_LANGUAGE_NAME)) ||
+        (*pcchLanguagesBuffer && !pwszLanguagesBuffer))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (dwFlags & MUI_LANGUAGE_ID)
+    {
+        _snwprintf(Name, ARRAYSIZE(Name) - 1, L"%04x", LangId);
+        Name[ARRAYSIZE(Name) - 1] = UNICODE_NULL;
+    }
+    else if (!LCIDToLocaleName(MAKELCID(LangId, SORT_DEFAULT), Name, ARRAYSIZE(Name), 0))
+    {
+        wcscpy(Name, L"en-US");
+    }
+
+    /* The name, its terminator, and the empty string ending the list */
+    Needed = (ULONG)wcslen(Name) + 2;
+    if (pwszLanguagesBuffer)
+    {
+        if (*pcchLanguagesBuffer < Needed)
+        {
+            *pcchLanguagesBuffer = Needed;
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return FALSE;
+        }
+        wcscpy(pwszLanguagesBuffer, Name);
+        pwszLanguagesBuffer[Needed - 1] = UNICODE_NULL;
+    }
+    *pulNumLanguages = 1;
+    *pcchLanguagesBuffer = Needed;
+    return TRUE;
+}
+
+/*
+ * @implemented
+ */
 BOOL
 WINAPI
 GetSystemPreferredUILanguages(
@@ -661,13 +714,14 @@ GetSystemPreferredUILanguages(
     PZZWSTR pwszLanguagesBuffer,
     PULONG pcchLanguagesBuffer)
 {
-    DPRINT1("%x %p %p %p\n", dwFlags, pulNumLanguages, pwszLanguagesBuffer, pcchLanguagesBuffer);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    return GetPreferredUILanguagesList(GetSystemDefaultUILanguage(), dwFlags, pulNumLanguages,
+                                       pwszLanguagesBuffer, pcchLanguagesBuffer);
 }
 
 /*
- * @unimplemented
+ * @implemented
+ *
+ * (A thread has no languages of its own: SetThreadPreferredUILanguages)
  */
 BOOL
 WINAPI
@@ -677,21 +731,18 @@ GetThreadPreferredUILanguages(
     PZZWSTR pwszLanguagesBuffer,
     PULONG pcchLanguagesBuffer)
 {
-    DPRINT1("%x %p %p %p\n", dwFlags, pulNumLanguages, pwszLanguagesBuffer, pcchLanguagesBuffer);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    return GetPreferredUILanguagesList(GetUserDefaultUILanguage(), dwFlags, pulNumLanguages,
+                                       pwszLanguagesBuffer, pcchLanguagesBuffer);
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 LANGID
 WINAPI
 GetThreadUILanguage(VOID)
 {
-    UNIMPLEMENTED;
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return 0;
+    return GetUserDefaultUILanguage();
 }
 
 /*
@@ -713,7 +764,7 @@ GetUILanguageInfo(
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
@@ -723,9 +774,8 @@ GetUserPreferredUILanguages(
     PZZWSTR pwszLanguagesBuffer,
     PULONG pcchLanguagesBuffer)
 {
-    DPRINT1("%x %p %p %p\n", dwFlags, pulNumLanguages, pwszLanguagesBuffer, pcchLanguagesBuffer);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    return GetPreferredUILanguagesList(GetUserDefaultUILanguage(), dwFlags, pulNumLanguages,
+                                       pwszLanguagesBuffer, pcchLanguagesBuffer);
 }
 
 /*
@@ -768,9 +818,14 @@ SetThreadPreferredUILanguages(
     PULONG pulNumLanguages
     )
 {
-    DPRINT1("%x %p %p\n", dwFlags, pwszLanguagesBuffer, pulNumLanguages);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    PCWSTR Language;
+    ULONG Count = 0;
+
+    /* (Like SetProcessPreferredUILanguages: the thread keeps the user's) */
+    for (Language = pwszLanguagesBuffer; Language && *Language; Language += wcslen(Language) + 1)
+        Count++;
+    if (pulNumLanguages) *pulNumLanguages = Count;
+    return TRUE;
 }
 
 /******************************************************************************
