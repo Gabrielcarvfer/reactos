@@ -4,6 +4,7 @@
 @ stdcall D3D11CoreRegisterLayers()
 @ stdcall D3D11CreateDevice(ptr long ptr long ptr long long ptr ptr ptr)
 @ stdcall D3D11CreateDeviceAndSwapChain(ptr long ptr long ptr long long ptr ptr ptr ptr ptr)
+@ stdcall -version=0xA00+ CreateDirect3D11DeviceFromDXGIDevice(ptr ptr)
 @ stdcall D3D11On12CreateDevice(ptr long ptr long ptr long long ptr ptr ptr)
 @ stdcall -version=0x600+ D3DKMTCheckVidPnExclusiveOwnership(ptr) gdi32.D3DKMTCheckVidPnExclusiveOwnership # __REACTOS__: gdi32 only exports D3DKMT* for NT6+
 @ stdcall -version=0x600+ D3DKMTCloseAdapter(ptr) gdi32.D3DKMTCloseAdapter

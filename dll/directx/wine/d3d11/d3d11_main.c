@@ -391,3 +391,16 @@ HRESULT WINAPI D3D11On12CreateDevice(IUnknown *device, UINT flags,
 
     return E_NOTIMPL;
 }
+
+#ifdef __REACTOS__
+/* The WinRT Direct3D device of a DXGI device, for Windows.Graphics.Capture,
+ * which ReactOS does not have (OBS imports it, and uses its other capture
+ * methods when this fails) */
+HRESULT WINAPI CreateDirect3D11DeviceFromDXGIDevice(IDXGIDevice *dxgi_device, IUnknown **graphics_device /* IInspectable */)
+{
+    FIXME("dxgi_device %p, graphics_device %p stub!\n", dxgi_device, graphics_device);
+    if (graphics_device)
+        *graphics_device = NULL;
+    return E_NOTIMPL;
+}
+#endif
