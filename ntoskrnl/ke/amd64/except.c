@@ -304,6 +304,58 @@ KiPrintUserAddress(
     DbgPrint("%s%p\n", Prefix, (PVOID)Address);
 }
 
+/*
+ * An MSVC C++ exception (throw): the types it can be caught as, from its
+ * throw information (x64: RVAs from the module base, the 4th parameter),
+ * and the message of a std::exception (its what(), after the vtable).
+ */
+#define CXX_EXCEPTION_CODE 0xE06D7363
+#define CXX_EXCEPTION_MAGIC 0x19930520
+
+static
+VOID
+KiPrintCxxException(
+    _In_ PEXCEPTION_RECORD ExceptionRecord)
+{
+    _SEH2_TRY
+    {
+        ULONG_PTR Object = ExceptionRecord->ExceptionInformation[1];
+        PULONG ThrowInfo = (PULONG)ExceptionRecord->ExceptionInformation[2];
+        ULONG_PTR Base = ExceptionRecord->ExceptionInformation[3];
+        PLONG Types;
+        LONG Count, i;
+        BOOLEAN IsStdException = FALSE;
+
+        ProbeForRead(ThrowInfo, 4 * sizeof(ULONG), sizeof(ULONG));
+        Types = (PLONG)(Base + ThrowInfo[3]);
+        ProbeForRead(Types, sizeof(LONG), sizeof(LONG));
+        Count = min(Types[0], 8);
+        for (i = 0; i < Count; i++)
+        {
+            PULONG CatchableType = (PULONG)(Base + Types[1 + i]);
+            PCHAR Name;
+
+            ProbeForRead(CatchableType, 2 * sizeof(ULONG), sizeof(ULONG));
+            /* (TypeDescriptor: vtable, spare, then the decorated name) */
+            Name = (PCHAR)(Base + CatchableType[1] + 2 * sizeof(PVOID));
+            ProbeForRead(Name, 1, 1);
+            DbgPrint("  C++ type: %.80s\n", Name);
+            if (!strcmp(Name, ".?AVexception@std@@"))
+                IsStdException = TRUE;
+        }
+        if (IsStdException && Object)
+        {
+            PCHAR What = *(PCHAR *)(Object + sizeof(PVOID));
+            ProbeForRead(What, 1, 1);
+            DbgPrint("  what(): %.200s\n", What);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+}
+
 static
 VOID
 KiPrintUnhandledUserException(
@@ -315,6 +367,11 @@ KiPrintUnhandledUserException(
              ExceptionRecord->NumberParameters > 0 ? ExceptionRecord->ExceptionInformation[0] : 0,
              ExceptionRecord->NumberParameters > 1 ? ExceptionRecord->ExceptionInformation[1] : 0);
     KiPrintUserAddress("  at ", (ULONG_PTR)ExceptionRecord->ExceptionAddress);
+    if (ExceptionRecord->ExceptionCode == CXX_EXCEPTION_CODE && ExceptionRecord->NumberParameters >= 4 &&
+        ExceptionRecord->ExceptionInformation[0] == CXX_EXCEPTION_MAGIC)
+    {
+        KiPrintCxxException(ExceptionRecord);
+    }
 }
 
 VOID
