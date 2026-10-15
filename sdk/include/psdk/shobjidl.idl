@@ -4533,6 +4533,19 @@ interface IApplicationActivationManager : IUnknown
 /*****************************************************************************
  * ShellObjects typelibrary
  */
+/*****************************************************************************
+ * IStartMenuPinnedList interface (Windows 7)
+ */
+[
+    object,
+    uuid(4cd19ada-25a5-4a32-b3b7-347bee5be36b),
+    pointer_default(unique)
+]
+interface IStartMenuPinnedList : IUnknown
+{
+    HRESULT RemoveFromList([in] IShellItem *pitem);
+}
+
 [
  uuid(50A7E9B1-70EF-11D1-B75A-00A0C90564FE),
  lcid(0x0000),
@@ -4609,6 +4622,14 @@ library ShellObjects
     ]
     coclass DestinationList {
         interface ICustomDestinationList;
+    }
+
+    [
+        uuid(a2a9545d-a0c2-42b4-9708-a0b2badd77c8)
+    ]
+    coclass StartMenuPin
+    {
+        interface IStartMenuPinnedList;
     }
 
     [
