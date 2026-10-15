@@ -208,10 +208,17 @@ list(APPEND SOURCE
     wtypes.idl
     wuapi.idl
     windows.data.json.idl
+    windows.devices.geolocation.idl
     windows.foundation.collections.idl
     windows.foundation.idl
     windows.foundation.metadata.idl
+    windows.globalization.idl
+    windows.storage.fileproperties.idl
+    windows.storage.idl
+    windows.storage.search.idl
     windows.storage.streams.idl
+    windows.system.idl
+    windows.system.userprofile.idl
     windowscontracts.idl
     xmldom.idl
     xmldso.idl
