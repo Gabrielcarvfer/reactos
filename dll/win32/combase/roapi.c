@@ -542,3 +542,97 @@ HRESULT WINAPI DllGetActivationFactory(HSTRING classid, IActivationFactory **fac
 
     return REGDB_E_CLASSNOTREG;
 }
+
+#ifdef __REACTOS__
+/***********************************************************************
+ *      RoTransformError (combase.@)
+ *
+ * Like RoOriginateError: error reporting is not on, nothing is recorded.
+ */
+BOOL WINAPI RoTransformError(HRESULT old_error, HRESULT new_error, HSTRING message)
+{
+    TRACE("%#lx, %#lx, %s\n", old_error, new_error, debugstr_hstring(message));
+    return FALSE;
+}
+
+/***********************************************************************
+ *      RoTransformErrorW (combase.@)
+ */
+BOOL WINAPI RoTransformErrorW(HRESULT old_error, HRESULT new_error, UINT max_len, const WCHAR *message)
+{
+    TRACE("%#lx, %#lx, %u, %p\n", old_error, new_error, max_len, message);
+    return FALSE;
+}
+
+/***********************************************************************
+ *      IsErrorPropagationEnabled (combase.@)
+ */
+BOOL WINAPI IsErrorPropagationEnabled(void)
+{
+    return FALSE;
+}
+
+/***********************************************************************
+ *      RoGetMatchingRestrictedErrorInfo (combase.@)
+ *
+ * No restricted error information is kept (see RoOriginateError).
+ */
+HRESULT WINAPI RoGetMatchingRestrictedErrorInfo(HRESULT error, IRestrictedErrorInfo **info)
+{
+    TRACE("%#lx, %p\n", error, info);
+
+    if (!info)
+        return E_POINTER;
+    *info = NULL;
+    return S_OK;
+}
+
+/***********************************************************************
+ *      RoReportFailedDelegate (combase.@)
+ */
+HRESULT WINAPI RoReportFailedDelegate(IUnknown *punkDelegate, IRestrictedErrorInfo *info)
+{
+    TRACE("%p, %p\n", punkDelegate, info);
+    return S_OK;
+}
+
+/* (headers of older Windows versions lack them) */
+#ifndef STATUS_STOWED_EXCEPTION
+#define STATUS_STOWED_EXCEPTION ((DWORD)0xC000027B)
+#endif
+VOID WINAPI RaiseFailFastException(PEXCEPTION_RECORD record, PCONTEXT context, DWORD flags);
+
+/***********************************************************************
+ *      RoFailFastWithErrorContext (combase.@)
+ */
+void WINAPI RoFailFastWithErrorContext(HRESULT error)
+{
+    EXCEPTION_RECORD record = { 0 };
+
+    ERR("%#lx: failing fast\n", error);
+    record.ExceptionCode = STATUS_STOWED_EXCEPTION;
+    record.ExceptionFlags = EXCEPTION_NONCONTINUABLE;
+    record.NumberParameters = 1;
+    record.ExceptionInformation[0] = (ULONG_PTR)error;
+    RaiseFailFastException(&record, NULL, 0);
+}
+
+/***********************************************************************
+ *      RoRevokeActivationFactories (combase.@)
+ *
+ * (RoRegisterActivationFactories registers none: nothing to revoke)
+ */
+void WINAPI RoRevokeActivationFactories(RO_REGISTRATION_COOKIE cookie)
+{
+    TRACE("%p\n", cookie);
+}
+
+/***********************************************************************
+ *      RoUnregisterForApartmentShutdown (combase.@)
+ */
+HRESULT WINAPI RoUnregisterForApartmentShutdown(APARTMENT_SHUTDOWN_REGISTRATION_COOKIE cookie)
+{
+    TRACE("%p\n", cookie);
+    return S_OK;
+}
+#endif
