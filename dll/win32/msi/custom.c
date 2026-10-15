@@ -858,6 +858,24 @@ static custom_action_info *do_msidbCustomActionTypeDll(
     return info;
 }
 
+#if defined(__REACTOS__) && defined(_M_AMD64)
+/* A 32-bit custom action runs in a 32-bit msiexec (custom_start_server),
+ * which needs WoW64. Without it, skip the action, as if it had run */
+static BOOL ros_skip_32bit_custom_action(const WCHAR *path, const WCHAR *source)
+{
+    WCHAR dir[MAX_PATH];
+    DWORD arch;
+
+    if (GetSystemWow64DirectoryW(dir, ARRAY_SIZE(dir)) &&
+        GetFileAttributesW(dir) != INVALID_FILE_ATTRIBUTES)
+        return FALSE;
+    if (!get_binary_type(path, &arch) || arch != SCS_32BIT_BINARY)
+        return FALSE;
+    ERR("%s is a 32 bit custom action, and there is no WoW64: skipping it\n", debugstr_w(source));
+    return TRUE;
+}
+#endif
+
 static UINT HANDLE_CustomType1( MSIPACKAGE *package, const WCHAR *source, const WCHAR *target,
                                 INT type, const WCHAR *action )
 {
@@ -868,14 +886,8 @@ static UINT HANDLE_CustomType1( MSIPACKAGE *package, const WCHAR *source, const 
         return ERROR_FUNCTION_FAILED;
 
 #if defined(__REACTOS__) && defined(_M_AMD64)
-    {
-        DWORD arch;
-        get_binary_type(binary->tmpfile, &arch);
-        if (arch == SCS_32BIT_BINARY) {
-            ERR("%s is a 32 bit custom action. Returning as ERROR_SUCCESS\n", debugstr_w(source));
-            return ERROR_SUCCESS; // HACK: NO WOW64! return as executed though it's not true
-        }
-    }
+    if (ros_skip_32bit_custom_action(binary->tmpfile, source))
+        return ERROR_SUCCESS;
 #endif
 
     TRACE("Calling function %s from %s\n", debugstr_w(target), debugstr_w(binary->tmpfile));
@@ -987,14 +999,8 @@ static UINT HANDLE_CustomType17( MSIPACKAGE *package, const WCHAR *source, const
     }
 
 #if defined(__REACTOS__) && defined(_M_AMD64)
-    {
-        DWORD arch;
-        get_binary_type(file->TargetPath, &arch);
-        if (arch == SCS_32BIT_BINARY) {
-            ERR("%s is a 32 bit custom action. Returning as ERROR_SUCCESS\n", debugstr_w(source));
-            return ERROR_SUCCESS; // HACK: NO WOW64! return as executed though it's not true
-        }
-    }
+    if (ros_skip_32bit_custom_action(file->TargetPath, source))
+        return ERROR_SUCCESS;
 #endif
 
     if (!(info = do_msidbCustomActionTypeDll( package, type, file->TargetPath, target, action )))
