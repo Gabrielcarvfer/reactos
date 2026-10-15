@@ -1367,3 +1367,28 @@ RtlQueryPerformanceFrequency(
 
     return NT_SUCCESS(NtQueryPerformanceCounter(&Counter, PerformanceFrequency));
 }
+
+/*
+ * NtOpenKeyEx (Windows 7): NtOpenKey with options. ReactOS has no such system
+ * call; REG_OPTION_OPEN_LINK is the OBJ_OPENLINK attribute, and the backup
+ * and restore option needs no more than the privilege it relies on.
+ */
+NTSTATUS
+NTAPI
+NtOpenKeyEx(
+    _Out_ PHANDLE KeyHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ ULONG OpenOptions)
+{
+    OBJECT_ATTRIBUTES Attributes;
+
+    if (OpenOptions & ~(REG_OPTION_OPEN_LINK | REG_OPTION_BACKUP_RESTORE))
+        return STATUS_INVALID_PARAMETER;
+    if (!(OpenOptions & REG_OPTION_OPEN_LINK))
+        return NtOpenKey(KeyHandle, DesiredAccess, ObjectAttributes);
+
+    Attributes = *ObjectAttributes;
+    Attributes.Attributes |= OBJ_OPENLINK;
+    return NtOpenKey(KeyHandle, DesiredAccess, &Attributes);
+}

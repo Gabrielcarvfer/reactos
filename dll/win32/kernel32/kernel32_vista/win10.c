@@ -8,6 +8,7 @@
  */
 
 #include <k32_vista.h>
+#include <ndk/exfuncs.h>
 #include <ndk/mmfuncs.h>
 
 #define NDEBUG
@@ -399,4 +400,54 @@ ClosePackageInfo(
     _In_ PVOID packageInfoReference)
 {
     return packageInfoReference ? ERROR_INVALID_PARAMETER : ERROR_SUCCESS;
+}
+
+/* HANDLES (Windows 10) *****************************************************/
+
+/*
+ * Do two handles refer to the same object? Windows asks the kernel
+ * (NtCompareObjects); here the system's handle list says which object each
+ * handle of this process refers to.
+ */
+BOOL
+WINAPI
+CompareObjectHandles(
+    _In_ HANDLE hFirstObjectHandle,
+    _In_ HANDLE hSecondObjectHandle)
+{
+    PSYSTEM_HANDLE_INFORMATION_EX Info = NULL;
+    ULONG Size = 0x10000, i;
+    ULONG_PTR ProcessId = (ULONG_PTR)NtCurrentTeb()->ClientId.UniqueProcess;
+    PVOID First = NULL, Second = NULL;
+    NTSTATUS Status;
+
+    if (hFirstObjectHandle == hSecondObjectHandle)
+        return TRUE;
+
+    for (;;)
+    {
+        Info = RtlAllocateHeap(RtlGetProcessHeap(), 0, Size);
+        if (!Info)
+            return FALSE;
+        Status = NtQuerySystemInformation(SystemExtendedHandleInformation, Info, Size, NULL);
+        if (Status != STATUS_INFO_LENGTH_MISMATCH)
+            break;
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
+        Size *= 2;
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        for (i = 0; i < Info->NumberOfHandles; i++)
+        {
+            if (Info->Handles[i].UniqueProcessId != ProcessId)
+                continue;
+            if (Info->Handles[i].HandleValue == (ULONG_PTR)hFirstObjectHandle)
+                First = Info->Handles[i].Object;
+            if (Info->Handles[i].HandleValue == (ULONG_PTR)hSecondObjectHandle)
+                Second = Info->Handles[i].Object;
+        }
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
+    return First && First == Second;
 }
