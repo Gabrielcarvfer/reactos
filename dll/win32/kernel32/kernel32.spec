@@ -62,6 +62,22 @@
 @ stdcall CancelTimerQueueTimer(long long)
 @ stdcall CancelWaitableTimer(long)
 @ stdcall ChangeTimerQueueTimer(ptr ptr long long)
+@ stdcall -version=0x602+ CharLowerA(str) user32.CharLowerA
+@ stdcall -version=0x602+ CharLowerBuffA(str long) user32.CharLowerBuffA
+@ stdcall -version=0x602+ CharLowerBuffW(wstr long) user32.CharLowerBuffW
+@ stdcall -version=0x602+ CharLowerW(wstr) user32.CharLowerW
+@ stdcall -version=0x602+ CharNextA(str) user32.CharNextA
+@ stdcall -version=0x602+ CharNextW(wstr) user32.CharNextW
+@ stdcall -version=0x602+ CharPrevA(str str) user32.CharPrevA
+@ stdcall -version=0x602+ CharPrevW(wstr wstr) user32.CharPrevW
+@ stdcall -version=0x602+ CharToOemA(str ptr) user32.CharToOemA
+@ stdcall -version=0x602+ CharToOemBuffA(str ptr long) user32.CharToOemBuffA
+@ stdcall -version=0x602+ CharToOemBuffW(wstr ptr long) user32.CharToOemBuffW
+@ stdcall -version=0x602+ CharToOemW(wstr ptr) user32.CharToOemW
+@ stdcall -version=0x602+ CharUpperA(str) user32.CharUpperA
+@ stdcall -version=0x602+ CharUpperBuffA(str long) user32.CharUpperBuffA
+@ stdcall -version=0x602+ CharUpperBuffW(wstr long) user32.CharUpperBuffW
+@ stdcall -version=0x602+ CharUpperW(wstr) user32.CharUpperW
 @ stdcall -stub -version=0x600+ CheckElevation(ptr ptr ptr ptr ptr)
 @ stdcall -stub -version=0x600+ CheckElevationEnabled(ptr)
 @ stub -version=0x600+ CheckForReadOnlyResource
@@ -526,6 +542,14 @@
 @ stdcall -version=0x602+ GetPackageFullName(ptr ptr ptr)
 @ stdcall -version=0x602+ GetPackagesByPackageFamily(wstr ptr ptr ptr ptr)
 @ stdcall -version=0x602+ GetThreadInformation(ptr long ptr long)
+@ stdcall -version=0x602+ IsCharAlphaA(long) user32.IsCharAlphaA
+@ stdcall -version=0x602+ IsCharAlphaNumericA(long) user32.IsCharAlphaNumericA
+@ stdcall -version=0x602+ IsCharAlphaNumericW(long) user32.IsCharAlphaNumericW
+@ stdcall -version=0x602+ IsCharAlphaW(long) user32.IsCharAlphaW
+@ stdcall -version=0x602+ IsCharLowerA(long) user32.IsCharLowerA
+@ stdcall -version=0x602+ IsCharLowerW(long) user32.IsCharLowerW
+@ stdcall -version=0x602+ IsCharUpperA(long) user32.IsCharUpperA
+@ stdcall -version=0x602+ IsCharUpperW(long) user32.IsCharUpperW
 @ stdcall -version=0x600+ IsValidLocaleName(wstr)
 @ stdcall GetLogicalDriveStringsA(long ptr)
 @ stdcall GetLogicalDriveStringsW(long ptr)
@@ -826,6 +850,8 @@
 @ stdcall LCMapStringA(long long str long ptr long)
 @ stdcall -version=0x600+ LCMapStringEx(long long wstr long ptr long ptr ptr long)
 @ stdcall LCMapStringW(long long wstr long ptr long)
+@ stdcall -version=0x602+ LoadStringA(long long ptr long) user32.LoadStringA
+@ stdcall -version=0x602+ LoadStringW(long long ptr long) user32.LoadStringW
 @ stdcall -version=0x601+ LocateXStateFeature(ptr long ptr)
 @ stdcall LZClose(long)
 @ stdcall LZCloseFile(long)
@@ -894,6 +920,10 @@
 @ stub -version=0x600+ NlsWriteEtwEvent
 @ stdcall -stub -version=0x600+ NormalizeString(long wstr long ptr long)
 @ stdcall -stub -version=0x600+ NotifyUILanguageChange(long wstr wstr long ptr)
+@ stdcall -version=0x602+ OemToCharA(str ptr) user32.OemToCharA
+@ stdcall -version=0x602+ OemToCharBuffA(str ptr long) user32.OemToCharBuffA
+@ stdcall -version=0x602+ OemToCharBuffW(str ptr long) user32.OemToCharBuffW
+@ stdcall -version=0x602+ OemToCharW(str ptr) user32.OemToCharW
 @ stdcall -version=0x603+ OfferVirtualMemory(ptr long long)
 @ stdcall OpenConsoleW(wstr long long long)
 @ stdcall -version=0x500-0x502 OpenDataFile(long long)
