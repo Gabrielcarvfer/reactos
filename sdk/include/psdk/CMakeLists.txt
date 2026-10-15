@@ -156,6 +156,7 @@ list(APPEND SOURCE
     pstore.idl
     restrictederrorinfo.idl
     richole.idl
+    robuffer.idl
     roparameterizediid.idl
 #   row.idl
 #   rowchg.idl
@@ -209,6 +210,8 @@ list(APPEND SOURCE
     windows.data.json.idl
     windows.foundation.collections.idl
     windows.foundation.idl
+    windows.foundation.metadata.idl
+    windows.storage.streams.idl
     windowscontracts.idl
     xmldom.idl
     xmldso.idl
