@@ -3071,6 +3071,28 @@ NtFlushInstructionCache(_In_ HANDLE ProcessHandle,
     return STATUS_SUCCESS;
 }
 
+/*
+ * PAGE_TARGETS_INVALID (allocation) and PAGE_TARGETS_NO_UPDATE (protection)
+ * are Control Flow Guard flags, for executable protections only. There is no
+ * CFG here: drop them (JIT compilers ask for them: V8 failed in Node.js).
+ * Returns FALSE when one is used with a protection that is not executable.
+ */
+#define MI_PAGE_TARGETS_FLAG 0x40000000
+static
+BOOLEAN
+MiRemoveCfgProtectionFlag(
+    _Inout_ PULONG Protect)
+{
+    ULONG Base;
+
+    if (!(*Protect & MI_PAGE_TARGETS_FLAG))
+        return TRUE;
+    *Protect &= ~MI_PAGE_TARGETS_FLAG;
+    Base = *Protect & ~(PAGE_GUARD | PAGE_NOCACHE | PAGE_WRITECOMBINE);
+    return (Base == PAGE_EXECUTE || Base == PAGE_EXECUTE_READ ||
+            Base == PAGE_EXECUTE_READWRITE || Base == PAGE_EXECUTE_WRITECOPY);
+}
+
 NTSTATUS
 NTAPI
 NtProtectVirtualMemory(IN HANDLE ProcessHandle,
@@ -3094,6 +3116,8 @@ NtProtectVirtualMemory(IN HANDLE ProcessHandle,
     //
     // Check for valid protection flags
     //
+    if (!MiRemoveCfgProtectionFlag(&NewAccessProtection))
+        return STATUS_INVALID_PAGE_PROTECTION;
     Protection = NewAccessProtection & ~(PAGE_GUARD|PAGE_NOCACHE);
     if (Protection != PAGE_NOACCESS &&
         Protection != PAGE_READONLY &&
@@ -4564,6 +4588,11 @@ NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
     }
 
     /* Calculate the protection mask and make sure it's valid */
+    if (!MiRemoveCfgProtectionFlag(&Protect))
+    {
+        DPRINT1("CFG flag on a protection that is not executable\n");
+        return STATUS_INVALID_PAGE_PROTECTION;
+    }
     ProtectionMask = MiMakeProtectionMask(Protect);
     if (ProtectionMask == MM_INVALID_PROTECTION)
     {
