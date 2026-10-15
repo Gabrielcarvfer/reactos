@@ -1813,11 +1813,12 @@ public:
 
     /*
      * Windows 11 style menu for a taskbar button: the app (starts a new one),
-     * pin/unpin, and close. pTaskItem: a window without a pin; PinIndex: a pin.
+     * pin/unpin, minimize, maximize/restore and close (of all the app's
+     * windows). pTaskItem: a window without a pin; PinIndex: a pin.
      */
     VOID ShowAppMenu(PTASK_ITEM pTaskItem, INT PinIndex)
     {
-        enum { CMD_LAUNCH = 1, CMD_PIN, CMD_UNPIN, CMD_CLOSE };
+        enum { CMD_LAUNCH = 1, CMD_PIN, CMD_UNPIN, CMD_MINIMIZE, CMD_MAXIMIZE, CMD_RESTORE, CMD_CLOSE };
         WCHAR szPath[MAX_PATH], szName[128], szText[128];
         PTASK_ITEM First = NULL, Next = NULL;
         INT Count = 0, Cmd;
@@ -1847,8 +1848,15 @@ public:
         AppendMenuW(hMenu, MF_STRING, PinIndex >= 0 ? CMD_UNPIN : CMD_PIN, szText);
         if (Count)
         {
-            LoadStringW(hExplorerInstance, Count > 1 ? IDS_CLOSE_ALL_WINDOWS : IDS_CLOSE_WINDOW, szText, _countof(szText));
+            /* Maximize, or Restore when the (first) window is maximized; also
+             * for windows without a title bar to drag or double-click */
+            BOOL bZoomed = ::IsZoomed(First->hWnd), bIconic = ::IsIconic(First->hWnd);
             AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+            LoadStringW(hExplorerInstance, IDS_MINIMIZE_WINDOW, szText, _countof(szText));
+            AppendMenuW(hMenu, MF_STRING | (bIconic && Count == 1 ? MF_GRAYED : 0), CMD_MINIMIZE, szText);
+            LoadStringW(hExplorerInstance, bZoomed ? IDS_RESTORE_WINDOW : IDS_MAXIMIZE_WINDOW, szText, _countof(szText));
+            AppendMenuW(hMenu, MF_STRING, bZoomed ? CMD_RESTORE : CMD_MAXIMIZE, szText);
+            LoadStringW(hExplorerInstance, Count > 1 ? IDS_CLOSE_ALL_WINDOWS : IDS_CLOSE_WINDOW, szText, _countof(szText));
             AppendMenuW(hMenu, MF_STRING, CMD_CLOSE, szText);
         }
 
@@ -1887,14 +1895,31 @@ public:
             case CMD_UNPIN:
                 UnpinApp(PinIndex);
                 break;
+            case CMD_MINIMIZE:
+            case CMD_MAXIMIZE:
+            case CMD_RESTORE:
             case CMD_CLOSE:
+            {
+                WPARAM SysCmd = Cmd == CMD_MINIMIZE ? SC_MINIMIZE :
+                                Cmd == CMD_MAXIMIZE ? SC_MAXIMIZE :
+                                Cmd == CMD_RESTORE ? SC_RESTORE : SC_CLOSE;
                 for (INT i = m_TaskItemCount - 1; i >= 0; i--)
                 {
                     PTASK_ITEM TaskItem = &m_TaskItems[i];
-                    if (TaskItem == pTaskItem || (PinIndex >= 0 && TaskItem->PinIndex == PinIndex))
-                        ::PostMessageW(TaskItem->hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+                    if (TaskItem != pTaskItem && !(PinIndex >= 0 && TaskItem->PinIndex == PinIndex))
+                        continue;
+                    /* Through the window's system command, like its own menu;
+                     * a window without SC_MAXIMIZE handling (no caption) is
+                     * shown maximized directly */
+                    if (SysCmd == SC_MAXIMIZE && !(::GetWindowLongPtrW(TaskItem->hWnd, GWL_STYLE) & WS_MAXIMIZEBOX))
+                        ::ShowWindowAsync(TaskItem->hWnd, SW_MAXIMIZE);
+                    else
+                        ::PostMessageW(TaskItem->hWnd, WM_SYSCOMMAND, SysCmd, 0);
                 }
+                if (SysCmd == SC_MAXIMIZE || SysCmd == SC_RESTORE)
+                    ::SetForegroundWindow(First->hWnd);
                 break;
+            }
         }
     }
 

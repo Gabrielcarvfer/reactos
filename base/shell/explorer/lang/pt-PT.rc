@@ -230,4 +230,7 @@ BEGIN
     IDS_UNPIN_FROM_TASKBAR "Unpin from taskbar"
     IDS_CLOSE_WINDOW "Close window"
     IDS_CLOSE_ALL_WINDOWS "Close all windows"
+    IDS_MINIMIZE_WINDOW "Minimize"
+    IDS_MAXIMIZE_WINDOW "Maximize"
+    IDS_RESTORE_WINDOW "Restore"
 END

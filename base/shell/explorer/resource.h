@@ -106,6 +106,9 @@
 #define IDS_UNPIN_FROM_TASKBAR 831
 #define IDS_CLOSE_WINDOW       832
 #define IDS_CLOSE_ALL_WINDOWS  833
+#define IDS_MINIMIZE_WINDOW    834
+#define IDS_MAXIMIZE_WINDOW    835
+#define IDS_RESTORE_WINDOW     836
 #define IDS_START                          595
 #define IDS_OPEN_ALL_USERS                 718
 #define IDS_EXPLORE_ALL_USERS              719
