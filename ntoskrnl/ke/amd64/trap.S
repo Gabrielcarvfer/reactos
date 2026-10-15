@@ -582,6 +582,23 @@ FUNC KiRaiseAssertion
 ENDFUNC
 
 
+PUBLIC KiRaiseSecurityCheckFailure
+FUNC KiRaiseSecurityCheckFailure
+    /* No error code */
+    EnterTrap TF_SAVE_ALL
+
+    /* __fastfail(Code) is int 29h with the code in rcx (the CRT's abort,
+       /GS failures...). Report it at the int 29h (2 bytes) */
+    sub qword ptr [rbp + KTRAP_FRAME_Rip], 2
+
+    /* Dispatch it (KiDispatchException ends a user mode process) */
+    DispatchException STATUS_STACK_BUFFER_OVERRUN, 1, [rbp+KTRAP_FRAME_Rcx], 0, 0
+
+    /* Return */
+    ExitTrap TF_SAVE_ALL
+ENDFUNC
+
+
 PUBLIC KiDebugServiceTrap
 FUNC KiDebugServiceTrap
    /* No error code */

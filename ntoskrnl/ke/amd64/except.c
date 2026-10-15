@@ -14,6 +14,7 @@
 #include <debug.h>
 
 extern KI_INTERRUPT_DISPATCH_ENTRY KiUnexpectedRange[256];
+VOID KiRaiseSecurityCheckFailure(VOID);
 
 /* GLOBALS *******************************************************************/
 
@@ -40,6 +41,7 @@ KIDT_INIT KiInterruptInitTable[] =
     {0x12, 0x00, 0x02, KiMcheckAbort},
     {0x13, 0x00, 0x00, KiXmmException},
     {0x1F, 0x00, 0x00, KiApcInterrupt},
+    {0x29, 0x03, 0x00, KiRaiseSecurityCheckFailure},
     {0x2C, 0x03, 0x00, KiRaiseAssertion},
     {0x2D, 0x03, 0x00, KiDebugServiceTrap},
     {0x2F, 0x00, 0x00, KiDpcInterrupt},
@@ -386,6 +388,18 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
 
     /* Increase number of Exception Dispatches */
     KeGetCurrentPrcb()->KeExceptionDispatchCount++;
+
+    /* A fast fail (__fastfail, int 29h) is not for exception handlers: the
+     * program asked to end at once (abort(), a /GS check...) */
+    if ((ExceptionRecord->ExceptionCode == STATUS_STACK_BUFFER_OVERRUN) &&
+        (PreviousMode == UserMode))
+    {
+        DbgPrint("Fast fail (code %Iu) in %.16s\n",
+                 ExceptionRecord->NumberParameters ? ExceptionRecord->ExceptionInformation[0] : 0,
+                 PsGetCurrentProcess()->ImageFileName);
+        KiPrintUserAddress("  at ", (ULONG_PTR)ExceptionRecord->ExceptionAddress);
+        ZwTerminateProcess(NtCurrentProcess(), STATUS_STACK_BUFFER_OVERRUN);
+    }
 
     /* Zero out the context to avoid leaking kernel stack memor to user mode */
     RtlZeroMemory(&Context, sizeof(Context));
