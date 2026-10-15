@@ -792,3 +792,126 @@ INT WINAPI CompareStringOrdinal(const WCHAR *str1, INT len1, const WCHAR *str2, 
     if (ret > 0) return CSTR_GREATER_THAN;
     return CSTR_EQUAL;
 }
+
+/*
+ * FlushProcessWriteBuffers: make the stores of every thread of the process
+ * visible to all processors. Changing the protection of a page makes the
+ * kernel synchronize the processors that run the process (as the TLB
+ * flush does); the barrier covers this processor.
+ */
+VOID
+WINAPI
+FlushProcessWriteBuffers(VOID)
+{
+    static PVOID Page;
+    DWORD OldProtect;
+
+    MemoryBarrier();
+    if (!Page)
+    {
+        PVOID NewPage = VirtualAlloc(NULL, 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (!NewPage)
+            return;
+        if (InterlockedCompareExchangePointer(&Page, NewPage, NULL))
+            VirtualFree(NewPage, 0, MEM_RELEASE);
+    }
+    /* (Touching it first, so that it is in memory and has a mapping) */
+    InterlockedIncrement((LONG *)Page);
+    VirtualProtect(Page, 1, PAGE_READONLY, &OldProtect);
+    VirtualProtect(Page, 1, PAGE_READWRITE, &OldProtect);
+}
+
+/* (ntdll's thread pool does the unloading) */
+VOID NTAPI TpCallbackUnloadDllOnCompletion(PTP_CALLBACK_INSTANCE Instance, HMODULE Module);
+
+VOID
+WINAPI
+FreeLibraryWhenCallbackReturns(
+    IN OUT PTP_CALLBACK_INSTANCE pci,
+    IN HMODULE mod)
+{
+    TpCallbackUnloadDllOnCompletion(pci, mod);
+}
+
+/*
+ * CancelSynchronousIo: cancel the synchronous I/O a thread is waiting for.
+ * ReactOS cannot cancel it (NtCancelSynchronousIoFile is missing): it says
+ * that it found none, which callers must handle anyway (the I/O may have
+ * ended in the meantime).
+ */
+BOOL
+WINAPI
+CancelSynchronousIo(IN HANDLE hThread)
+{
+    DPRINT1("CancelSynchronousIo(%p): not supported, nothing cancelled\n", hThread);
+    SetLastError(ERROR_NOT_FOUND);
+    return FALSE;
+}
+
+/* No process registers itself for a restart (see RegisterApplicationRestart) */
+HRESULT
+WINAPI
+GetApplicationRestartSettings(
+    IN HANDLE hProcess,
+    OUT PWSTR pwzCommandline OPTIONAL,
+    IN OUT PDWORD pcchSize,
+    OUT PDWORD pdwFlags OPTIONAL)
+{
+    if (!pcchSize)
+        return E_INVALIDARG;
+    return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+}
+
+/*
+ * EnumResource*Ex: the Ex flags choose MUI files and languages; ReactOS
+ * keeps the resources in the module itself, so it enumerates those.
+ */
+BOOL
+WINAPI
+EnumResourceNamesExW(
+    IN HMODULE hModule OPTIONAL,
+    IN LPCWSTR lpType,
+    IN ENUMRESNAMEPROCW lpEnumFunc,
+    IN LONG_PTR lParam,
+    IN DWORD dwFlags,
+    IN LANGID LangId)
+{
+    return EnumResourceNamesW(hModule, lpType, lpEnumFunc, lParam);
+}
+
+BOOL
+WINAPI
+EnumResourceNamesExA(
+    IN HMODULE hModule OPTIONAL,
+    IN LPCSTR lpType,
+    IN ENUMRESNAMEPROCA lpEnumFunc,
+    IN LONG_PTR lParam,
+    IN DWORD dwFlags,
+    IN LANGID LangId)
+{
+    return EnumResourceNamesA(hModule, lpType, lpEnumFunc, lParam);
+}
+
+BOOL
+WINAPI
+EnumResourceTypesExW(
+    IN HMODULE hModule OPTIONAL,
+    IN ENUMRESTYPEPROCW lpEnumFunc,
+    IN LONG_PTR lParam,
+    IN DWORD dwFlags,
+    IN LANGID LangId)
+{
+    return EnumResourceTypesW(hModule, lpEnumFunc, lParam);
+}
+
+BOOL
+WINAPI
+EnumResourceTypesExA(
+    IN HMODULE hModule OPTIONAL,
+    IN ENUMRESTYPEPROCA lpEnumFunc,
+    IN LONG_PTR lParam,
+    IN DWORD dwFlags,
+    IN LANGID LangId)
+{
+    return EnumResourceTypesA(hModule, lpEnumFunc, lParam);
+}

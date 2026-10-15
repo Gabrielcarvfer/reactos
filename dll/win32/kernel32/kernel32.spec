@@ -57,7 +57,7 @@
 @ stdcall CancelDeviceWakeupRequest(long)
 @ stdcall CancelIo(long)
 @ stdcall -version=0x600+ CancelIoEx(ptr ptr)
-@ stdcall -stub -version=0x600+ CancelSynchronousIo(ptr)
+@ stdcall -version=0x600+ CancelSynchronousIo(ptr)
 @ stdcall -version=0x600+ CancelThreadpoolIo(ptr) ntdll.TpCancelAsyncIoOperation
 @ stdcall CancelTimerQueueTimer(long long)
 @ stdcall CancelWaitableTimer(long)
@@ -122,8 +122,8 @@
 @ stdcall -stub -version=0x600+ CreateDirectoryTransactedW(wstr wstr ptr ptr)
 @ stdcall CreateDirectoryW(wstr ptr)
 @ stdcall CreateEventA(ptr long long str)
-@ stdcall -stub -version=0x600+ CreateEventExA(ptr str long long)
-@ stdcall -stub -version=0x600+ CreateEventExW(ptr wstr long long)
+@ stdcall -version=0x600+ CreateEventExA(ptr str long long)
+@ stdcall -version=0x600+ CreateEventExW(ptr wstr long long)
 @ stdcall CreateEventW(ptr long long wstr)
 @ stdcall CreateFiber(long ptr ptr)
 @ stdcall CreateFiberEx(long long long ptr ptr)
@@ -148,8 +148,8 @@
 @ stdcall CreateMailslotW(ptr long long ptr)
 @ stdcall CreateMemoryResourceNotification(long)
 @ stdcall CreateMutexA(ptr long str)
-@ stdcall -stub -version=0x600+ CreateMutexExA(ptr str long long)
-@ stdcall -stub -version=0x600+ CreateMutexExW(ptr wstr long long)
+@ stdcall -version=0x600+ CreateMutexExA(ptr str long long)
+@ stdcall -version=0x600+ CreateMutexExW(ptr wstr long long)
 @ stdcall CreateMutexW(ptr long wstr)
 @ stdcall CreateNamedPipeA(str long long long long long long ptr)
 @ stdcall CreateNamedPipeW(wstr long long long long long long ptr)
@@ -186,7 +186,7 @@
 @ stdcall CreateTimerQueueTimer(ptr long ptr ptr long long long)
 @ stdcall CreateToolhelp32Snapshot(long long)
 @ stdcall CreateWaitableTimerA(ptr long str)
-@ stub -version=0x600+ CreateWaitableTimerExA
+@ stdcall -version=0x600+ CreateWaitableTimerExA(ptr str long long)
 @ stdcall -version=0x600+ CreateWaitableTimerExW(ptr wstr long long)
 @ stdcall CreateWaitableTimerW(ptr long wstr)
 ;@ stdcall -arch=x86_64 CtrlRoutine()
@@ -249,12 +249,12 @@
 @ stub -version=0x600+ EnumResourceLanguagesExW
 @ stdcall EnumResourceLanguagesW(long wstr wstr ptr long)
 @ stdcall EnumResourceNamesA(long str ptr long)
-@ stub -version=0x600+ EnumResourceNamesExA
-@ stub -version=0x600+ EnumResourceNamesExW
+@ stdcall -version=0x600+ EnumResourceNamesExA(ptr str ptr long long long)
+@ stdcall -version=0x600+ EnumResourceNamesExW(ptr wstr ptr long long long)
 @ stdcall EnumResourceNamesW(long wstr ptr long)
 @ stdcall EnumResourceTypesA(long ptr long)
-@ stub -version=0x600+ EnumResourceTypesExA
-@ stub -version=0x600+ EnumResourceTypesExW
+@ stdcall -version=0x600+ EnumResourceTypesExA(ptr ptr long long long)
+@ stdcall -version=0x600+ EnumResourceTypesExW(ptr ptr long long long)
 @ stdcall EnumResourceTypesW(long ptr long)
 @ stdcall EnumSystemCodePagesA(ptr long)
 @ stdcall EnumSystemCodePagesW(ptr long)
@@ -339,7 +339,7 @@
 @ stdcall FlushConsoleInputBuffer(long)
 @ stdcall FlushFileBuffers(long)
 @ stdcall FlushInstructionCache(long long long)
-@ stub -version=0x600+ FlushProcessWriteBuffers
+@ stdcall -version=0x600+ FlushProcessWriteBuffers()
 @ stdcall FlushViewOfFile(ptr long)
 @ stdcall FoldStringA(long str long ptr long)
 @ stdcall FoldStringW(long wstr long ptr long)
@@ -350,7 +350,7 @@
 @ stdcall FreeEnvironmentStringsW(ptr)
 @ stdcall FreeLibrary(long)
 @ stdcall FreeLibraryAndExitThread(long long)
-@ stub -version=0x600+ FreeLibraryWhenCallbackReturns
+@ stdcall -version=0x600+ FreeLibraryWhenCallbackReturns(ptr ptr)
 @ stdcall FreeResource(long)
 @ stdcall FreeUserPhysicalPages(long long long)
 @ stdcall GenerateConsoleCtrlEvent(long long)
@@ -358,7 +358,7 @@
 @ stdcall -version=0x601+ GetActiveProcessorCount(long)
 @ stdcall -version=0x601+ GetActiveProcessorGroupCount()
 @ stdcall -version=0x600+ GetApplicationRecoveryCallback(ptr ptr ptr ptr ptr)
-@ stub -version=0x600+ GetApplicationRestartSettings
+@ stdcall -version=0x600+ GetApplicationRestartSettings(ptr ptr ptr ptr)
 @ stdcall -version=0x602+ GetApplicationUserModelId(ptr ptr ptr)
 @ stdcall GetAtomNameA(long ptr long)
 @ stdcall GetAtomNameW(long ptr long)
@@ -562,7 +562,7 @@
 @ stdcall -version=0x500-0x502 GetNlsSectionName(long long long str str long)
 @ stdcall GetNumaAvailableMemoryNode(long ptr)
 @ stdcall GetNumaHighestNodeNumber(ptr)
-@ stdcall -stub -version=0x601+ GetNumaNodeProcessorMaskEx(long ptr)
+@ stdcall -version=0x601+ GetNumaNodeProcessorMaskEx(long ptr)
 @ stdcall GetNumaNodeProcessorMask(long ptr)
 @ stdcall GetNumaProcessorNode(long ptr)
 @ stdcall -version=0x601+ GetNumaProcessorNodeEx(ptr ptr)
@@ -800,7 +800,7 @@
 @ stdcall -version=0x601+ K32EnumPageFilesA(ptr ptr) EnumPageFilesA
 @ stdcall -version=0x601+ K32EnumPageFilesW(ptr ptr) EnumPageFilesW
 @ stdcall -version=0x601+ K32EnumProcessModules(long ptr long ptr) EnumProcessModules
-@ stdcall -stub -version=0x601+ K32EnumProcessModulesEx(long ptr long ptr long); EnumProcessModulesEx
+@ stdcall -version=0x601+ K32EnumProcessModulesEx(long ptr long ptr long) EnumProcessModulesEx
 @ stdcall -version=0x601+ K32EnumProcesses(ptr long ptr) EnumProcesses
 @ stdcall -version=0x601+ K32GetDeviceDriverBaseNameA(ptr ptr long) GetDeviceDriverBaseNameA
 @ stdcall -version=0x601+ K32GetDeviceDriverBaseNameW(ptr ptr long) GetDeviceDriverBaseNameW

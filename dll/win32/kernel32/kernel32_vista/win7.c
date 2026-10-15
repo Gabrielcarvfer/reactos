@@ -1080,3 +1080,31 @@ GetLogicalProcessorInformationEx(
     RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
     return TRUE;
 }
+
+/* (winbase.h does not always declare it) */
+BOOL WINAPI GetNumaNodeProcessorMask(UCHAR Node, PULONGLONG ProcessorMask);
+
+/*
+ * GetNumaNodeProcessorMaskEx: the processors of a NUMA node, with their
+ * group. There is one group (and the nodes of GetNumaNodeProcessorMask).
+ */
+BOOL
+WINAPI
+GetNumaNodeProcessorMaskEx(
+    _In_ USHORT Node,
+    _Out_ PGROUP_AFFINITY ProcessorMask)
+{
+    ULONGLONG Mask;
+
+    if (!ProcessorMask || Node > 0xff)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!GetNumaNodeProcessorMask((UCHAR)Node, &Mask))
+        return FALSE;
+    RtlZeroMemory(ProcessorMask, sizeof(*ProcessorMask));
+    ProcessorMask->Mask = (KAFFINITY)Mask;
+    ProcessorMask->Group = 0;
+    return TRUE;
+}

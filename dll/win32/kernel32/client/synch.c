@@ -562,6 +562,46 @@ CreateMutexW(IN LPSECURITY_ATTRIBUTES lpMutexAttributes  OPTIONAL,
  */
 HANDLE
 WINAPI
+CreateMutexExW(IN LPSECURITY_ATTRIBUTES lpMutexAttributes OPTIONAL,
+               IN LPCWSTR lpName OPTIONAL,
+               IN DWORD dwFlags,
+               IN DWORD dwDesiredAccess)
+{
+    /* CREATE_MUTEX_INITIAL_OWNER (1) */
+    if (dwFlags & ~0x1)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    CreateNtObjectFromWin32Api(Mutex, Mutant, dwDesiredAccess,
+                               lpMutexAttributes,
+                               lpName,
+                               (dwFlags & 0x1) ? TRUE : FALSE);
+}
+
+/*
+ * @implemented
+ */
+HANDLE
+WINAPI
+CreateMutexExA(IN LPSECURITY_ATTRIBUTES lpMutexAttributes OPTIONAL,
+               IN LPCSTR lpName OPTIONAL,
+               IN DWORD dwFlags,
+               IN DWORD dwDesiredAccess)
+{
+    PUNICODE_STRING Name = NULL;
+
+    if (lpName && !(Name = Basep8BitStringToStaticUnicodeString(lpName)))
+        return NULL;
+    return CreateMutexExW(lpMutexAttributes, Name ? Name->Buffer : NULL, dwFlags, dwDesiredAccess);
+}
+
+/*
+ * @implemented
+ */
+HANDLE
+WINAPI
 DECLSPEC_HOTPATCH
 OpenMutexW(IN DWORD dwDesiredAccess,
            IN BOOL bInheritHandle,
@@ -619,6 +659,64 @@ CreateEventW(IN LPSECURITY_ATTRIBUTES lpEventAttributes  OPTIONAL,
                                lpName,
                                bManualReset ? NotificationEvent : SynchronizationEvent,
                                bInitialState);
+}
+
+/*
+ * @implemented
+ */
+HANDLE
+WINAPI
+CreateEventExW(IN LPSECURITY_ATTRIBUTES lpEventAttributes OPTIONAL,
+               IN LPCWSTR lpName OPTIONAL,
+               IN DWORD dwFlags,
+               IN DWORD dwDesiredAccess)
+{
+    /* CREATE_EVENT_MANUAL_RESET (1) and CREATE_EVENT_INITIAL_SET (2) */
+    if (dwFlags & ~(0x1 | 0x2))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    CreateNtObjectFromWin32Api(Event, Event, dwDesiredAccess,
+                               lpEventAttributes,
+                               lpName,
+                               (dwFlags & 0x1) ? NotificationEvent : SynchronizationEvent,
+                               (dwFlags & 0x2) ? TRUE : FALSE);
+}
+
+/*
+ * @implemented
+ */
+HANDLE
+WINAPI
+CreateEventExA(IN LPSECURITY_ATTRIBUTES lpEventAttributes OPTIONAL,
+               IN LPCSTR lpName OPTIONAL,
+               IN DWORD dwFlags,
+               IN DWORD dwDesiredAccess)
+{
+    PUNICODE_STRING Name = NULL;
+
+    if (lpName && !(Name = Basep8BitStringToStaticUnicodeString(lpName)))
+        return NULL;
+    return CreateEventExW(lpEventAttributes, Name ? Name->Buffer : NULL, dwFlags, dwDesiredAccess);
+}
+
+/*
+ * @implemented
+ */
+HANDLE
+WINAPI
+CreateWaitableTimerExA(IN LPSECURITY_ATTRIBUTES lpTimerAttributes OPTIONAL,
+                       IN LPCSTR lpTimerName OPTIONAL,
+                       IN DWORD dwFlags,
+                       IN DWORD dwDesiredAccess)
+{
+    PUNICODE_STRING Name = NULL;
+
+    if (lpTimerName && !(Name = Basep8BitStringToStaticUnicodeString(lpTimerName)))
+        return NULL;
+    return CreateWaitableTimerExW(lpTimerAttributes, Name ? Name->Buffer : NULL, dwFlags, dwDesiredAccess);
 }
 
 /*

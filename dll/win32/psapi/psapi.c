@@ -459,6 +459,30 @@ EnumProcesses(DWORD *lpidProcess,
 
 /*
  * @implemented
+ *
+ * The filter (32-bit, 64-bit or all modules) chooses between the two module
+ * lists of a WoW64 process. Only the native list is enumerated here, which
+ * is what the default filter gives (and what EnumProcessModules returns).
+ */
+BOOL
+WINAPI
+EnumProcessModulesEx(HANDLE hProcess,
+                     HMODULE *lphModule,
+                     DWORD cb,
+                     LPDWORD lpcbNeeded,
+                     DWORD dwFilterFlag)
+{
+    /* LIST_MODULES_DEFAULT (0), _32BIT (1), _64BIT (2), _ALL (3) */
+    if (dwFilterFlag > 3)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    return EnumProcessModules(hProcess, lphModule, cb, lpcbNeeded);
+}
+
+/*
+ * @implemented
  */
 BOOL
 WINAPI
