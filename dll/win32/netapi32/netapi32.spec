@@ -148,6 +148,8 @@
 @ stdcall NetFileClose(wstr long)
 @ stdcall NetFileEnum(wstr wstr wstr long ptr long ptr ptr ptr)
 @ stdcall NetFileGetInfo(wstr long long ptr)
+@ stdcall -version=0xA00+ NetFreeAadJoinInformation(ptr)
+@ stdcall -version=0xA00+ NetGetAadJoinInformation(wstr ptr)
 @ stdcall NetGetAnyDCName(wstr wstr ptr)
 @ stdcall NetGetDCName(wstr wstr ptr)
 @ stdcall NetGetDisplayInformationIndex(wstr long wstr ptr)

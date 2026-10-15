@@ -1084,6 +1084,27 @@ AddAccessAllowedAceEx(PACL pAcl,
     return TRUE;
 }
 
+#ifdef __REACTOS__
+/*
+ * AddConditionalAce (Windows 7): an ACE with a condition on the claims of
+ * the caller. ReactOS's access checks have no conditions or claims.
+ */
+BOOL
+WINAPI
+AddConditionalAce(PACL pAcl,
+                  DWORD dwAceRevision,
+                  DWORD AceFlags,
+                  UCHAR AceType,
+                  DWORD AccessMask,
+                  PSID pSid,
+                  PWCHAR ConditionStr,
+                  DWORD *ReturnLength)
+{
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return FALSE;
+}
+#endif
+
 /*
  * Adds a mandatory label (integrity level) ACE to a system ACL.
  *

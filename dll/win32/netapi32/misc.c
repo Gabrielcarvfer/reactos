@@ -322,3 +322,29 @@ NetpNtStatusToApiStatus(
 }
 
 /* EOF */
+
+
+/*
+ * NetGetAadJoinInformation (Windows 10): the Azure AD join of the computer
+ * or user. ReactOS cannot be joined: no information (S_OK and NULL, which is
+ * what Windows answers when not joined).
+ */
+HRESULT
+WINAPI
+NetGetAadJoinInformation(
+    _In_opt_ LPCWSTR pcszTenantId,
+    _Outptr_result_maybenull_ PVOID *ppJoinInfo)
+{
+    if (!ppJoinInfo)
+        return E_INVALIDARG;
+    *ppJoinInfo = NULL;
+    return S_OK;
+}
+
+VOID
+WINAPI
+NetFreeAadJoinInformation(
+    _In_opt_ PVOID pJoinInfo)
+{
+    /* (None was ever returned) */
+}

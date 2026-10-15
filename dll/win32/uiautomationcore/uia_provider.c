@@ -2317,3 +2317,17 @@ HRESULT WINAPI UiaDisconnectProvider(IRawElementProviderSimple *elprov)
 
     return S_OK;
 }
+
+#ifdef __REACTOS__
+/***********************************************************************
+ *          UiaDisconnectAllProviders (uiautomationcore.@)
+ *
+ * Providers are only connected to clients of this process here (there is
+ * no UI Automation across processes): nothing to disconnect from.
+ */
+HRESULT WINAPI UiaDisconnectAllProviders(void)
+{
+    TRACE("()\n");
+    return S_OK;
+}
+#endif

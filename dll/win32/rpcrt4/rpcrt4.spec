@@ -1,5 +1,6 @@
 @ stdcall CreateProxyFromTypeInfo(ptr ptr ptr ptr ptr)
 @ stdcall CreateStubFromTypeInfo(ptr ptr ptr ptr)
+@ stdcall -version=0x600+ I_RpcOpenClientProcess(ptr long ptr)
 @ stub I_RpcServerTurnOnOffKeepalives
 @ stdcall CStdStubBuffer_AddRef(ptr)
 @ stdcall CStdStubBuffer_Connect(ptr ptr)
