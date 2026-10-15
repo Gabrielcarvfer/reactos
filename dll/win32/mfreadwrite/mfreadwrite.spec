@@ -1,2 +1,5 @@
 @ stdcall MFCreateSourceReaderFromMediaSource(ptr ptr ptr)
 @ stdcall MFCreateSourceReaderFromURL(wstr ptr ptr)
+@ stdcall MFCreateSourceReaderFromByteStream(ptr ptr ptr)
+@ stdcall MFCreateSinkWriterFromURL(wstr ptr ptr ptr)
+@ stdcall MFCreateSinkWriterFromMediaSink(ptr ptr ptr)

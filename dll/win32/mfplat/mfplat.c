@@ -80,3 +80,63 @@ HRESULT WINAPI MFCreateStreamDescriptor(DWORD Identifier, DWORD Count, void **Ty
 {
     NOT_AVAILABLE(Descriptor);
 }
+
+/* Functions of Chromium's, Firefox's and OBS's Media Foundation code */
+HRESULT WINAPI MFCreateMediaBufferWrapper(void *Buffer, DWORD Offset, DWORD Length, void **Wrapper)
+{
+    NOT_AVAILABLE(Wrapper);
+}
+HRESULT WINAPI MFCreateWaveFormatExFromMFMediaType(void *Type, void **Format, UINT32 *Size, UINT32 Flags)
+{
+    if (Size) *Size = 0;
+    NOT_AVAILABLE(Format);
+}
+HRESULT WINAPI MFInitMediaTypeFromWaveFormatEx(void *Type, const void *Format, UINT32 Size)
+{
+    return MF_E_PLATFORM_NOT_INITIALIZED;
+}
+HRESULT WINAPI MFSerializeAttributesToStream(void *Attributes, DWORD Options, IStream *Stream)
+{
+    return MF_E_PLATFORM_NOT_INITIALIZED;
+}
+HRESULT WINAPI MFCreateSourceResolver(void **Resolver) { NOT_AVAILABLE(Resolver); }
+HRESULT WINAPI MFUnwrapMediaType(void *Wrapper, void **Original) { NOT_AVAILABLE(Original); }
+HRESULT WINAPI MFInvokeCallback(void *AsyncResult) { return MF_E_PLATFORM_NOT_INITIALIZED; }
+HRESULT WINAPI MFPutWorkItem(DWORD Queue, void *Callback, IUnknown *State)
+{
+    return MF_E_PLATFORM_NOT_INITIALIZED;
+}
+
+/* The stride of an image of a format (in bytes, from the bit count) */
+HRESULT WINAPI MFGetStrideForBitmapInfoHeader(DWORD Format, DWORD Width, LONG *Stride)
+{
+    if (!Stride)
+        return E_POINTER;
+    *Stride = 0;
+    switch (Format)
+    {
+        case 21: /* D3DFMT_A8R8G8B8 */
+        case 22: /* D3DFMT_X8R8G8B8 */
+            *Stride = Width * 4;
+            return S_OK;
+        case 20: /* D3DFMT_R8G8B8 */
+            *Stride = (Width * 3 + 3) & ~3;
+            return S_OK;
+        case 23: /* D3DFMT_R5G6B5 */
+        case 24: /* D3DFMT_X1R5G5B5 */
+            *Stride = Width * 2;
+            return S_OK;
+        default:
+            return MF_E_PLATFORM_NOT_INITIALIZED;
+    }
+}
+
+/* Media Foundation's clock: 100 ns units, monotonic */
+LONGLONG WINAPI MFGetSystemTime(void)
+{
+    LARGE_INTEGER Counter, Frequency;
+
+    QueryPerformanceFrequency(&Frequency);
+    QueryPerformanceCounter(&Counter);
+    return (LONGLONG)((double)Counter.QuadPart * 10000000.0 / (double)Frequency.QuadPart);
+}

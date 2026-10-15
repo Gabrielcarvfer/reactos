@@ -21,3 +21,21 @@ HRESULT WINAPI MFCreateSourceReaderFromURL(const WCHAR *Url, void *Attributes, v
     if (Reader) *Reader = NULL;
     return MF_E_PLATFORM_NOT_INITIALIZED;
 }
+
+HRESULT WINAPI MFCreateSourceReaderFromByteStream(void *Stream, void *Attributes, void **Reader)
+{
+    if (Reader) *Reader = NULL;
+    return MF_E_PLATFORM_NOT_INITIALIZED;
+}
+
+HRESULT WINAPI MFCreateSinkWriterFromURL(const WCHAR *Url, void *Stream, void *Attributes, void **Writer)
+{
+    if (Writer) *Writer = NULL;
+    return MF_E_PLATFORM_NOT_INITIALIZED;
+}
+
+HRESULT WINAPI MFCreateSinkWriterFromMediaSink(void *Sink, void *Attributes, void **Writer)
+{
+    if (Writer) *Writer = NULL;
+    return MF_E_PLATFORM_NOT_INITIALIZED;
+}
