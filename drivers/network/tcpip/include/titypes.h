@@ -301,6 +301,7 @@ typedef struct _TI_QUERY_CONTEXT {
     PMDL InputMdl;
     PMDL OutputMdl;
     TCP_REQUEST_QUERY_INFORMATION_EX QueryInfo;
+    ULONG ContextOffset; /* of Context in the caller's request (32-bit callers: 20) */
 } TI_QUERY_CONTEXT, *PTI_QUERY_CONTEXT;
 
 /* EOF */
