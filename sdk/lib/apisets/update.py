@@ -39,6 +39,8 @@ REDIRECT_APISETS = {
     'api-ms-win-downlevel-shlwapi-': 'shlwapi.dll',
     'api-ms-win-core-url-': 'shlwapi.dll',
     'api-ms-win-core-path-': 'kernelbase_ros.dll',
+    # WaitOnAddress is not in kernel32 on Windows (VLC 3 relies on that)
+    'api-ms-win-core-synch-l1-2-': 'kernelbase_ros.dll',
     'api-ms-win-downlevel-user32-': 'user32.dll',
     'api-ms-win-downlevel-normaliz-': 'normaliz.dll',
     'api-ms-win-mm-time-': 'winmm.dll',
