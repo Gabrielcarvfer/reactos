@@ -824,6 +824,71 @@ CMP_UnregisterNotification(
 
 
 /***********************************************************************
+ * CM_Register_Notification [SETUPAPI.@]
+ *
+ * Windows 8: call back when devices of a kind come and go. No device changes
+ * are reported here yet: the registration is checked and kept, and its
+ * callback is never called. (Firefox watches its audio devices this way.)
+ */
+#define CM_NOTIFICATION_MAGIC 0x4e4d4343 /* "CCMN" */
+
+typedef struct _CM_NOTIFICATION
+{
+    ULONG ulMagic;
+    PVOID pCallback;
+    PVOID pContext;
+} CM_NOTIFICATION, *PCM_NOTIFICATION;
+
+CONFIGRET
+WINAPI
+CM_Register_Notification(
+    _In_ PVOID pFilter,
+    _In_opt_ PVOID pContext,
+    _In_ PVOID pCallback,
+    _Out_ PVOID *pNotifyContext)
+{
+    PCM_NOTIFICATION pNotification;
+
+    TRACE("CM_Register_Notification(%p %p %p %p)\n", pFilter, pContext, pCallback, pNotifyContext);
+
+    if (!pFilter || !pCallback || !pNotifyContext)
+        return CR_INVALID_POINTER;
+    /* (The filter starts with its size) */
+    if (*(PULONG)pFilter < sizeof(ULONG) * 4)
+        return CR_INVALID_DATA;
+
+    pNotification = HeapAlloc(GetProcessHeap(), 0, sizeof(*pNotification));
+    if (!pNotification)
+        return CR_OUT_OF_MEMORY;
+    pNotification->ulMagic = CM_NOTIFICATION_MAGIC;
+    pNotification->pCallback = pCallback;
+    pNotification->pContext = pContext;
+    *pNotifyContext = pNotification;
+    return CR_SUCCESS;
+}
+
+
+/***********************************************************************
+ * CM_Unregister_Notification [SETUPAPI.@]
+ */
+CONFIGRET
+WINAPI
+CM_Unregister_Notification(
+    _In_ PVOID NotifyContext)
+{
+    PCM_NOTIFICATION pNotification = NotifyContext;
+
+    TRACE("CM_Unregister_Notification(%p)\n", NotifyContext);
+
+    if (!pNotification || pNotification->ulMagic != CM_NOTIFICATION_MAGIC)
+        return CR_INVALID_POINTER;
+    pNotification->ulMagic = 0;
+    HeapFree(GetProcessHeap(), 0, pNotification);
+    return CR_SUCCESS;
+}
+
+
+/***********************************************************************
  * CMP_WaitNoPendingInstallEvents [SETUPAPI.@]
  */
 DWORD

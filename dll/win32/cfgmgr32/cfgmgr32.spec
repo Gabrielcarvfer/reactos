@@ -166,6 +166,7 @@
 @ stdcall CM_Register_Device_InterfaceW(long ptr wstr wstr ptr long) setupapi.CM_Register_Device_InterfaceW
 @ stdcall CM_Register_Device_Interface_ExA(long ptr str str ptr long long) setupapi.CM_Register_Device_Interface_ExA
 @ stdcall CM_Register_Device_Interface_ExW(long ptr wstr wstr ptr long long) setupapi.CM_Register_Device_Interface_ExW
+@ stdcall -version=0x602+ CM_Register_Notification(ptr ptr ptr ptr) setupapi.CM_Register_Notification
 @ stdcall CM_Remove_SubTree(long long) setupapi.CM_Remove_SubTree
 @ stdcall CM_Remove_SubTree_Ex(long long long) setupapi.CM_Remove_SubTree_Ex
 @ stdcall CM_Request_Eject_PC() setupapi.CM_Request_Eject_PC
@@ -201,3 +202,4 @@
 @ stub CM_Remove_Unmarked_Children_Ex # setupapi.CM_Remove_Unmarked_Children_Ex
 @ stub CM_Reset_Children_Marks # setupapi.CM_Reset_Children_Marks
 @ stub CM_Reset_Children_Marks_Ex # setupapi.CM_Reset_Children_Marks_Ex
+@ stdcall -version=0x602+ CM_Unregister_Notification(ptr) setupapi.CM_Unregister_Notification
