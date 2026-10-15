@@ -440,7 +440,15 @@ NtUserProcessConnect(
         // FIXME: Check that pUserConnect->ulVersion == USER_VERSION;
         // FIXME: Check the value of pUserConnect->dwDispatchCount.
 
+        /* A 32-bit program's structure (on its stack) is only 4-byte aligned:
+           probing it for 8 failed, depending on where the thread's stack is
+           (user32 then failed to load in a second thread) */
+#ifdef _WIN64
+        ProbeForWrite(pUserConnect, sizeof(*pUserConnect),
+                      IoIs32bitProcess(NULL) ? sizeof(ULONG) : sizeof(PVOID));
+#else
         ProbeForWrite(pUserConnect, sizeof(*pUserConnect), sizeof(PVOID));
+#endif
 
         // FIXME: Instead of assuming that the mapping of the heap desktop
         // also holds there, we **MUST** create and map instead the shared
