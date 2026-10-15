@@ -548,6 +548,7 @@ SepDuplicateToken(
     SepAcquireTokenLockShared(Token);
 
     AccessToken->SessionId = Token->SessionId;
+    AccessToken->IntegrityLevelRid = Token->IntegrityLevelRid;
     AccessToken->ModifiedId = Token->ModifiedId;
 
     AccessToken->TokenFlags = Token->TokenFlags & ~TOKEN_SESSION_NOT_REFERENCED;
@@ -991,6 +992,7 @@ SepPerformTokenFiltering(
 
     /* Copy the mutable fields */
     AccessToken->SessionId = Token->SessionId;
+    AccessToken->IntegrityLevelRid = Token->IntegrityLevelRid;
     AccessToken->TokenFlags = Token->TokenFlags & ~TOKEN_SESSION_NOT_REFERENCED;
 
     /* Reference the logon session */

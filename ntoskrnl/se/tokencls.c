@@ -70,7 +70,7 @@ static const INFORMATION_CLASS_INFO SeTokenInformationClass[] = {
     /* TokenVirtualizationEnabled */
     IQS_SAME(ULONG, ULONG, ICIF_QUERY),
     /* TokenIntegrityLevel */
-    IQS_SAME(TOKEN_MANDATORY_LABEL, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
+    IQS_SAME(TOKEN_MANDATORY_LABEL, ULONG, ICIF_QUERY | ICIF_SET | ICIF_SIZE_VARIABLE),
     /* TokenUIAccess */
     IQS_SAME(ULONG, ULONG, ICIF_QUERY),
     /* TokenMandatoryPolicy */
@@ -108,6 +108,18 @@ SepTokenIsAdmin(
         }
     }
     return FALSE;
+}
+
+/* The integrity level of a token: the one set on it (lowered, by a
+ * sandbox), else high for administrators and medium for the others */
+static
+ULONG
+SepGetTokenIntegrityRid(
+    _In_ PTOKEN Token)
+{
+    if (Token->IntegrityLevelRid)
+        return Token->IntegrityLevelRid;
+    return SepTokenIsAdmin(Token) ? SECURITY_MANDATORY_HIGH_RID : SECURITY_MANDATORY_MEDIUM_RID;
 }
 
 /* PUBLIC FUNCTIONS *****************************************************************/
@@ -1183,8 +1195,7 @@ NtQueryInformationToken(
                         PSID Sid = (PSID)(Label + 1);
 
                         RtlInitializeSid(Sid, &MandatoryLabelAuthority, 1);
-                        *RtlSubAuthoritySid(Sid, 0) = SepTokenIsAdmin(Token) ?
-                            SECURITY_MANDATORY_HIGH_RID : SECURITY_MANDATORY_MEDIUM_RID;
+                        *RtlSubAuthoritySid(Sid, 0) = SepGetTokenIntegrityRid(Token);
                         Label->Label.Sid = Sid;
                         Label->Label.Attributes = 0x20 | 0x40; /* SE_GROUP_INTEGRITY | SE_GROUP_INTEGRITY_ENABLED */
                     }
@@ -1621,6 +1632,56 @@ NtSetInformationToken(
                 {
                     Status = STATUS_INFO_LENGTH_MISMATCH;
                 }
+                break;
+            }
+
+            case TokenIntegrityLevel:
+            {
+                /* Lower the integrity level (Chromium's sandbox makes its
+                 * processes' tokens Low or Untrusted); raising it needs TCB */
+                static SID_IDENTIFIER_AUTHORITY MandatoryLabelAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
+                ULONG Rid = 0;
+                BOOLEAN Valid = FALSE;
+
+                _SEH2_TRY
+                {
+                    PSID Sid = ((PTOKEN_MANDATORY_LABEL)TokenInformation)->Label.Sid;
+
+                    if (PreviousMode != KernelMode)
+                        ProbeForRead(Sid, RtlLengthRequiredSid(1), sizeof(UCHAR));
+                    if (RtlValidSid(Sid) && *RtlSubAuthorityCountSid(Sid) == 1 &&
+                        RtlEqualMemory(RtlIdentifierAuthoritySid(Sid), &MandatoryLabelAuthority,
+                                       sizeof(MandatoryLabelAuthority)))
+                    {
+                        Rid = *RtlSubAuthoritySid(Sid, 0);
+                        Valid = TRUE;
+                    }
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Status = _SEH2_GetExceptionCode();
+                    _SEH2_YIELD(goto Cleanup);
+                }
+                _SEH2_END;
+
+                if (!Valid)
+                {
+                    Status = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+
+                SepAcquireTokenLockExclusive(Token);
+                if (Rid > SepGetTokenIntegrityRid(Token) &&
+                    !SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
+                {
+                    Status = STATUS_PRIVILEGE_NOT_HELD;
+                }
+                else
+                {
+                    Token->IntegrityLevelRid = Rid;
+                    ExAllocateLocallyUniqueId(&Token->ModifiedId);
+                }
+                SepReleaseTokenLock(Token);
                 break;
             }
 
