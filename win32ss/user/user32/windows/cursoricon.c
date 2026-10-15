@@ -1915,6 +1915,23 @@ CURSORICON_LoadImageW(
         &cursorData,
         (BITMAPINFO*)bits);
 
+    if(!bStatus && dir->idType != 2)
+    {
+        /* A PNG image (Vista icons; most of Notepad++'s toolbar icons): convert
+         * it, as CreateIconFromResourceEx does */
+        DWORD BmpIconSize;
+        PBYTE pbBmpIcon = CURSORICON_ConvertPngToBmpIcon(bits, SizeofResource(hinst, hrsrc), &BmpIconSize);
+
+        if (pbBmpIcon)
+        {
+            CURSORICONFILEDIR *pngdir = (CURSORICONFILEDIR *)pbBmpIcon;
+
+            bStatus = CURSORICON_GetCursorDataFromBMI(&cursorData,
+                (BITMAPINFO*)&pbBmpIcon[pngdir->idEntries[0].dwDIBOffset]);
+            HeapFree(GetProcessHeap(), 0, pbBmpIcon);
+        }
+    }
+
     FreeResource( handle );
 
     if(!bStatus)
