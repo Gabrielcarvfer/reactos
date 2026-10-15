@@ -75,8 +75,8 @@ static const INFORMATION_CLASS_INFO SeTokenInformationClass[] = {
     IQS_SAME(ULONG, ULONG, ICIF_QUERY),
     /* TokenMandatoryPolicy */
     IQS_SAME(TOKEN_MANDATORY_POLICY, ULONG, ICIF_QUERY),
-    /* TokenLogonSid (not supported) */
-    IQS_NONE,
+    /* TokenLogonSid */
+    IQS_SAME(TOKEN_GROUPS, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenIsAppContainer */
     IQS_SAME(ULONG, ULONG, ICIF_QUERY),
     /* TokenCapabilities */
@@ -85,7 +85,27 @@ static const INFORMATION_CLASS_INFO SeTokenInformationClass[] = {
     IQS_SAME(PSID, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenAppContainerNumber */
     IQS_SAME(ULONG, ULONG, ICIF_QUERY),
+    /* TokenUserClaimAttributes .. TokenRestrictedDeviceGroups (not supported) */
+    IQS_NONE,
+    IQS_NONE,
+    IQS_NONE,
+    IQS_NONE,
+    IQS_NONE,
+    IQS_NONE,
+    /* TokenSecurityAttributes */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
+    /* TokenIsRestricted */
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY),
 };
+
+/* TokenSecurityAttributes: the header of the list (the attributes follow) */
+typedef struct _SEP_TOKEN_SECURITY_ATTRIBUTES_INFORMATION
+{
+    USHORT Version;
+    USHORT Reserved;
+    ULONG AttributeCount;
+    PVOID pAttributeV1;
+} SEP_TOKEN_SECURITY_ATTRIBUTES_INFORMATION;
 
 /*
  * Whether a token has the Administrators group enabled. ReactOS has no UAC:
@@ -117,8 +137,9 @@ ULONG
 SepGetTokenIntegrityRid(
     _In_ PTOKEN Token)
 {
+    /* (Stored plus one: untrusted is 0) */
     if (Token->IntegrityLevelRid)
-        return Token->IntegrityLevelRid;
+        return Token->IntegrityLevelRid - 1;
     return SepTokenIsAdmin(Token) ? SECURITY_MANDATORY_HIGH_RID : SECURITY_MANDATORY_MEDIUM_RID;
 }
 
@@ -1214,6 +1235,108 @@ NtQueryInformationToken(
                 break;
             }
 
+            case TokenLogonSid:
+            {
+                /* The logon session's group of the token (Chromium's
+                 * sandbox revokes its access in the default DACL) */
+                PTOKEN_GROUPS tg = (PTOKEN_GROUPS)TokenInformation;
+                ULONG i, Count = 0, SidsLength = 0;
+
+                for (i = 1; i < Token->UserAndGroupCount; i++)
+                {
+                    if (Token->UserAndGroups[i].Attributes & SE_GROUP_LOGON_ID)
+                    {
+                        Count++;
+                        SidsLength += RtlLengthSid(Token->UserAndGroups[i].Sid);
+                    }
+                }
+                if (!Count)
+                {
+                    Status = STATUS_NOT_FOUND;
+                    break;
+                }
+
+                RequiredLength = FIELD_OFFSET(TOKEN_GROUPS, Groups[Count]) + SidsLength;
+                _SEH2_TRY
+                {
+                    if (TokenInformationLength >= RequiredLength)
+                    {
+                        PUCHAR SidBuffer = (PUCHAR)&tg->Groups[Count];
+                        ULONG n = 0;
+
+                        tg->GroupCount = Count;
+                        for (i = 1; i < Token->UserAndGroupCount; i++)
+                        {
+                            ULONG Length;
+
+                            if (!(Token->UserAndGroups[i].Attributes & SE_GROUP_LOGON_ID))
+                                continue;
+                            Length = RtlLengthSid(Token->UserAndGroups[i].Sid);
+                            RtlCopyMemory(SidBuffer, Token->UserAndGroups[i].Sid, Length);
+                            tg->Groups[n].Sid = (PSID)SidBuffer;
+                            tg->Groups[n].Attributes = Token->UserAndGroups[i].Attributes;
+                            SidBuffer += Length;
+                            n++;
+                        }
+                    }
+                    else
+                    {
+                        Status = STATUS_BUFFER_TOO_SMALL;
+                    }
+                    *ReturnLength = RequiredLength;
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Status = _SEH2_GetExceptionCode();
+                }
+                _SEH2_END;
+
+                break;
+            }
+
+            case TokenSecurityAttributes:
+            {
+                /* No security attributes: an empty version 1 list */
+                RequiredLength = sizeof(SEP_TOKEN_SECURITY_ATTRIBUTES_INFORMATION);
+                _SEH2_TRY
+                {
+                    if (TokenInformationLength >= RequiredLength)
+                    {
+                        RtlZeroMemory(TokenInformation, RequiredLength);
+                        ((SEP_TOKEN_SECURITY_ATTRIBUTES_INFORMATION *)TokenInformation)->Version = 1;
+                    }
+                    else
+                    {
+                        Status = STATUS_BUFFER_TOO_SMALL;
+                    }
+                    *ReturnLength = RequiredLength;
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Status = _SEH2_GetExceptionCode();
+                }
+                _SEH2_END;
+
+                break;
+            }
+
+            case TokenIsRestricted:
+            {
+                _SEH2_TRY
+                {
+                    /* Buffer size was already verified (a ULONG) */
+                    *(PULONG)TokenInformation = (Token->RestrictedSidCount != 0);
+                    *ReturnLength = sizeof(ULONG);
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Status = _SEH2_GetExceptionCode();
+                }
+                _SEH2_END;
+
+                break;
+            }
+
             case TokenCapabilities:
             case TokenAppContainerSid:
             {
@@ -1678,7 +1801,7 @@ NtSetInformationToken(
                 }
                 else
                 {
-                    Token->IntegrityLevelRid = Rid;
+                    Token->IntegrityLevelRid = Rid + 1;
                     ExAllocateLocallyUniqueId(&Token->ModifiedId);
                 }
                 SepReleaseTokenLock(Token);

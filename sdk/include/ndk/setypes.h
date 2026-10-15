@@ -245,7 +245,7 @@ typedef struct _TOKEN
     PSEP_LOGON_SESSION_REFERENCES LogonSession;       /* 0x98 */
     LUID OriginatingLogonSession;                     /* 0x9C */
 #ifdef __REACTOS__
-    ULONG IntegrityLevelRid;                          /* Set integrity level; 0: from the groups */
+    ULONG IntegrityLevelRid;                          /* Set integrity level plus one; 0: from the groups */
 #endif
 #if DBG
     UCHAR ImageFileName[16];                          /* 0xA4 */
