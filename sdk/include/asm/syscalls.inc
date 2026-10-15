@@ -86,12 +86,25 @@ MACRO(STUBCODE_K, Name, SyscallId, ArgCount)
     ret StackBytes
 ENDM
 #elif defined(_M_AMD64)
+/* The code of Windows 10's stubs, byte for byte, in 32 byte slots:
+ * Chromium's sandbox checks it before it hooks some of them in its
+ * processes (SBOX_ERROR_CANNOT_SETUP_INTERCEPTION_THUNK otherwise), and
+ * writes its jump over the stub. KUSER_SHARED_DATA+0x308 is 0 on
+ * ReactOS: the syscall is always taken. */
 MACRO(STUBCODE_U, Name, SyscallId, ArgCount)
     .ENDPROLOG
-    mov eax, SyscallId
-    mov r10, rcx
-    syscall
-    ret
+    .byte HEX(4C), HEX(8B), HEX(D1)              /* mov r10, rcx */
+    .byte HEX(B8)                                /* mov eax, SyscallId */
+    .long SyscallId
+    .byte HEX(F6), HEX(04), HEX(25)              /* test byte ptr [7FFE0308h], 1 */
+    .long HEX(7FFE0308)
+    .byte 1
+    .byte HEX(75), 3                             /* jne (int 2Eh) */
+    .byte HEX(0F), HEX(05)                       /* syscall */
+    .byte HEX(C3)                                /* ret */
+    .byte HEX(CD), HEX(2E)                       /* int 2Eh */
+    .byte HEX(C3)                                /* ret */
+    .byte HEX(0F), HEX(1F), HEX(84), 0, 0, 0, 0, 0 /* nop dword ptr [rax+rax] */
 ENDM
 MACRO(STUBCODE_K, Name, SyscallId, ArgCount)
     .ENDPROLOG
@@ -149,6 +162,9 @@ ENDM
 #endif
 
 MACRO(STUB_U, Name, ArgCount)
+#ifdef _M_AMD64
+    ALIGN 32
+#endif
     MAKE_LABEL Zw&Name, %ArgCount * 4
     START_PROC Nt&Name, %ArgCount * 4
     STUBCODE_U Name, SyscallId, %ArgCount
