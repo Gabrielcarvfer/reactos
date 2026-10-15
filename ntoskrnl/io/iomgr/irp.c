@@ -233,6 +233,65 @@ IopCleanupIrp(IN PIRP Irp,
     IoFreeIrp(Irp);
 }
 
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+/*
+ * WoW64 passes each I/O system call of a 32-bit program a 64-bit status
+ * block on its own stack, with the program's IO_STATUS_BLOCK32 in Pointer and
+ * a marker in Information. That block is gone when an asynchronous request
+ * completes later, so take the 32-bit block now: the request is completed
+ * into it, and an APC receives its address, as the program expects.
+ */
+#define WOW64_IOSB_NOT_WRITTEN ((ULONG_PTR)0xbadb10cbadb10c00ull)
+
+VOID
+NTAPI
+IopCaptureIosb32(IN PIRP Irp)
+{
+    PIO_STATUS_BLOCK Iosb = Irp->UserIosb;
+    PVOID Iosb32;
+
+    if (Irp->RequestorMode != UserMode || !Iosb ||
+        (PVOID)Iosb > MmHighestUserAddress || !IoIs32bitProcess(NULL))
+    {
+        return;
+    }
+
+    _SEH2_TRY
+    {
+        Iosb32 = Iosb->Pointer;
+        if (Iosb->Information == WOW64_IOSB_NOT_WRITTEN &&
+            Iosb32 && (ULONG_PTR)Iosb32 <= MAXULONG)
+        {
+            Irp->UserIosb = Iosb32;
+            Irp->Flags |= IRP_WOW64_IOSB32;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        /* Leave it alone */
+    }
+    _SEH2_END;
+}
+#endif
+
+/* Write the I/O status into the requester's status block */
+static
+VOID
+IopWriteUserIosb(PIRP Irp)
+{
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    if (Irp->Flags & IRP_WOW64_IOSB32)
+    {
+        PIO_STATUS_BLOCK32 Iosb32 = (PIO_STATUS_BLOCK32)Irp->UserIosb;
+
+        Iosb32->Information = (ULONG)Irp->IoStatus.Information;
+        Iosb32->Status = Irp->IoStatus.Status;
+        return;
+    }
+#endif
+    *Irp->UserIosb = Irp->IoStatus;
+}
+
 static
 VOID
 IopWriteAsyncUserIosb(PIRP Irp)
@@ -244,7 +303,8 @@ IopWriteAsyncUserIosb(PIRP Irp)
         _SEH2_TRY
         {
 #if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
-            PIO_STATUS_BLOCK32 Iosb32 = (PIO_STATUS_BLOCK32)Irp->UserIosb->Pointer;
+            PIO_STATUS_BLOCK32 Iosb32 = (Irp->Flags & IRP_WOW64_IOSB32) ? NULL :
+                                        (PIO_STATUS_BLOCK32)Irp->UserIosb->Pointer;
 
             /*
              * If this is a 32-bit process, and UserIosb falls within the
@@ -268,7 +328,7 @@ IopWriteAsyncUserIosb(PIRP Irp)
             else
 #endif
             {
-                *Irp->UserIosb = Irp->IoStatus;
+                IopWriteUserIosb(Irp);
             }
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -524,7 +584,7 @@ IopCompleteRequest(IN PKAPC Apc,
             if (Irp->Flags & IRP_SYNCHRONOUS_API)
             {
                 /* Yes, this IRP was synchronous, so return the I/O Status */
-                *Irp->UserIosb = Irp->IoStatus;
+                IopWriteUserIosb(Irp);
 
                 /* Now check if the user gave an event */
                 if (Irp->UserEvent)

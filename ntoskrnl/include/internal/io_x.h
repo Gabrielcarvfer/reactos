@@ -50,6 +50,11 @@ IopQueueIrpToThread(IN PIRP Irp)
 {
     PETHREAD Thread = Irp->Tail.Overlay.Thread;
 
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    /* A 32-bit program's request: complete its own status block */
+    IopCaptureIosb32(Irp);
+#endif
+
     /* Disable special kernel APCs so we can't race with IopCompleteRequest.
      * IRP's thread must be the current thread */
     KeEnterGuardedRegionThread(&Thread->Tcb);

@@ -90,6 +90,18 @@
 //
 #define IOP_MAX_REPARSE_TRAVERSAL 0x20
 
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+//
+// The IRP of a 32-bit (WoW64) program whose UserIosb is the program's own
+// 32-bit IO_STATUS_BLOCK32 (see IopCaptureIosb32)
+//
+#define IRP_WOW64_IOSB32 0x40000000
+
+VOID
+NTAPI
+IopCaptureIosb32(IN PIRP Irp);
+#endif
+
 //
 // Private flags for IoCreateFile / IoParseDevice
 //
