@@ -86,3 +86,96 @@ SkipPointerFrameMessages(
 {
     return NoSuchPointer();
 }
+
+/* No pointer device exists (see GetPointerDevices): none can be asked about */
+/* @implemented */
+BOOL
+WINAPI
+GetPointerDevice(
+    _In_ HANDLE device,
+    _Out_ PVOID pointerDevice)
+{
+    return NoSuchPointer();
+}
+
+/* @implemented */
+BOOL
+WINAPI
+GetPointerDeviceProperties(
+    _In_ HANDLE device,
+    _Inout_ UINT32 *propertyCount,
+    _Out_opt_ PVOID pointerProperties)
+{
+    return NoSuchPointer();
+}
+
+/* @implemented */
+BOOL
+WINAPI
+GetRawPointerDeviceData(
+    _In_ UINT32 pointerId,
+    _In_ UINT32 historyCount,
+    _In_ UINT32 propertiesCount,
+    _In_ PVOID pProperties,
+    _Out_ LONG *pValues)
+{
+    return NoSuchPointer();
+}
+
+/* @implemented */
+BOOL
+WINAPI
+GetPointerInputTransform(
+    _In_ UINT32 pointerId,
+    _In_ UINT32 historyCount,
+    _Out_ PVOID inputTransform)
+{
+    return NoSuchPointer();
+}
+
+/* @implemented */
+BOOL
+WINAPI
+GetPointerFrameInfo(
+    _In_ UINT32 pointerId,
+    _Inout_ UINT32 *pointerCount,
+    _Out_opt_ PVOID pointerInfo)
+{
+    return NoSuchPointer();
+}
+
+/* @implemented */
+BOOL
+WINAPI
+GetPointerFrameInfoHistory(
+    _In_ UINT32 pointerId,
+    _Inout_ UINT32 *entriesCount,
+    _Inout_ UINT32 *pointerCount,
+    _Out_opt_ PVOID pointerInfo)
+{
+    return NoSuchPointer();
+}
+
+/* @implemented */
+BOOL
+WINAPI
+GetPointerFramePenInfoHistory(
+    _In_ UINT32 pointerId,
+    _Inout_opt_ UINT32 *entriesCount,
+    _Inout_opt_ UINT32 *pointerCount,
+    _Out_opt_ PVOID penInfo)
+{
+    return NoSuchPointer();
+}
+
+/* Synthetic pointer devices are not supported (CreateSyntheticPointerDevice) */
+/* @implemented */
+BOOL
+WINAPI
+InjectSyntheticPointerInput(
+    _In_ HANDLE device,
+    _In_ PVOID pointerInfo,
+    _In_ UINT32 count)
+{
+    return NoSuchPointer();
+}

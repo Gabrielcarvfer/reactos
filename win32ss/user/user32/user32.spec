@@ -236,6 +236,7 @@
 @ stdcall EnumWindowStationsW(ptr long)
 @ stdcall EnumWindows(ptr long)
 @ stdcall EqualRect(ptr ptr)
+@ stdcall -version=0x602+ EvaluateProximityToPolygon(long ptr ptr ptr)
 @ stdcall -version=0x602+ EvaluateProximityToRect(ptr ptr ptr)
 @ stdcall ExcludeUpdateRgn(long long) NtUserExcludeUpdateRgn
 @ stdcall ExitWindowsEx(long long)
@@ -256,6 +257,7 @@
 @ stdcall GetAppCompatFlags(long)
 @ stdcall GetAppCompatFlags2(long)
 @ stdcall GetAsyncKeyState(long)
+@ stdcall -version=0x602+ GetAutoRotationState(ptr)
 @ stdcall -version=0xA00+ GetAwarenessFromDpiAwarenessContext(long)
 @ stdcall GetCapture()
 @ stdcall GetCaretBlinkTime() NtUserGetCaretBlinkTime
@@ -308,6 +310,8 @@
 @ stdcall -version=0x601+ GetGestureInfo(long ptr)
 @ stdcall GetGuiResources(long long) NtUserGetGuiResources
 @ stdcall GetIconInfo(long ptr)
+@ stdcall -version=0x600+ GetIconInfoExA(ptr ptr)
+@ stdcall -version=0x600+ GetIconInfoExW(ptr ptr)
 @ stdcall GetInputDesktop()
 @ stdcall GetInputState()
 @ stdcall GetInternalWindowPos(long ptr ptr) NtUserGetInternalWindowPos
@@ -351,7 +355,13 @@
 @ stdcall GetNextDlgTabItem(long long long)
 @ stdcall GetOpenClipboardWindow() NtUserGetOpenClipboardWindow
 @ stdcall GetParent(long)
+@ stdcall -version=0x602+ GetPointerDevice(ptr ptr)
+@ stdcall -version=0x602+ GetPointerDeviceProperties(ptr ptr ptr)
+@ stdcall -version=0x602+ GetPointerFrameInfo(long ptr ptr)
+@ stdcall -version=0x602+ GetPointerFrameInfoHistory(long ptr ptr ptr)
+@ stdcall -version=0x602+ GetPointerFramePenInfoHistory(long ptr ptr ptr)
 @ stdcall -version=0x602+ GetPointerInfo(long ptr)
+@ stdcall -version=0x602+ GetPointerInputTransform(long long ptr)
 @ stdcall -version=0x602+ GetPointerTouchInfo(long ptr)
 @ stdcall -version=0x602+ GetPointerTouchInfoHistory(long ptr ptr)
 @ stdcall -version=0x602+ GetPointerDeviceRects(ptr ptr ptr)
@@ -374,6 +384,7 @@
 @ stdcall GetRawInputDeviceInfoA(ptr long ptr ptr)
 @ stdcall GetRawInputDeviceInfoW(ptr long ptr ptr) NtUserGetRawInputDeviceInfo
 @ stdcall GetRawInputDeviceList(ptr ptr long) NtUserGetRawInputDeviceList
+@ stdcall -version=0x602+ GetRawPointerDeviceData(long long long ptr ptr)
 @ stdcall GetReasonTitleFromReasonCode(long long long)
 @ stdcall GetRegisteredRawInputDevices(ptr ptr long) NtUserGetRegisteredRawInputDevices
 # GetRipFlags
@@ -402,6 +413,7 @@
 @ stdcall GetUserObjectInformationA(long long ptr long ptr)
 @ stdcall GetUserObjectInformationW(long long ptr long ptr) NtUserGetObjectInformation
 @ stdcall GetUserObjectSecurity (long ptr ptr long ptr)
+@ stdcall -version=0x602+ GetWindowBand(ptr ptr)
 @ stdcall -version=0xA00+ GetWindowDpiAwarenessContext(ptr)
 @ stdcall GetWinStationInfo(ptr)
 @ stdcall GetWindow(long long)
@@ -437,6 +449,7 @@
 @ stdcall IMPSetIMEA(long ptr)
 @ stdcall IMPSetIMEW(long ptr)
 @ stdcall ImpersonateDdeClientWindow(long long) ; Direct call NtUserImpersonateDdeClientWindow
+@ stdcall -version=0xA00+ InjectSyntheticPointerInput(ptr ptr long)
 @ stdcall InSendMessage()
 @ stdcall InSendMessageEx(ptr)
 @ stdcall InflateRect(ptr long long)
@@ -477,6 +490,7 @@
 @ stdcall IsServerSideWindow(long)
 @ stdcall -version=0x601+ IsTouchWindow(long ptr)
 @ stdcall -version=0xA00+ IsValidDpiAwarenessContext(long)
+@ stdcall -version=0xA00+ IsWindowArranged(ptr)
 @ stdcall IsWinEventHookInstalled(long)
 @ stdcall IsWindow(long)
 @ stdcall IsWindowEnabled(long)
@@ -606,6 +620,7 @@
 @ stdcall -import RegisterRawInputDevices(ptr long long) NtUserRegisterRawInputDevices
 @ stdcall RegisterServicesProcess(long)
 @ stdcall RegisterShellHookWindow(long)
+@ stdcall -version=0x602+ RegisterSuspendResumeNotification(ptr long)
 @ stdcall RegisterSystemThread(long long)
 @ stdcall RegisterTasklist(long) NtUserRegisterTasklist
 @ stdcall -version=0x602+ RegisterTouchHitTestingWindow(long long)

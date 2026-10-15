@@ -15,7 +15,8 @@ list(APPEND VISTA_SOURCE
 list(APPEND SOURCE
     dpi.c
     pointer.c
-    timer.c)
+    timer.c
+    win8.c)
 
 # These are just for Vista+ support
 add_library(user32_optional_vista
