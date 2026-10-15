@@ -59,16 +59,19 @@ HRESULT WINAPI CTaskbarList::SetTabProperties(HWND hwnd, STPFLAG stpFlags)
  *   ITaskbarList3 implementation
  */
 
+/* The taskbar shows no progress on its buttons yet. Accept it quietly:
+ * installers call this for every step (VS Code's setup: 25000 times, each
+ * one an UNIMPLEMENTED line on the slow debug port) */
 HRESULT WINAPI CTaskbarList::SetProgressValue(HWND hwnd, ULONGLONG ullCompleted, ULONGLONG ullTotal)
 {
-    UNIMPLEMENTED;
-    return E_NOTIMPL;
+    TRACE("(%p, %I64u, %I64u)\n", hwnd, ullCompleted, ullTotal);
+    return S_OK;
 }
 
 HRESULT WINAPI CTaskbarList::SetProgressState(HWND hwnd, TBPFLAG tbpFlags)
 {
-    UNIMPLEMENTED;
-    return E_NOTIMPL;
+    TRACE("(%p, %x)\n", hwnd, tbpFlags);
+    return S_OK;
 }
 
 HRESULT WINAPI CTaskbarList::RegisterTab(HWND hwnd, HWND hwndMDI)
