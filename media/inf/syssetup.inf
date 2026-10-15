@@ -132,6 +132,7 @@ AddReg=Classes
 11,,w32time.dll,1
 11,,windows.ui.dll,1
 11,,windows.web.dll,1
+11,,wintypes.dll,1
 11,,windowscodecs.dll,1
 11,,winhttp.dll,1
 11,,wininet.dll,2
