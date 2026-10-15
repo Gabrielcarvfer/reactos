@@ -7,6 +7,6 @@ list(APPEND SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/sas.def)
 
 add_library(sas MODULE ${SOURCE})
-set_module_type(sas win32dll)
+set_module_type(sas win32dll ENTRYPOINT 0)
 add_importlibs(sas kernel32 ntdll)
 add_cd_file(TARGET sas DESTINATION reactos/system32 FOR all)
