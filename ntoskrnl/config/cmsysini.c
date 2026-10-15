@@ -2202,6 +2202,36 @@ CmShutdownSystem(VOID)
     CmpUnlockRegistry();
 }
 
+#ifdef _WIN64
+/* The version values of Windows 10: the major and minor numbers (new in
+ * Windows 10; LibreOffice's MSI checks them), and the build, after
+ * "CurrentVersion", which stays at 6.3 since Windows 8.1 */
+static
+VOID
+CmpSetWindows10Version(
+    _In_ HANDLE KeyHandle)
+{
+    static const WCHAR Build[] = L"19045";
+    static const WCHAR Version[] = L"6.3";
+    UNICODE_STRING ValueName;
+    ULONG Number;
+
+    RtlInitUnicodeString(&ValueName, L"CurrentVersion");
+    NtSetValueKey(KeyHandle, &ValueName, 0, REG_SZ, (PVOID)Version, sizeof(Version));
+    RtlInitUnicodeString(&ValueName, L"CurrentBuildNumber");
+    NtSetValueKey(KeyHandle, &ValueName, 0, REG_SZ, (PVOID)Build, sizeof(Build));
+    RtlInitUnicodeString(&ValueName, L"CurrentBuild");
+    NtSetValueKey(KeyHandle, &ValueName, 0, REG_SZ, (PVOID)Build, sizeof(Build));
+
+    RtlInitUnicodeString(&ValueName, L"CurrentMajorVersionNumber");
+    Number = 10;
+    NtSetValueKey(KeyHandle, &ValueName, 0, REG_DWORD, &Number, sizeof(Number));
+    RtlInitUnicodeString(&ValueName, L"CurrentMinorVersionNumber");
+    Number = 0;
+    NtSetValueKey(KeyHandle, &ValueName, 0, REG_DWORD, &Number, sizeof(Number));
+}
+#endif
+
 VOID
 NTAPI
 CmpSetVersionData(VOID)
@@ -2323,28 +2353,26 @@ CmpSetVersionData(VOID)
 #ifdef _WIN64
     /* 64-bit ReactOS offers the functions of Windows 10, and says so in the
      * shared user data (see ExpInitializeExecutive). Say it here too, the
-     * way Windows 10 does, for installers that read it here: the major and
-     * minor numbers (new in Windows 10; LibreOffice's MSI checks them), and
-     * the build, after "CurrentVersion", which stays at 6.3 since
-     * Windows 8.1 (Notepad++'s setup took "5.2" for Windows Server 2003) */
+     * way Windows 10 does, for installers that read it here, in both views
+     * of the registry: 32-bit programs read the Wow6432Node copy of this
+     * key (Notepad++'s setup, 32-bit, took its "5.2" for Windows Server
+     * 2003) */
+    CmpSetWindows10Version(CurrentVersionKeyHandle);
     {
-        static const WCHAR Build[] = L"19045";
-        static const WCHAR Version[] = L"6.3";
-        ULONG Number;
+        UNICODE_STRING Wow64Name =
+            RTL_CONSTANT_STRING(L"\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\CurrentVersion");
+        HANDLE Wow64KeyHandle;
 
-        RtlInitUnicodeString(&ValueName, L"CurrentVersion");
-        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_SZ, (PVOID)Version, sizeof(Version));
-        RtlInitUnicodeString(&ValueName, L"CurrentBuildNumber");
-        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_SZ, (PVOID)Build, sizeof(Build));
-        RtlInitUnicodeString(&ValueName, L"CurrentBuild");
-        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_SZ, (PVOID)Build, sizeof(Build));
-
-        RtlInitUnicodeString(&ValueName, L"CurrentMajorVersionNumber");
-        Number = 10;
-        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_DWORD, &Number, sizeof(Number));
-        RtlInitUnicodeString(&ValueName, L"CurrentMinorVersionNumber");
-        Number = 0;
-        NtSetValueKey(CurrentVersionKeyHandle, &ValueName, 0, REG_DWORD, &Number, sizeof(Number));
+        InitializeObjectAttributes(&ObjectAttributes,
+                                   &Wow64Name,
+                                   OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                                   NULL,
+                                   NULL);
+        if (NT_SUCCESS(NtOpenKey(&Wow64KeyHandle, KEY_SET_VALUE, &ObjectAttributes)))
+        {
+            CmpSetWindows10Version(Wow64KeyHandle);
+            NtClose(Wow64KeyHandle);
+        }
     }
 #endif
 
