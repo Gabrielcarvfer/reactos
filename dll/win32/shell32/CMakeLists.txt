@@ -45,6 +45,7 @@ list(APPEND SOURCE
     propsheet.cpp
     shell32.cpp
     netaddr.cpp
+    stockicon.cpp
     utils.cpp
     CShellItem.cpp
     CShellItemArray.cpp
