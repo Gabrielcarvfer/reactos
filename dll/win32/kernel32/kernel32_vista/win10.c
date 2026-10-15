@@ -451,3 +451,95 @@ CompareObjectHandles(
     RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
     return First && First == Second;
 }
+
+/* APP PACKAGE NAMES (Windows 8) ********************************************/
+
+/*
+ * A package full name is "Name_Version_Architecture_ResourceId_PublisherId"
+ * (the resource id may be empty), its family name "Name_PublisherId". These
+ * only take strings apart; no package needs to exist.
+ */
+#define PACKAGE_FULL_NAME_PARTS 5
+
+static BOOL SplitPackageName(PCWSTR Name, PCWSTR Parts[], SIZE_T Lengths[], ULONG Count)
+{
+    PCWSTR Start = Name, End;
+    ULONG i;
+
+    for (i = 0; i < Count; i++)
+    {
+        End = wcschr(Start, L'_');
+        if ((i == Count - 1) != (End == NULL))
+            return FALSE;
+        if (!End)
+            End = Start + wcslen(Start);
+        Parts[i] = Start;
+        Lengths[i] = End - Start;
+        Start = End + 1;
+    }
+    /* Name, version, architecture and publisher id are never empty
+     * (the resource id, the fourth part of a full name, may be) */
+    for (i = 0; i < Count; i++)
+    {
+        if (!Lengths[i] && !(Count == PACKAGE_FULL_NAME_PARTS && i == 3))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+LONG
+WINAPI
+VerifyPackageFullName(
+    _In_ PCWSTR packageFullName)
+{
+    PCWSTR Parts[PACKAGE_FULL_NAME_PARTS];
+    SIZE_T Lengths[PACKAGE_FULL_NAME_PARTS];
+
+    if (!packageFullName)
+        return ERROR_INVALID_PARAMETER;
+    return SplitPackageName(packageFullName, Parts, Lengths, PACKAGE_FULL_NAME_PARTS)
+           ? ERROR_SUCCESS : ERROR_INVALID_PARAMETER;
+}
+
+LONG
+WINAPI
+VerifyPackageFamilyName(
+    _In_ PCWSTR packageFamilyName)
+{
+    PCWSTR Parts[2];
+    SIZE_T Lengths[2];
+
+    if (!packageFamilyName)
+        return ERROR_INVALID_PARAMETER;
+    return SplitPackageName(packageFamilyName, Parts, Lengths, 2) ? ERROR_SUCCESS : ERROR_INVALID_PARAMETER;
+}
+
+LONG
+WINAPI
+PackageFamilyNameFromFullName(
+    _In_ PCWSTR packageFullName,
+    _Inout_ UINT32 *packageFamilyNameLength,
+    _Out_writes_opt_(*packageFamilyNameLength) PWSTR packageFamilyName)
+{
+    PCWSTR Parts[PACKAGE_FULL_NAME_PARTS];
+    SIZE_T Lengths[PACKAGE_FULL_NAME_PARTS];
+    UINT32 Needed;
+
+    if (!packageFullName || !packageFamilyNameLength ||
+        !SplitPackageName(packageFullName, Parts, Lengths, PACKAGE_FULL_NAME_PARTS))
+        return ERROR_INVALID_PARAMETER;
+
+    /* "Name_PublisherId" and its terminator */
+    Needed = (UINT32)(Lengths[0] + 1 + Lengths[4] + 1);
+    if (!packageFamilyName || *packageFamilyNameLength < Needed)
+    {
+        *packageFamilyNameLength = Needed;
+        return ERROR_INSUFFICIENT_BUFFER;
+    }
+    RtlCopyMemory(packageFamilyName, Parts[0], Lengths[0] * sizeof(WCHAR));
+    packageFamilyName[Lengths[0]] = L'_';
+    RtlCopyMemory(packageFamilyName + Lengths[0] + 1, Parts[4], Lengths[4] * sizeof(WCHAR));
+    packageFamilyName[Needed - 1] = UNICODE_NULL;
+    *packageFamilyNameLength = Needed;
+    return ERROR_SUCCESS;
+}

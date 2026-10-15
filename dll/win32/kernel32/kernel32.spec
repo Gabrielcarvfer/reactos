@@ -961,6 +961,7 @@
 @ stdcall OpenWaitableTimerW(long long wstr)
 @ stdcall OutputDebugStringA(str)
 @ stdcall OutputDebugStringW(wstr)
+@ stdcall -version=0x602+ PackageFamilyNameFromFullName(wstr ptr ptr)
 @ stdcall -version=0x602+ PackageIdFromFullName(wstr long ptr ptr)
 @ stdcall PeekConsoleInputA(ptr ptr long ptr)
 @ stdcall PeekConsoleInputW(ptr ptr long ptr)
@@ -1288,6 +1289,8 @@
 @ stdcall VDMOperationStarted(long)
 @ stdcall -version=0x500-0x502 ValidateLCType(long long ptr ptr)
 @ stdcall -version=0x500-0x502 ValidateLocale(long)
+@ stdcall -version=0xA00+ VerifyPackageFamilyName(wstr)
+@ stdcall -version=0xA00+ VerifyPackageFullName(wstr)
 @ stdcall VerLanguageNameA(long str long)
 @ stdcall VerLanguageNameW(long wstr long)
 @ stdcall -ret64 VerSetConditionMask(long long long long) ntdll.VerSetConditionMask
