@@ -299,6 +299,23 @@ static LSTATUS open_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKE
     OBJECT_ATTRIBUTES attr;
     UNICODE_STRING nameW;
 
+#ifdef __REACTOS__
+    /* HKEY_CLASSES_ROOT is HKCU\Software\Classes over HKLM\Software\Classes:
+       per-user installs (Spotify) register their COM classes there */
+    if (hkey == HKEY_CLASSES_ROOT && !(sizeof(void *) > sizeof(int) && (access & KEY_WOW64_32KEY)))
+    {
+        WCHAR path[MAX_PATH];
+
+        int len = _snwprintf(path, ARRAY_SIZE(path), L"Software\\Classes\\%s", name);
+
+        if (len >= 0 && len < ARRAY_SIZE(path) &&
+            !RegOpenKeyExW(HKEY_CURRENT_USER, path, 0, access & ~KEY_WOW64_64KEY, retkey))
+        {
+            return ERROR_SUCCESS;
+        }
+    }
+#endif
+
     if (!(hkey = get_classes_root_hkey(hkey, access)))
         return ERROR_INVALID_HANDLE;
 
