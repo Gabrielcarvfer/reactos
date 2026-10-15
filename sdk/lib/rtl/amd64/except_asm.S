@@ -258,6 +258,118 @@ ReturnFar:
 
 .ENDP
 
+/*
+ * PVOID
+ * RtlpCallConsolidateCallback(
+ *     _In_ PCONTEXT ContextRecord@<rcx>,
+ *     _In_ PVOID (*Callback)(PEXCEPTION_RECORD)@<rdx>,
+ *     _In_ PEXCEPTION_RECORD ExceptionRecord@<r8>);
+ *
+ * Calls the callback of a consolidated unwind (the C++ runtime's, which runs
+ * the catch block) in a frame whose unwind information leads straight to the
+ * target frame, described by ContextRecord: its non-volatile registers are
+ * "saved" here, and a machine frame gives its Rip and Rsp. An exception
+ * raised by the catch block (a rethrow...) then unwinds from the catch block
+ * to the function it belongs to, and not again through the frames that the
+ * unwind already went through (their destructors ran twice).
+ */
+PUBLIC RtlpCallConsolidateCallback
+.PROC RtlpCallConsolidateCallback
+
+    /* A machine frame for the target's Rip and Rsp, then slots for its
+       non-volatile registers (filled below: nothing unwinds this frame
+       before the callback runs) */
+    sub rsp, 40
+    .PUSHFRAME
+    sub rsp, 256
+    .ALLOCSTACK 256
+    .SAVEREG rbx, 32
+    .SAVEREG rbp, 40
+    .SAVEREG rsi, 48
+    .SAVEREG rdi, 56
+    .SAVEREG r12, 64
+    .SAVEREG r13, 72
+    .SAVEREG r14, 80
+    .SAVEREG r15, 88
+    .SAVEXMM128 xmm6, 96
+    .SAVEXMM128 xmm7, 112
+    .SAVEXMM128 xmm8, 128
+    .SAVEXMM128 xmm9, 144
+    .SAVEXMM128 xmm10, 160
+    .SAVEXMM128 xmm11, 176
+    .SAVEXMM128 xmm12, 192
+    .SAVEXMM128 xmm13, 208
+    .SAVEXMM128 xmm14, 224
+    .SAVEXMM128 xmm15, 240
+    .ENDPROLOG
+
+    mov rax, [rcx + CxRip]
+    mov [rsp + 256 + 0], rax
+    mov rax, [rcx + CxRsp]
+    mov [rsp + 256 + 24], rax
+    mov rax, [rcx + CxRbx]
+    mov [rsp + 32], rax
+    mov rax, [rcx + CxRbp]
+    mov [rsp + 40], rax
+    mov rax, [rcx + CxRsi]
+    mov [rsp + 48], rax
+    mov rax, [rcx + CxRdi]
+    mov [rsp + 56], rax
+    mov rax, [rcx + CxR12]
+    mov [rsp + 64], rax
+    mov rax, [rcx + CxR13]
+    mov [rsp + 72], rax
+    mov rax, [rcx + CxR14]
+    mov [rsp + 80], rax
+    mov rax, [rcx + CxR15]
+    mov [rsp + 88], rax
+    movdqa xmm0, [rcx + CxXmm6]
+    movdqa [rsp + 96], xmm0
+    movdqa xmm0, [rcx + CxXmm7]
+    movdqa [rsp + 112], xmm0
+    movdqa xmm0, [rcx + CxXmm8]
+    movdqa [rsp + 128], xmm0
+    movdqa xmm0, [rcx + CxXmm9]
+    movdqa [rsp + 144], xmm0
+    movdqa xmm0, [rcx + CxXmm10]
+    movdqa [rsp + 160], xmm0
+    movdqa xmm0, [rcx + CxXmm11]
+    movdqa [rsp + 176], xmm0
+    movdqa xmm0, [rcx + CxXmm12]
+    movdqa [rsp + 192], xmm0
+    movdqa xmm0, [rcx + CxXmm13]
+    movdqa [rsp + 208], xmm0
+    movdqa xmm0, [rcx + CxXmm14]
+    movdqa [rsp + 224], xmm0
+    movdqa xmm0, [rcx + CxXmm15]
+    movdqa [rsp + 240], xmm0
+
+    /* Callback(ExceptionRecord) */
+    mov rax, rdx
+    mov rcx, r8
+    call rax
+
+    /* (Not an epilog right after the call: the unwinder must not take it
+       for one) */
+    nop
+    add rsp, 256 + 40
+    ret
+
+.ENDPROLOG
+
+    /* Callback(ExceptionRecord) */
+    mov rax, rdx
+    mov rcx, r8
+    call rax
+
+    /* (Not an epilog right after the call: the unwinder must not take it
+       for one) */
+    nop
+    add rsp, 256 + 40
+    ret
+
+.ENDP
+
 EXTERN RtlpCheckForActiveDebugger:PROC
 EXTERN RtlDispatchException:PROC
 EXTERN ZwContinue:PROC
