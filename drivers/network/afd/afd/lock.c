@@ -20,6 +20,185 @@ PVOID GetLockedData(PIRP Irp, PIO_STACK_LOCATION IrpSp)
     return Irp->Tail.Overlay.DriverContext[0];
 }
 
+#ifdef _WIN64
+BOOLEAN AfdIs32bitRequest( PIRP Irp )
+{
+    return Irp->RequestorMode == UserMode && IoIs32bitProcess(Irp);
+}
+
+/* A 32-bit program sent this request: replace the locked copy of its
+ * structure by the native layout (the pointers and handles widened) */
+static BOOLEAN WidenRequest32( PIRP Irp, PIO_STACK_LOCATION IrpSp )
+{
+    PVOID In = Irp->Tail.Overlay.DriverContext[0], Out;
+    ULONG InLength = IrpSp->Parameters.DeviceIoControl.InputBufferLength;
+    ULONG InSize, OutSize;
+
+    switch (IrpSp->Parameters.DeviceIoControl.IoControlCode)
+    {
+        case IOCTL_AFD_RECV:
+        case IOCTL_AFD_SEND:
+            InSize = sizeof(AFD_RECV_INFO32); OutSize = sizeof(AFD_RECV_INFO); break;
+        case IOCTL_AFD_RECV_DATAGRAM:
+            InSize = sizeof(AFD_RECV_INFO_UDP32); OutSize = sizeof(AFD_RECV_INFO_UDP); break;
+        case IOCTL_AFD_SEND_DATAGRAM:
+            InSize = sizeof(AFD_SEND_INFO_UDP32); OutSize = sizeof(AFD_SEND_INFO_UDP); break;
+        case IOCTL_AFD_EVENT_SELECT:
+            InSize = sizeof(AFD_EVENT_SELECT_INFO32); OutSize = sizeof(AFD_EVENT_SELECT_INFO); break;
+        case IOCTL_AFD_ENUM_NETWORK_EVENTS:
+            InSize = sizeof(AFD_ENUM_NETWORK_EVENTS_INFO32); OutSize = sizeof(AFD_ENUM_NETWORK_EVENTS_INFO); break;
+        case IOCTL_AFD_SUPER_ACCEPT:
+            InSize = sizeof(AFD_SUPER_ACCEPT_INFO32); OutSize = sizeof(AFD_SUPER_ACCEPT_INFO); break;
+        default:
+            return TRUE; /* the same in both layouts */
+    }
+
+    if (InLength < InSize) return FALSE;
+    Out = ExAllocatePoolWithTag(NonPagedPool, OutSize, TAG_AFD_DATA_BUFFER);
+    if (!Out) return FALSE;
+    RtlZeroMemory(Out, OutSize);
+
+    switch (IrpSp->Parameters.DeviceIoControl.IoControlCode)
+    {
+        case IOCTL_AFD_RECV:
+        case IOCTL_AFD_SEND:
+        {
+            PAFD_RECV_INFO32 From = In;
+            PAFD_RECV_INFO To = Out;
+            To->BufferArray = ULongToPtr(From->BufferArray);
+            To->BufferCount = From->BufferCount;
+            To->AfdFlags = From->AfdFlags;
+            To->TdiFlags = From->TdiFlags;
+            break;
+        }
+        case IOCTL_AFD_RECV_DATAGRAM:
+        {
+            PAFD_RECV_INFO_UDP32 From = In;
+            PAFD_RECV_INFO_UDP To = Out;
+            To->BufferArray = ULongToPtr(From->BufferArray);
+            To->BufferCount = From->BufferCount;
+            To->AfdFlags = From->AfdFlags;
+            To->TdiFlags = From->TdiFlags;
+            To->Address = ULongToPtr(From->Address);
+            To->AddressLength = ULongToPtr(From->AddressLength);
+            break;
+        }
+        case IOCTL_AFD_SEND_DATAGRAM:
+        {
+            PAFD_SEND_INFO_UDP32 From = In;
+            PAFD_SEND_INFO_UDP To = Out;
+            To->BufferArray = ULongToPtr(From->BufferArray);
+            To->BufferCount = From->BufferCount;
+            To->AfdFlags = From->AfdFlags;
+            To->TdiRequest.Request.Handle.AddressHandle = AfdHandle32(From->TdiRequest.Handle);
+            To->TdiRequest.Request.RequestNotifyObject = ULongToPtr(From->TdiRequest.RequestNotifyObject);
+            To->TdiRequest.Request.RequestContext = ULongToPtr(From->TdiRequest.RequestContext);
+            To->TdiRequest.Request.TdiStatus = From->TdiRequest.TdiStatus;
+            To->TdiRequest.SendDatagramInformation = ULongToPtr(From->TdiRequest.SendDatagramInformation);
+            To->TdiConnection.UserDataLength = From->TdiConnection.UserDataLength;
+            To->TdiConnection.UserData = ULongToPtr(From->TdiConnection.UserData);
+            To->TdiConnection.OptionsLength = From->TdiConnection.OptionsLength;
+            To->TdiConnection.Options = ULongToPtr(From->TdiConnection.Options);
+            To->TdiConnection.RemoteAddressLength = From->TdiConnection.RemoteAddressLength;
+            To->TdiConnection.RemoteAddress = ULongToPtr(From->TdiConnection.RemoteAddress);
+            break;
+        }
+        case IOCTL_AFD_EVENT_SELECT:
+        {
+            PAFD_EVENT_SELECT_INFO32 From = In;
+            PAFD_EVENT_SELECT_INFO To = Out;
+            To->EventObject = AfdHandle32(From->EventObject);
+            To->Events = From->Events;
+            break;
+        }
+        case IOCTL_AFD_ENUM_NETWORK_EVENTS:
+        {
+            PAFD_ENUM_NETWORK_EVENTS_INFO32 From = In;
+            PAFD_ENUM_NETWORK_EVENTS_INFO To = Out;
+            To->Event = AfdHandle32(From->Event);
+            To->PollEvents = From->PollEvents;
+            RtlCopyMemory(To->EventStatus, From->EventStatus, sizeof(To->EventStatus));
+            break;
+        }
+        case IOCTL_AFD_SUPER_ACCEPT:
+        {
+            PAFD_SUPER_ACCEPT_INFO32 From = In;
+            PAFD_SUPER_ACCEPT_INFO To = Out;
+            To->SanActive = From->SanActive;
+            To->FixAddressAlignment = From->FixAddressAlignment;
+            To->AcceptHandle = AfdHandle32(From->AcceptHandle);
+            To->ReceiveDataLength = From->ReceiveDataLength;
+            To->LocalAddressLength = From->LocalAddressLength;
+            To->RemoteAddressLength = From->RemoteAddressLength;
+            break;
+        }
+    }
+
+    ExFreePoolWithTag(In, TAG_AFD_DATA_BUFFER);
+    Irp->Tail.Overlay.DriverContext[0] = Out;
+    return TRUE;
+}
+
+/* select() from a 32-bit program: give AFD a native copy of the poll
+ * request in place of the buffered one */
+NTSTATUS AfdWidenPollRequest( PIRP Irp, PIO_STACK_LOCATION IrpSp )
+{
+    PAFD_POLL_INFO32 From = Irp->AssociatedIrp.SystemBuffer;
+    ULONG InLength = IrpSp->Parameters.DeviceIoControl.InputBufferLength;
+    ULONG OutLength = IrpSp->Parameters.DeviceIoControl.OutputBufferLength;
+    PAFD_POLL_INFO To;
+    ULONG Count, i;
+
+    if (!From || InLength < FIELD_OFFSET(AFD_POLL_INFO32, Handles))
+        return STATUS_INVALID_PARAMETER;
+    Count = From->HandleCount;
+    if (Count > (InLength - FIELD_OFFSET(AFD_POLL_INFO32, Handles)) / sizeof(AFD_HANDLE32) ||
+        OutLength < FIELD_OFFSET(AFD_POLL_INFO32, Handles) + Count * sizeof(AFD_HANDLE32))
+        return STATUS_INVALID_PARAMETER;
+
+    /* The I/O manager frees the system buffer with its own tag */
+    To = ExAllocatePoolWithTag(NonPagedPool,
+                               FIELD_OFFSET(AFD_POLL_INFO, Handles) + Count * sizeof(AFD_HANDLE),
+                               'UBOI');
+    if (!To) return STATUS_NO_MEMORY;
+
+    To->Timeout = From->Timeout;
+    To->HandleCount = Count;
+    To->Exclusive = From->Exclusive;
+    for (i = 0; i < Count; i++)
+    {
+        To->Handles[i].Handle = (SOCKET)AfdHandle32(From->Handles[i].Handle);
+        To->Handles[i].Events = From->Handles[i].Events;
+        To->Handles[i].Status = From->Handles[i].Status;
+    }
+
+    ExFreePoolWithTag(From, 'UBOI');
+    Irp->AssociatedIrp.SystemBuffer = To;
+    return STATUS_SUCCESS;
+}
+
+/* Back to the 32-bit layout, in place, before the I/O manager copies it out */
+VOID AfdNarrowPollRequest( PIRP Irp )
+{
+    PAFD_POLL_INFO From = Irp->AssociatedIrp.SystemBuffer;
+    PAFD_POLL_INFO32 To = Irp->AssociatedIrp.SystemBuffer;
+    ULONG Count = From->HandleCount, i;
+    AFD_HANDLE32 Handle;
+
+    To->HandleCount = Count;
+    To->Exclusive = 0;
+    for (i = 0; i < Count; i++)
+    {
+        /* Each 32-bit entry is at or before the native one it comes from */
+        Handle.Handle = (ULONG)From->Handles[i].Handle;
+        Handle.Events = From->Handles[i].Events;
+        Handle.Status = From->Handles[i].Status;
+        To->Handles[i] = Handle;
+    }
+    Irp->IoStatus.Information = FIELD_OFFSET(AFD_POLL_INFO32, Handles) + Count * sizeof(AFD_HANDLE32);
+}
+#endif
+
 /* Lock a method_neither request so it'll be available from DISPATCH_LEVEL */
 PVOID LockRequest( PIRP Irp,
                    PIO_STACK_LOCATION IrpSp,
@@ -85,6 +264,18 @@ PVOID LockRequest( PIRP Irp,
                 RtlCopyMemory(Irp->Tail.Overlay.DriverContext[0],
                               Irp->Tail.Overlay.DriverContext[1],
                               MmGetMdlByteCount(Irp->MdlAddress));
+
+#ifdef _WIN64
+                if (AfdIs32bitRequest(Irp) && !WidenRequest32(Irp, IrpSp))
+                {
+                    AFD_DbgPrint(MIN_TRACE,("Failed to convert a 32-bit request\n"));
+                    ExFreePoolWithTag(Irp->Tail.Overlay.DriverContext[0], TAG_AFD_DATA_BUFFER);
+                    MmUnlockPages(Irp->MdlAddress);
+                    IoFreeMdl( Irp->MdlAddress );
+                    Irp->MdlAddress = NULL;
+                    return NULL;
+                }
+#endif
 
                 /* If we don't want a copy back, we zero the mapped address pointer */
                 if (!Output)
@@ -187,6 +378,19 @@ VOID UnlockRequest( PIRP Irp, PIO_STACK_LOCATION IrpSp )
     /* Check if we need to copy stuff back */
     if (Irp->Tail.Overlay.DriverContext[1] != NULL)
     {
+#ifdef _WIN64
+        IrpSp = IoGetCurrentIrpStackLocation(Irp);
+        if (IrpSp->MajorFunction == IRP_MJ_DEVICE_CONTROL &&
+            IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_ENUM_NETWORK_EVENTS &&
+            AfdIs32bitRequest(Irp))
+        {
+            PAFD_ENUM_NETWORK_EVENTS_INFO From = Irp->Tail.Overlay.DriverContext[0];
+            PAFD_ENUM_NETWORK_EVENTS_INFO32 To = Irp->Tail.Overlay.DriverContext[1];
+            To->PollEvents = From->PollEvents;
+            RtlCopyMemory(To->EventStatus, From->EventStatus, sizeof(To->EventStatus));
+        }
+        else
+#endif
         RtlCopyMemory(Irp->Tail.Overlay.DriverContext[1],
                       Irp->Tail.Overlay.DriverContext[0],
                       MmGetMdlByteCount(Irp->MdlAddress));
@@ -222,6 +426,19 @@ PAFD_WSABUF LockBuffers( PAFD_WSABUF Buf, UINT Count,
         MapBuf = (PAFD_MAPBUF)(NewBuf + Count + Lock);
 
         _SEH2_TRY {
+#ifdef _WIN64
+            /* A 32-bit program's buffer array */
+            if (LockMode == UserMode && IoIs32bitProcess(NULL))
+            {
+                PAFD_WSABUF32 Buf32 = (PAFD_WSABUF32)Buf;
+                for (i = 0; i < Count; i++)
+                {
+                    NewBuf[i].len = Buf32[i].len;
+                    NewBuf[i].buf = ULongToPtr(Buf32[i].buf);
+                }
+            }
+            else
+#endif
             RtlCopyMemory( NewBuf, Buf, sizeof(AFD_WSABUF) * Count );
             if( LockAddress ) {
                 if (AddressBuf && AddressLen) {

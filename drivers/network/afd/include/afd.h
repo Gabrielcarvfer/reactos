@@ -104,6 +104,98 @@ typedef struct IPADDR_ENTRY {
 #define AFD_HANDLES(x) ((PAFD_HANDLE)(x)->Exclusive)
 #define SET_AFD_HANDLES(x,y) (((x)->Exclusive) = (ULONG_PTR)(y))
 
+#ifdef _WIN64
+/* What 32-bit programs (WoW64) pass: the same structures with 32-bit
+ * pointers and handles. AFD widens them to the native layout. */
+typedef struct _AFD_WSABUF32 {
+    UINT len;
+    ULONG buf;
+} AFD_WSABUF32, *PAFD_WSABUF32;
+
+typedef struct _AFD_HANDLE32 {
+    ULONG Handle;
+    ULONG Events;
+    NTSTATUS Status;
+} AFD_HANDLE32, *PAFD_HANDLE32;
+
+typedef struct _AFD_POLL_INFO32 {
+    LARGE_INTEGER Timeout;
+    ULONG HandleCount;
+    ULONG Exclusive;
+    AFD_HANDLE32 Handles[1];
+} AFD_POLL_INFO32, *PAFD_POLL_INFO32;
+
+typedef struct _AFD_ACCEPT_DATA32 {
+    ULONG UseSAN;
+    ULONG SequenceNumber;
+    ULONG ListenHandle;
+} AFD_ACCEPT_DATA32, *PAFD_ACCEPT_DATA32;
+
+typedef struct _AFD_SUPER_ACCEPT_INFO32 {
+    BOOLEAN SanActive;
+    BOOLEAN FixAddressAlignment;
+    ULONG AcceptHandle;
+    ULONG ReceiveDataLength;
+    ULONG LocalAddressLength;
+    ULONG RemoteAddressLength;
+} AFD_SUPER_ACCEPT_INFO32, *PAFD_SUPER_ACCEPT_INFO32;
+
+typedef struct _AFD_RECV_INFO32 {
+    ULONG BufferArray;
+    ULONG BufferCount;
+    ULONG AfdFlags;
+    ULONG TdiFlags;
+} AFD_RECV_INFO32, *PAFD_RECV_INFO32, AFD_SEND_INFO32, *PAFD_SEND_INFO32;
+
+typedef struct _AFD_RECV_INFO_UDP32 {
+    ULONG BufferArray;
+    ULONG BufferCount;
+    ULONG AfdFlags;
+    ULONG TdiFlags;
+    ULONG Address;
+    ULONG AddressLength;
+} AFD_RECV_INFO_UDP32, *PAFD_RECV_INFO_UDP32;
+
+typedef struct _AFD_SEND_INFO_UDP32 {
+    ULONG BufferArray;
+    ULONG BufferCount;
+    ULONG AfdFlags;
+    struct {
+        ULONG Handle;
+        ULONG RequestNotifyObject;
+        ULONG RequestContext;
+        TDI_STATUS TdiStatus;
+        ULONG SendDatagramInformation;
+    } TdiRequest;
+    struct {
+        LONG UserDataLength;
+        ULONG UserData;
+        LONG OptionsLength;
+        ULONG Options;
+        LONG RemoteAddressLength;
+        ULONG RemoteAddress;
+    } TdiConnection;
+} AFD_SEND_INFO_UDP32, *PAFD_SEND_INFO_UDP32;
+
+typedef struct _AFD_EVENT_SELECT_INFO32 {
+    ULONG EventObject;
+    ULONG Events;
+} AFD_EVENT_SELECT_INFO32, *PAFD_EVENT_SELECT_INFO32;
+
+typedef struct _AFD_ENUM_NETWORK_EVENTS_INFO32 {
+    ULONG Event;
+    ULONG PollEvents;
+    NTSTATUS EventStatus[AFD_MAX_EVENTS];
+} AFD_ENUM_NETWORK_EVENTS_INFO32, *PAFD_ENUM_NETWORK_EVENTS_INFO32;
+
+typedef struct _AFD_TDI_HANDLE_DATA32 {
+    ULONG TdiAddressHandle;
+    ULONG TdiConnectionHandle;
+} AFD_TDI_HANDLE_DATA32, *PAFD_TDI_HANDLE_DATA32;
+
+#define AfdHandle32(h) ((HANDLE)(LONG_PTR)(LONG)(h))
+#endif
+
 typedef struct _AFD_MAPBUF {
     PVOID BufferAddress;
     PMDL  Mdl;
@@ -304,6 +396,11 @@ PAFD_HANDLE LockHandles( PAFD_HANDLE HandleArray, UINT HandleCount );
 VOID UnlockHandles( PAFD_HANDLE HandleArray, UINT HandleCount );
 PVOID LockRequest( PIRP Irp, PIO_STACK_LOCATION IrpSp, BOOLEAN Output, KPROCESSOR_MODE *LockMode );
 VOID UnlockRequest( PIRP Irp, PIO_STACK_LOCATION IrpSp );
+#ifdef _WIN64
+BOOLEAN AfdIs32bitRequest( PIRP Irp );
+NTSTATUS AfdWidenPollRequest( PIRP Irp, PIO_STACK_LOCATION IrpSp );
+VOID AfdNarrowPollRequest( PIRP Irp );
+#endif
 PVOID GetLockedData( PIRP Irp, PIO_STACK_LOCATION IrpSp );
 NTSTATUS LeaveIrpUntilLater( PAFD_FCB FCB, PIRP Irp, UINT Function );
 NTSTATUS QueueUserModeIrp(PAFD_FCB FCB, PIRP Irp, UINT Function);

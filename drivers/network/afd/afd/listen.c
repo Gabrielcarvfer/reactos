@@ -498,8 +498,15 @@ NTSTATUS AfdAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
             RemoveEntryList( PendingConn );
 
+            HANDLE ListenHandle = AcceptData->ListenHandle;
+
+#ifdef _WIN64
+            /* A 32-bit program's AFD_ACCEPT_DATA */
+            if (AfdIs32bitRequest(Irp))
+                ListenHandle = AfdHandle32(((PAFD_ACCEPT_DATA32)AcceptData)->ListenHandle);
+#endif
             Status = ObReferenceObjectByHandle
-                ( AcceptData->ListenHandle,
+                ( ListenHandle,
                   FILE_ALL_ACCESS,
                   NULL,
                   KernelMode,

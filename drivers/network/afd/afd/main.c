@@ -284,11 +284,30 @@ AfdGetTdiHandles(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         return UnlockAndMaybeComplete(FCB, STATUS_NO_MEMORY, Irp, 0);
 
     if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(ULONG) ||
-        IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(*HandleData))
+        IrpSp->Parameters.DeviceIoControl.OutputBufferLength <
+#ifdef _WIN64
+            (AfdIs32bitRequest(Irp) ? sizeof(AFD_TDI_HANDLE_DATA32) : sizeof(*HandleData)))
+#else
+            sizeof(*HandleData))
+#endif
     {
         AFD_DbgPrint(MIN_TRACE,("Buffer too small\n"));
         return UnlockAndMaybeComplete(FCB, STATUS_BUFFER_TOO_SMALL, Irp, 0);
     }
+
+#ifdef _WIN64
+    /* A 32-bit program gets 32-bit handles */
+    if (AfdIs32bitRequest(Irp))
+    {
+        PAFD_TDI_HANDLE_DATA32 HandleData32 = Irp->UserBuffer;
+
+        if ((*HandleFlags) & AFD_ADDRESS_HANDLE)
+            HandleData32->TdiAddressHandle = HandleToUlong(FCB->AddressFile.Handle);
+        if ((*HandleFlags) & AFD_CONNECTION_HANDLE)
+            HandleData32->TdiConnectionHandle = HandleToUlong(FCB->Connection.Handle);
+        return UnlockAndMaybeComplete(FCB, STATUS_SUCCESS, Irp, 0);
+    }
+#endif
 
     if ((*HandleFlags) & AFD_ADDRESS_HANDLE)
         HandleData->TdiAddressHandle = FCB->AddressFile.Handle;

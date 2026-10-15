@@ -85,6 +85,9 @@ VOID SignalSocket(
               PollReq->Handles[i].Status));
     }
     UnlockHandles( AFD_HANDLES(PollReq), PollReq->HandleCount );
+#ifdef _WIN64
+    if (AfdIs32bitRequest(Irp)) AfdNarrowPollRequest(Irp);
+#endif
     if( Irp->MdlAddress ) UnlockRequest( Irp, IoGetCurrentIrpStackLocation( Irp ) );
     AFD_DbgPrint(MID_TRACE,("Completing\n"));
     (void)IoSetCancelRoutine(Irp, NULL);
@@ -167,13 +170,30 @@ AfdSelect( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     NTSTATUS Status = STATUS_NO_MEMORY;
     PAFD_FCB FCB;
     PFILE_OBJECT FileObject;
-    PAFD_POLL_INFO PollReq = Irp->AssociatedIrp.SystemBuffer;
+    PAFD_POLL_INFO PollReq;
     PAFD_DEVICE_EXTENSION DeviceExt = DeviceObject->DeviceExtension;
     KIRQL OldIrql;
     UINT i, Signalled = 0;
-    ULONG Exclusive = PollReq->Exclusive;
+    ULONG Exclusive;
 
+#ifdef _WIN64
+    if (AfdIs32bitRequest(Irp))
+    {
+        Status = AfdWidenPollRequest(Irp, IrpSp);
+        if (!NT_SUCCESS(Status))
+        {
+            Irp->IoStatus.Status = Status;
+            Irp->IoStatus.Information = 0;
+            IoCompleteRequest( Irp, IO_NETWORK_INCREMENT );
+            return Status;
+        }
+        Status = STATUS_NO_MEMORY;
+    }
+#else
     UNREFERENCED_PARAMETER(IrpSp);
+#endif
+    PollReq = Irp->AssociatedIrp.SystemBuffer;
+    Exclusive = PollReq->Exclusive;
 
     AFD_DbgPrint(MID_TRACE,("Called (HandleCount %u Timeout %d)\n",
                             PollReq->HandleCount,
