@@ -1011,7 +1011,9 @@ IntWideCharToMultiByteUTF8(UINT CodePage,
     INT TempLength;
     DWORD Char;
 
-    if (Flags)
+    /* Vista+: WC_ERR_INVALID_CHARS fails on unpaired surrogates (GIMP's babl
+       converts its module path with it) */
+    if (Flags & ~WC_ERR_INVALID_CHARS)
     {
         SetLastError(ERROR_INVALID_FLAGS);
         return 0;
@@ -1031,12 +1033,18 @@ IntWideCharToMultiByteUTF8(UINT CodePage,
                 {
                     TempLength++;
                     if (*WideCharString >= 0xd800 && *WideCharString < 0xdc00 &&
-                        WideCharCount >= 1 &&
-                        WideCharString[1] >= 0xdc00 && WideCharString[1] <= 0xe000)
+                        WideCharCount > 1 &&
+                        WideCharString[1] >= 0xdc00 && WideCharString[1] < 0xe000)
                     {
                         WideCharCount--;
                         WideCharString++;
                         TempLength++;
+                    }
+                    else if ((Flags & WC_ERR_INVALID_CHARS) &&
+                             *WideCharString >= 0xd800 && *WideCharString < 0xe000)
+                    {
+                        SetLastError(ERROR_NO_UNICODE_TRANSLATION);
+                        return 0;
                     }
                 }
             }
@@ -1075,7 +1083,7 @@ IntWideCharToMultiByteUTF8(UINT CodePage,
 
         /* surrogate pair 0x10000-0x10ffff: 4 bytes */
         if (Char >= 0xd800 && Char < 0xdc00 &&
-            WideCharCount >= 1 &&
+            WideCharCount > 1 &&
             WideCharString[1] >= 0xdc00 && WideCharString[1] < 0xe000)
         {
             WideCharCount--;
@@ -1100,6 +1108,13 @@ IntWideCharToMultiByteUTF8(UINT CodePage,
             MultiByteString += 4;
             TempLength -= 4;
             continue;
+        }
+
+        if ((Flags & WC_ERR_INVALID_CHARS) && Char >= 0xd800 && Char < 0xe000)
+        {
+            /* Unpaired surrogate */
+            SetLastError(ERROR_NO_UNICODE_TRANSLATION);
+            return 0;
         }
 
         /* 0x800-0xffff: 3 bytes */
