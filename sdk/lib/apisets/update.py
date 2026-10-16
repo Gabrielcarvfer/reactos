@@ -16,7 +16,9 @@ REDIRECT_HOSTS = {
     'kernel.appcore.dll': 'kernel32.dll',
     'ucrtbase.dll': 'msvcrt.dll',
     'winmmbase.dll': 'winmm.dll',
-    'gdi32full.dll': 'gdi32.dll'
+    'gdi32full.dll': 'gdi32.dll',
+    # SDDL, services, LSA lookup... (Audacity 4: api-ms-win-security-sddl)
+    'sechost.dll': 'advapi32.dll',
 }
 
 # Apisets whose functions are in another module of ours than the one the
