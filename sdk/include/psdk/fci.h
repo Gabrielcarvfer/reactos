@@ -25,7 +25,11 @@
 extern "C" {
 #endif /* defined(__cplusplus) */
 
+/* Windows packs these structures to 4 bytes on 32-bit only: on 64-bit
+   they keep natural alignment (FDINOTIFICATION.pv is at offset 0x20) */
+#ifndef _WIN64
 #include <pshpack4.h>
+#endif
 
 #ifndef INCLUDED_TYPES_FCI_FDI
 #define INCLUDED_TYPES_FCI_FDI 1
@@ -250,7 +254,9 @@ BOOL __cdecl FCIDestroy(HFCI hfci);
 
 /**********************************************************************/
 
+#ifndef _WIN64
 #include <poppack.h>
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */
