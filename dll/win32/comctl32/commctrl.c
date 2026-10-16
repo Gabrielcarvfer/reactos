@@ -1373,7 +1373,9 @@ BOOL WINAPI GetWindowSubclass (HWND hWnd, SUBCLASSPROC pfnSubclass,
    while (proc) {
       if ((proc->id == uID) &&
          (proc->subproc == pfnSubclass)) {
-         *pdwRef = proc->ref;
+         /* NULL is allowed (Notepad++ passes it) */
+         if (pdwRef)
+            *pdwRef = proc->ref;
          return TRUE;
       }
       proc = proc->next;
