@@ -118,6 +118,7 @@ PspWriteTebImpersonationInfo(IN PETHREAD Thread,
     PTEB Teb;
     BOOLEAN Attached = FALSE;
     BOOLEAN IsImpersonating;
+    BOOLEAN Protected;
     KAPC_STATE ApcState;
     PAGED_CODE();
     PSTRACE(PS_SECURITY_DEBUG, "Thread: %p\n", Thread);
@@ -130,8 +131,11 @@ PspWriteTebImpersonationInfo(IN PETHREAD Thread,
     Teb = Thread->Tcb.Teb;
     if (Teb)
     {
-        /* Check if we're not in the right process */
-        if (Thread->Tcb.ApcState.Process != &Process->Pcb)
+        /* The TEB is in the thread's process: attach to it if we are in
+           another one (e.g. Chromium sets the token of a sandboxed child's
+           thread; checking the target thread's own process here wrote to
+           the TEB address in the caller's address space) */
+        if (Process != PsGetCurrentProcess())
         {
             /* Attach to the process */
             KeStackAttachProcess(&Process->Pcb, &ApcState);
@@ -139,29 +143,37 @@ PspWriteTebImpersonationInfo(IN PETHREAD Thread,
         }
 
         /* Check if we're in a different thread or acquire rundown */
-        if ((Thread == CurrentThread) ||
-            (ExAcquireRundownProtection(&Thread->RundownProtect)))
+        Protected = (Thread != CurrentThread) &&
+                    ExAcquireRundownProtection(&Thread->RundownProtect);
+        if ((Thread == CurrentThread) || Protected)
         {
             /* Check if the thread is impersonating */
             IsImpersonating = (BOOLEAN)Thread->ActiveImpersonationInfo;
-            if (IsImpersonating)
+            _SEH2_TRY
             {
-                /* Set TEB data */
-                Teb->ImpersonationLocale = -1;
-                Teb->IsImpersonating = 1;
+                if (IsImpersonating)
+                {
+                    /* Set TEB data */
+                    Teb->ImpersonationLocale = -1;
+                    Teb->IsImpersonating = 1;
+                }
+                else
+                {
+                    /* Set TEB data */
+                    Teb->ImpersonationLocale = 0;
+                    Teb->IsImpersonating = 0;
+                }
             }
-            else
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {
-                /* Set TEB data */
-                Teb->ImpersonationLocale = 0;
-                Teb->IsImpersonating = 0;
+                /* The TEB went away (the thread is exiting) */
             }
+            _SEH2_END;
         }
 
-        /* Check if we're in a different thread */
-        if (Thread != CurrentThread)
+        /* Release the protection, if we got it */
+        if (Protected)
         {
-            /* Release protection */
             ExReleaseRundownProtection(&Thread->RundownProtect);
         }
 
