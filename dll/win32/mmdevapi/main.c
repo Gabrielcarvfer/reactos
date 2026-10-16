@@ -133,6 +133,11 @@ static BOOL WINAPI init_driver(INIT_ONCE *once, void *param, void **context)
     }
 
     TRACE("Loading driver list %s\n", wine_dbgstr_w(driver_list));
+#ifdef __REACTOS__
+    /* None of Wine's drivers here: unless a list is given, only the built-in
+     * one (waveOut) */
+    if(driver_list != default_list)
+#endif
     for(next = p = driver_list; next; p = next + 1){
         next = wcschr(p, ',');
         if(next)
@@ -156,6 +161,20 @@ static BOOL WINAPI init_driver(INIT_ONCE *once, void *param, void **context)
         if(next)
             *next = ',';
     }
+
+#ifdef __REACTOS__
+    if(!drvs.module){
+        TRACE("Using the built-in waveOut driver\n");
+        drvs.module = instance;
+        lstrcpyW(drvs.module_name, L"winmm");
+        drvs.pGetPriority = WINMM_GetPriority;
+        drvs.pGetEndpointIDs = WINMM_GetEndpointIDs;
+        drvs.pGetAudioEndpoint = WINMM_GetAudioEndpoint;
+        drvs.pGetAudioSessionManager = WINMM_GetAudioSessionManager;
+        drvs.pGetPropValue = WINMM_GetPropValue;
+        drvs.priority = drvs.pGetPriority();
+    }
+#endif
 
     return drvs.module != 0;
 }

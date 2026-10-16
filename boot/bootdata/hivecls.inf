@@ -806,6 +806,11 @@ HKCR,"SystemFileAssociations\text\OpenWithList\wordpad.exe","",0x00000000,""
 HKCR,"SystemFileAssociations\text\shell\edit\command","",0x00020000,"%SystemRoot%\system32\notepad.exe %1"
 HKCR,"SystemFileAssociations\text\shell\open\command","",0x00020000,"%SystemRoot%\system32\notepad.exe %1"
 
+; Core Audio (mmdevapi): the device enumerator
+HKCR,"CLSID\{BCDE0395-E52F-467C-8E3D-C4579291692E}","",0x00000000,"MMDeviceEnumerator class"
+HKCR,"CLSID\{BCDE0395-E52F-467C-8E3D-C4579291692E}\InprocServer32","",0x00020000,"%SystemRoot%\system32\mmdevapi.dll"
+HKCR,"CLSID\{BCDE0395-E52F-467C-8E3D-C4579291692E}\InprocServer32","ThreadingModel",0x00000000,"Both"
+
 ; DirectShow: quartz and devenum are chicken and egg.
 HKCR,"CLSID\{4315d437-5b8c-11d0-bd3b-00a0c911ce86}","",0x00000000,"Device Moniker"
 HKCR,"CLSID\{4315d437-5b8c-11d0-bd3b-00a0c911ce86}\InprocServer32","",0x00020000,"%SystemRoot%\system32\devenum.dll"

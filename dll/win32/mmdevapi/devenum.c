@@ -33,6 +33,10 @@
 #include "dshow.h"
 #include "dsound.h"
 #include "audioclient.h"
+#ifdef __REACTOS__
+/* (dshow.h has defined IID_IKsControl already: ksuuids.h) */
+#define __IKsControl_INTERFACE_DEFINED__
+#endif
 #include "endpointvolume.h"
 #include "audiopolicy.h"
 
