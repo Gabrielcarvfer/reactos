@@ -2700,12 +2700,22 @@ static HRESULT uia_get_provider_from_hwnd(struct uia_node *node)
     if (!uia_start_client_thread())
         return E_FAIL;
 
+    /* With a timeout, like Windows (UIA connection timeout, 2 s): a window
+       whose thread doesn't process messages must not hang the caller
+       (Spotify's UI thread asked for an element of such a window and froze) */
     SetLastError(NOERROR);
-    args.lr = SendMessageW(node->hwnd, WM_GETOBJECT, 0, UiaRootObjectId);
-    if (GetLastError() == ERROR_INVALID_WINDOW_HANDLE)
+    args.lr = 0;
+    if (!SendMessageTimeoutW(node->hwnd, WM_GETOBJECT, 0, UiaRootObjectId,
+                             SMTO_NORMAL | SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&args.lr))
     {
+        DWORD err = GetLastError();
+
         uia_stop_client_thread();
-        return UIA_E_ELEMENTNOTAVAILABLE;
+        if (err == ERROR_INVALID_WINDOW_HANDLE)
+            return UIA_E_ELEMENTNOTAVAILABLE;
+        if (err == ERROR_TIMEOUT || err == NOERROR)
+            return UIA_E_TIMEOUT;
+        return S_FALSE;
     }
 
     if (!args.lr)
