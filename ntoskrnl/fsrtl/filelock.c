@@ -48,6 +48,9 @@ typedef struct _LOCK_SHARED_RANGE
     LARGE_INTEGER Start, End;
     ULONG Key;
     PVOID ProcessId;
+    /* Locks belong to a file object (a handle), not just a process: two
+       SQLite connections of one process share-lock the same bytes */
+    PFILE_OBJECT FileObject;
 }
     LOCK_SHARED_RANGE, *PLOCK_SHARED_RANGE;
 
@@ -568,6 +571,7 @@ FsRtlPrivateLock(IN PFILE_LOCK FileLock,
             NewSharedRange->End.QuadPart = FileOffset->QuadPart + Length->QuadPart;
             NewSharedRange->Key = Key;
             NewSharedRange->ProcessId = ToInsert.Exclusive.FileLock.ProcessId;
+            NewSharedRange->FileObject = FileObject;
             InsertTailList(&LockInfo->SharedLocks, &NewSharedRange->Entry);
 
             DPRINT("Acquired shared lock %wZ %08x%08x %08x%08x\n",
@@ -640,6 +644,7 @@ FsRtlPrivateLock(IN PFILE_LOCK FileLock,
             NewSharedRange->End.QuadPart = FileOffset->QuadPart + Length->QuadPart;
             NewSharedRange->Key = Key;
             NewSharedRange->ProcessId = Process;
+            NewSharedRange->FileObject = FileObject;
             InsertTailList(&LockInfo->SharedLocks, &NewSharedRange->Entry);
         }
 
@@ -878,6 +883,7 @@ FsRtlFastUnlockSingle(IN PFILE_LOCK FileLock,
     {
         if (Entry->Exclusive.FileLock.Key != Key ||
             Entry->Exclusive.FileLock.ProcessId != Process ||
+            Entry->Exclusive.FileLock.FileObject != FileObject ||
             Entry->Exclusive.FileLock.StartingByte.QuadPart != FileOffset->QuadPart ||
             Entry->Exclusive.FileLock.EndingByte.QuadPart !=
             FileOffset->QuadPart + Length->QuadPart)
@@ -905,7 +911,8 @@ FsRtlFastUnlockSingle(IN PFILE_LOCK FileLock,
             if (SharedRange->Start.QuadPart == FileOffset->QuadPart &&
                 SharedRange->End.QuadPart == FileOffset->QuadPart + Length->QuadPart &&
                 SharedRange->Key == Key &&
-                SharedRange->ProcessId == Process)
+                SharedRange->ProcessId == Process &&
+                SharedRange->FileObject == FileObject)
             {
                 FoundShared = TRUE;
                 DPRINT("Found shared element to delete %wZ Start %08x%08x End %08x%08x Key %x\n",
@@ -941,7 +948,7 @@ FsRtlFastUnlockSingle(IN PFILE_LOCK FileLock,
             {
                 COMBINED_LOCK_ELEMENT LockElement;
                 SharedRange = CONTAINING_RECORD(SharedEntry, LOCK_SHARED_RANGE, Entry);
-                LockElement.Exclusive.FileLock.FileObject = FileObject;
+                LockElement.Exclusive.FileLock.FileObject = SharedRange->FileObject;
                 LockElement.Exclusive.FileLock.StartingByte = SharedRange->Start;
                 LockElement.Exclusive.FileLock.EndingByte = SharedRange->End;
                 LockElement.Exclusive.FileLock.ProcessId = SharedRange->ProcessId;
@@ -1045,7 +1052,7 @@ FsRtlFastUnlockAll(IN PFILE_LOCK FileLock,
         PLOCK_SHARED_RANGE Range = CONTAINING_RECORD(ListEntry, LOCK_SHARED_RANGE, Entry);
         Length.QuadPart = Range->End.QuadPart - Range->Start.QuadPart;
         ListEntry = ListEntry->Flink;
-        if (Range->ProcessId != Process)
+        if (Range->ProcessId != Process || Range->FileObject != FileObject)
             continue;
         FsRtlFastUnlockSingle
             (FileLock,
@@ -1062,7 +1069,8 @@ FsRtlFastUnlockAll(IN PFILE_LOCK FileLock,
          Entry = RtlEnumerateGenericTable(&InternalInfo->RangeTable, FALSE))
     {
         LARGE_INTEGER Length;
-        if (Entry->Exclusive.FileLock.ProcessId != Process)
+        if (Entry->Exclusive.FileLock.ProcessId != Process ||
+            Entry->Exclusive.FileLock.FileObject != FileObject)
             continue;
         // We'll take the first one to be the list head, and free the others first...
         Length.QuadPart =
@@ -1109,6 +1117,7 @@ FsRtlFastUnlockAllByKey(IN PFILE_LOCK FileLock,
         Length.QuadPart = Range->End.QuadPart - Range->Start.QuadPart;
         ListEntry = ListEntry->Flink;
         if (Range->ProcessId != Process ||
+            Range->FileObject != FileObject ||
             Range->Key != Key)
             continue;
         FsRtlFastUnlockSingle
@@ -1131,7 +1140,8 @@ FsRtlFastUnlockAllByKey(IN PFILE_LOCK FileLock,
             Entry->Exclusive.FileLock.EndingByte.QuadPart -
             Entry->Exclusive.FileLock.StartingByte.QuadPart;
         if (Entry->Exclusive.FileLock.Key == Key &&
-            Entry->Exclusive.FileLock.ProcessId == Process)
+            Entry->Exclusive.FileLock.ProcessId == Process &&
+            Entry->Exclusive.FileLock.FileObject == FileObject)
         {
             FsRtlFastUnlockSingle
                 (FileLock,
