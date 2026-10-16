@@ -9,6 +9,7 @@ extern void func__wsystem(void);
 extern void func_acos(void);
 extern void func_asin(void);
 extern void func_atan(void);
+extern void func_c99math(void);
 extern void func_ceil(void);
 extern void func_cos(void);
 extern void func_exp(void);
@@ -31,6 +32,7 @@ const struct test winetest_testlist[] =
     { "acos", func_acos },
     { "asin", func_asin },
     { "atan", func_atan },
+    { "c99math", func_c99math },
     { "ceil", func_ceil },
     { "cos", func_cos },
     { "exp", func_exp },
