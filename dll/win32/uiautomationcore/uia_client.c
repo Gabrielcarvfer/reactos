@@ -2135,6 +2135,10 @@ struct uia_client_thread
 struct uia_get_node_prov_args {
     LRESULT lr;
     BOOL unwrap;
+    /* Posted form: the result and the event set when it's there */
+    struct uia_node *node;
+    LRESULT result;
+    HANDLE done;
 };
 
 static struct uia_client_thread client_thread;
@@ -2149,6 +2153,7 @@ static CRITICAL_SECTION client_thread_cs = { &client_thread_cs_debug, -1, 0, 0, 
 
 #define WM_UIA_CLIENT_GET_NODE_PROV (WM_USER + 1)
 #define WM_UIA_CLIENT_THREAD_STOP (WM_USER + 2)
+#define WM_UIA_CLIENT_GET_NODE_PROV_POSTED (WM_USER + 3)
 static HRESULT create_wine_uia_nested_node_provider(struct uia_node *node, LRESULT lr, BOOL unwrap);
 static LRESULT CALLBACK uia_client_thread_msg_proc(HWND hwnd, UINT msg, WPARAM wparam,
         LPARAM lparam)
@@ -2159,6 +2164,14 @@ static LRESULT CALLBACK uia_client_thread_msg_proc(HWND hwnd, UINT msg, WPARAM w
     {
         struct uia_get_node_prov_args *args = (struct uia_get_node_prov_args *)wparam;
         return create_wine_uia_nested_node_provider((struct uia_node *)lparam, args->lr, args->unwrap);
+    }
+
+    case WM_UIA_CLIENT_GET_NODE_PROV_POSTED:
+    {
+        struct uia_get_node_prov_args *args = (struct uia_get_node_prov_args *)wparam;
+        args->result = create_wine_uia_nested_node_provider(args->node, args->lr, args->unwrap);
+        SetEvent(args->done);
+        return 0;
     }
 
     default:
@@ -2725,7 +2738,32 @@ static HRESULT uia_get_provider_from_hwnd(struct uia_node *node)
     }
 
     args.unwrap = GetCurrentThreadId() == GetWindowThreadProcessId(node->hwnd, NULL);
-    return SendMessageW(client_thread.hwnd, WM_UIA_CLIENT_GET_NODE_PROV, (WPARAM)&args, (LPARAM)node);
+    if (!args.unwrap)
+        return SendMessageW(client_thread.hwnd, WM_UIA_CLIENT_GET_NODE_PROV, (WPARAM)&args, (LPARAM)node);
+
+    /* The provider lives on this thread: the client thread reaches it through
+       COM, whose calls into this (STA) thread arrive as posted messages, which
+       a thread waiting in SendMessage never handles (Spotify's UI thread hung
+       there). Post the request and keep dispatching our messages until done. */
+    args.node = node;
+    args.result = E_FAIL;
+    args.done = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!args.done || !PostMessageW(client_thread.hwnd, WM_UIA_CLIENT_GET_NODE_PROV_POSTED, (WPARAM)&args, 0))
+    {
+        if (args.done) CloseHandle(args.done);
+        return SendMessageW(client_thread.hwnd, WM_UIA_CLIENT_GET_NODE_PROV, (WPARAM)&args, (LPARAM)node);
+    }
+    while (MsgWaitForMultipleObjectsEx(1, &args.done, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE) != WAIT_OBJECT_0)
+    {
+        MSG msg;
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    CloseHandle(args.done);
+    return args.result;
 }
 
 HRESULT create_uia_node_from_hwnd(HWND hwnd, HUIANODE *out_node, int node_flags)
