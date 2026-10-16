@@ -519,12 +519,10 @@ static const INFORMATION_CLASS_INFO PsThreadInfoClass[] =
         ICIF_SET
     ),
 
-    /* ThreadPriorityBoost */
-    IQS
+    /* ThreadPriorityBoost (a ULONG both ways, also on 64-bit) */
+    IQS_SAME
     (
         ULONG,
-        ULONG,
-        ULONG_PTR,
         ULONG,
         ICIF_QUERY | ICIF_SET
     ),
