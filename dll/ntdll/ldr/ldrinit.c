@@ -1975,6 +1975,8 @@ static const struct
     { L"WIN10",   10, 0, 19045, 0x000, L"" },
     { L"WIN11",   10, 0, 22631, 0x000, L"" },
 };
+#define LDRP_VERSION_LAYER_WIN8 5
+#define LDRP_VERSION_LAYER_WIN81 6
 #define LDRP_VERSION_LAYER_WIN10 7
 
 /* A version was asked for (Image File Execution Options or ROS_COMPAT_WINVER) */
@@ -2072,16 +2074,28 @@ LdrpInitializeProcessCompat(PVOID pProcessActctx, PVOID* pOldShimData)
        version was asked for */
     if (!LdrpVersionLayerApplied)
     {
+        BOOLEAN Win81 = FALSE;
         for (n = 0; n < ContextCompatInfo->ElementCount; ++n)
         {
-            if (ContextCompatInfo->Elements[n].Type == ACTCTX_COMPATIBILITY_ELEMENT_TYPE_OS &&
-                RtlCompareMemory(&ContextCompatInfo->Elements[n].Id, &COMPAT_GUID_WIN10, sizeof(GUID)) == sizeof(GUID))
+            if (ContextCompatInfo->Elements[n].Type != ACTCTX_COMPATIBILITY_ELEMENT_TYPE_OS)
+                continue;
+            if (RtlCompareMemory(&ContextCompatInfo->Elements[n].Id, &COMPAT_GUID_WIN10, sizeof(GUID)) == sizeof(GUID))
             {
                 LdrpReportVersionLayer(LDRP_VERSION_LAYER_WIN10, "manifest");
                 LdrpVersionLayerApplied = TRUE;
                 break;
             }
+            if (RtlCompareMemory(&ContextCompatInfo->Elements[n].Id, &COMPAT_GUID_WIN81, sizeof(GUID)) == sizeof(GUID))
+                Win81 = TRUE;
         }
+#if defined(DLL_EXPORT_VERSION) && (DLL_EXPORT_VERSION >= 0x0A00)
+        /* Manifested for Windows 8.1 at most: Windows 10 shows 6.3 */
+        if (!LdrpVersionLayerApplied && Win81)
+        {
+            LdrpReportVersionLayer(LDRP_VERSION_LAYER_WIN81, "manifest");
+            LdrpVersionLayerApplied = TRUE;
+        }
+#endif
     }
 
     /* With a version layer, ReactOS reports a newer Windows: do as that
@@ -2324,8 +2338,14 @@ LdrpApplyVersionLayer(VOID)
         {
             LdrpReportVersionLayer(LDRP_VERSION_LAYER_WIN10, "system program");
             LdrpVersionLayerApplied = TRUE;
+            return;
         }
     }
+
+    /* Other programs: Windows 8, as Windows 10 shows programs not manifested
+       for 8.1 or 10 (MediaMonkey refused to run on NT 5.2). Not "applied":
+       the manifest, read later, may say 8.1 or 10 */
+    LdrpReportVersionLayer(LDRP_VERSION_LAYER_WIN8, "default for programs without a Windows 10 manifest");
 #endif
 }
 
