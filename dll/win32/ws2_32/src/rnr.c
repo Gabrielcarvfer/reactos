@@ -254,7 +254,8 @@ WSALookupServiceBeginA(IN LPWSAQUERYSETA lpqsRestrictions,
 
     /* Verify pointer */
     if (IsBadReadPtr(lpqsRestrictions, sizeof(*lpqsRestrictions)) ||
-        IsBadReadPtr(lpqsRestrictions->lpServiceClassId, sizeof(*lpqsRestrictions->lpServiceClassId)))
+        (lpqsRestrictions->lpServiceClassId &&
+         IsBadReadPtr(lpqsRestrictions->lpServiceClassId, sizeof(*lpqsRestrictions->lpServiceClassId))))
     {
         /* Invalid */
         SetLastError(WSAEFAULT);
@@ -335,9 +336,11 @@ WSALookupServiceBeginW(IN LPWSAQUERYSETW lpqsRestrictions,
     /* Verify pointers */
     if (IsBadWritePtr(lphLookup, sizeof(*lphLookup)) ||
         IsBadReadPtr(lpqsRestrictions, sizeof(*lpqsRestrictions)) ||
-        IsBadReadPtr(lpqsRestrictions->lpServiceClassId, sizeof(*lpqsRestrictions->lpServiceClassId)))
+        (lpqsRestrictions->lpServiceClassId &&
+         IsBadReadPtr(lpqsRestrictions->lpServiceClassId, sizeof(*lpqsRestrictions->lpServiceClassId))))
     {
-        /* They are invalid; fail */
+        /* They are invalid; fail. (No service class is fine: Chromium's
+           network change notifier queries NS_NLA without one) */
         SetLastError(WSAEFAULT);
         return SOCKET_ERROR;
     }

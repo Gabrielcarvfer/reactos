@@ -221,7 +221,13 @@ mwsNSPLookupServiceBegin(_In_ LPGUID lpProviderId,
 #else /* NSP_REDIRECT */
 
     wsaErr = ERROR_CALL_NOT_IMPLEMENTED;
-    if (IsEqualGUID(lpqsRestrictions->lpServiceClassId, &guid_NULL))
+    if (!lpqsRestrictions->lpServiceClassId)
+    {
+        /* No service class (Chromium's NS_NLA query): nothing this
+           provider can answer */
+        wsaErr = WSASERVICE_NOT_FOUND;
+    }
+    else if (IsEqualGUID(lpqsRestrictions->lpServiceClassId, &guid_NULL))
     {
         wsaErr = ERROR_CALL_NOT_IMPLEMENTED;
     }
