@@ -2349,6 +2349,150 @@ LdrpApplyVersionLayer(VOID)
 #endif
 }
 
+/*
+ * Chromium-based programs (Chrome, Edge, Electron and CEF apps: VS Code,
+ * Spotify...) draw through ANGLE, whose default Direct3D 11 backend leaves
+ * their windows dark on ReactOS (no DirectComposition; D3D11 goes through
+ * wined3d). ANGLE's OpenGL backend can't initialize in Chromium's GPU process
+ * (it draws to another process's window, which needs WGL_NV_DX_interop2;
+ * Mesa has none). ANGLE's own software renderer, SwiftShader, works for
+ * VS Code but leaves Spotify's (CEF) window black. Without a GPU process
+ * (--disable-gpu, software compositing) both work. Chromium has no system-wide
+ * setting, so the browser process of such a program gets extra switches
+ * appended to its command line; Chromium passes them on to its children.
+ * Recognized by marks of each Chromium family in the program (see
+ * LdrpApplyChromiumSwitches). Settings: HKLM\SOFTWARE\ReactOS\Compatibility\Chromium,
+ * "Enabled" (REG_DWORD, default 1) and "Switches" (REG_SZ, default
+ * "--disable-gpu"). Not done when the program already chose a GL/ANGLE
+ * mode itself, nor for Chromium's child processes ("--type=").
+ */
+/* The program imports a DLL whose name ends with Suffix (case-insensitive) */
+static BOOLEAN
+LdrpImageImportsDllSuffix(PVOID ImageBase, PCSTR Suffix)
+{
+    PIMAGE_IMPORT_DESCRIPTOR Import;
+    ULONG Size;
+    SIZE_T SuffixLen = strlen(Suffix);
+
+    Import = RtlImageDirectoryEntryToData(ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &Size);
+    if (!Import || !Size) return FALSE;
+    for (; Import->Name; Import++)
+    {
+        PCSTR Name = (PCSTR)((ULONG_PTR)ImageBase + Import->Name);
+        SIZE_T Len = strlen(Name);
+        if (Len >= SuffixLen && !_stricmp(Name + Len - SuffixLen, Suffix))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOLEAN
+LdrpImageExportsName(PVOID ImageBase, PCSTR Wanted)
+{
+    PIMAGE_EXPORT_DIRECTORY Exports;
+    PULONG Names;
+    ULONG Size, i;
+
+    Exports = RtlImageDirectoryEntryToData(ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &Size);
+    if (!Exports || !Size) return FALSE;
+    Names = (PULONG)((ULONG_PTR)ImageBase + Exports->AddressOfNames);
+    for (i = 0; i < Exports->NumberOfNames; i++)
+    {
+        if (!strcmp((PCSTR)((ULONG_PTR)ImageBase + Names[i]), Wanted))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOLEAN
+LdrpCommandLineHas(PCUNICODE_STRING CommandLine, PCWSTR Switch)
+{
+    SIZE_T i, n = CommandLine->Length / sizeof(WCHAR), m = wcslen(Switch);
+    for (i = 0; i + m <= n; i++)
+        if (!_wcsnicmp(CommandLine->Buffer + i, Switch, m)) return TRUE;
+    return FALSE;
+}
+
+static VOID
+LdrpApplyChromiumSwitches(PRTL_USER_PROCESS_PARAMETERS Params)
+{
+    static const UNICODE_STRING KeyName =
+        RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SOFTWARE\\ReactOS\\Compatibility\\Chromium");
+    static const UNICODE_STRING EnabledName = RTL_CONSTANT_STRING(L"Enabled");
+    static const UNICODE_STRING SwitchesName = RTL_CONSTANT_STRING(L"Switches");
+    WCHAR Switches[256] = L"--disable-gpu";
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(Switches)];
+    PKEY_VALUE_PARTIAL_INFORMATION Info = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE Key;
+    ULONG Length;
+    SIZE_T NewChars;
+    PWCHAR NewBuffer;
+
+    if (!Params || !Params->CommandLine.Buffer || !Params->ImagePathName.Buffer)
+        return;
+
+    /* Not for Chromium's children, nor when the program chose a mode itself */
+    if (LdrpCommandLineHas(&Params->CommandLine, L"--type=") ||
+        LdrpCommandLineHas(&Params->CommandLine, L"--use-angle") ||
+        LdrpCommandLineHas(&Params->CommandLine, L"--use-gl") ||
+        LdrpCommandLineHas(&Params->CommandLine, L"--disable-gpu"))
+        return;
+
+    /* A Chromium host program, by the marks each family leaves in its .exe:
+       - Chromium browsers (chrome.exe, msedge.exe, brave, opera, vivaldi) and
+         CEF hosts (Spotify) import Chromium's early-startup DLL, chrome_elf.dll
+         or a renamed copy (msedge_elf.dll, ...);
+       - other CEF hosts import libcef.dll;
+       - Electron apps (VS Code) are one .exe exporting both Node's
+         napi_module_register and Chromium's sandbox IsSandboxedProcess
+         (node.exe has only the first, Firefox only the second). */
+    {
+        PVOID Image = NtCurrentPeb()->ImageBaseAddress;
+        if (!LdrpImageImportsDllSuffix(Image, "_elf.dll") &&
+            !LdrpImageImportsDllSuffix(Image, "libcef.dll") &&
+            !(LdrpImageExportsName(Image, "napi_module_register") &&
+              LdrpImageExportsName(Image, "IsSandboxedProcess")))
+            return;
+    }
+
+    InitializeObjectAttributes(&ObjectAttributes, (PUNICODE_STRING)&KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (NT_SUCCESS(NtOpenKey(&Key, KEY_QUERY_VALUE, &ObjectAttributes)))
+    {
+        if (NT_SUCCESS(NtQueryValueKey(Key, (PUNICODE_STRING)&EnabledName, KeyValuePartialInformation,
+                                       Info, sizeof(Buffer), &Length)) &&
+            Info->Type == REG_DWORD && Info->DataLength == sizeof(ULONG) && !*(PULONG)Info->Data)
+        {
+            NtClose(Key);
+            return;
+        }
+        if (NT_SUCCESS(NtQueryValueKey(Key, (PUNICODE_STRING)&SwitchesName, KeyValuePartialInformation,
+                                       Info, sizeof(Buffer) - sizeof(WCHAR), &Length)) &&
+            (Info->Type == REG_SZ || Info->Type == REG_EXPAND_SZ) && Info->DataLength < sizeof(Switches))
+        {
+            RtlCopyMemory(Switches, Info->Data, Info->DataLength);
+            Switches[Info->DataLength / sizeof(WCHAR)] = UNICODE_NULL;
+        }
+        NtClose(Key);
+    }
+    if (!Switches[0])
+        return;
+
+    NewChars = Params->CommandLine.Length / sizeof(WCHAR) + 1 + wcslen(Switches);
+    if (NewChars * sizeof(WCHAR) + sizeof(WCHAR) > UNICODE_STRING_MAX_BYTES)
+        return;
+    NewBuffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, (NewChars + 1) * sizeof(WCHAR));
+    if (!NewBuffer)
+        return;
+    RtlCopyMemory(NewBuffer, Params->CommandLine.Buffer, Params->CommandLine.Length);
+    NewBuffer[Params->CommandLine.Length / sizeof(WCHAR)] = L' ';
+    wcscpy(NewBuffer + Params->CommandLine.Length / sizeof(WCHAR) + 1, Switches);
+    Params->CommandLine.Buffer = NewBuffer;
+    Params->CommandLine.Length = (USHORT)(NewChars * sizeof(WCHAR));
+    Params->CommandLine.MaximumLength = (USHORT)((NewChars + 1) * sizeof(WCHAR));
+    DPRINT1("Chromium-based program %wZ: added \"%S\"\n", &Params->ImagePathName, Switches);
+}
+
 NTSTATUS
 NTAPI
 LdrpInitializeProcess(IN PCONTEXT Context,
@@ -2696,6 +2840,9 @@ LdrpInitializeProcess(IN PCONTEXT Context,
         DPRINT1("Failed to create loader private heap\n");
         return STATUS_NO_MEMORY;
     }
+
+    /* Chromium-based programs: extra switches (before kernel32 reads the command line) */
+    LdrpApplyChromiumSwitches(Peb->ProcessParameters);
 
     /* Check for Debug Heap */
     if (OptionsKey)
