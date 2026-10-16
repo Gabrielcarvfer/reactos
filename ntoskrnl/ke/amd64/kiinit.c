@@ -187,8 +187,11 @@ KiInitializeCpu(PKIPCR Pcr)
         KeBugCheck(0);
     }
 
-    /* Set DEP to always on */
-    SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_ALWAYSON;
+    /* Set DEP to always on (the boot processor; KiInitializeKernelMachineDependent
+       applies the boot options afterwards, which application processors must
+       not overwrite) */
+    if (Pcr->Prcb.Number == 0)
+        SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_ALWAYSON;
     FeatureBits |= KF_NX_ENABLED;
 
     /* Save feature bits */
@@ -492,19 +495,16 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     ULONG64 InitialStack;
     PKIPCR Pcr;
 
-    /* Boot cycles timestamp */
-    BootCycles = __rdtsc();
-
-    /* HACK */
-    FrLdrDbgPrint = LoaderBlock->u.I386.CommonDataArea;
-    //FrLdrDbgPrint("Hello from KiSystemStartup!!!\n");
-
-    /* Get the current CPU number */
-    Cpu = KeNumberProcessors++; // FIXME
-
     /* LoaderBlock initialization for Cpu 0 */
-    if (Cpu == 0)
+    if (KeNumberProcessors == 0)
     {
+        /* Boot cycles timestamp */
+        BootCycles = __rdtsc();
+
+        /* HACK */
+        FrLdrDbgPrint = LoaderBlock->u.I386.CommonDataArea;
+        //FrLdrDbgPrint("Hello from KiSystemStartup!!!\n");
+
         /* Save the loader block */
         KeLoaderBlock = LoaderBlock;
 
@@ -512,11 +512,15 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         KiInitializeP0BootStructures(LoaderBlock);
     }
 
-    /* Get Pcr from loader block */
+    /* Get Pcr from loader block. For an application processor,
+       KeStartAllProcessors prepared it and set its number. */
     Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
+    Cpu = Pcr->Prcb.Number;
 
     /* Set the PRCB for this Processor */
     KiProcessorBlock[Cpu] = &Pcr->Prcb;
+    KeMemoryBarrier();
+    KeNumberProcessors = max(KeNumberProcessors, Cpu + 1);
 
     /* Save the initial thread */
     InitialThread = (PKTHREAD)LoaderBlock->Thread;
@@ -551,8 +555,15 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     /* Initialize the Processor with HAL */
     HalInitializeProcessor(Cpu, KeLoaderBlock);
 
-    /* Set processor as active */
-    KeActiveProcessors |= 1ULL << Cpu;
+    /* The HAL calibrated the stall loop on the boot processor only */
+    if (Cpu != 0)
+        Pcr->StallScaleFactor = KiInitialPcr.StallScaleFactor;
+
+    /* Set processor as active. An application processor does it at the end
+       of its initialization (KiSystemStartupBootStack), when it can answer
+       IPIs: other processors wait for it to answer TLB flush requests. */
+    if (Cpu == 0)
+        KeActiveProcessors |= 1ULL << Cpu;
 
     /* Release lock */
     InterlockedAnd64((PLONG64)&KiFreezeExecutionLock, 0);
@@ -566,8 +577,13 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         if (KdPollBreakIn()) DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
     }
 
-    DPRINT1("Pcr = %p, Gdt = %p, Idt = %p, Tss = %p\n",
-           Pcr, Pcr->GdtBase, Pcr->IdtBase, Pcr->TssBase);
+    /* (Not on an application processor: printing freezes the others,
+       and this one cannot answer IPIs yet) */
+    if (Cpu == 0)
+    {
+        DPRINT1("Pcr = %p, Gdt = %p, Idt = %p, Tss = %p\n",
+               Pcr, Pcr->GdtBase, Pcr->IdtBase, Pcr->TssBase);
+    }
 
     /* Raise to HIGH_LEVEL */
     KfRaiseIrql(HIGH_LEVEL);

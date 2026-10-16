@@ -83,8 +83,9 @@ HalpInitializeTsc(VOID)
     /* Set the calibration ISR */
     KeRegisterInterruptHandler(APIC_CLOCK_VECTOR, TscCalibrationISR);
 
-    /* Reset TSC value to 0 */
-    __writemsr(MSR_RDTSC, 0);
+    /* Don't reset the TSC: the performance counter is the TSC, and it must
+       agree between processors (the other ones keep counting from power-on,
+       a thread moving to another processor would see the time jump) */
 
     /* Enable the timer interrupt */
     HalEnableSystemInterrupt(APIC_CLOCK_VECTOR, CLOCK_LEVEL, Latched);

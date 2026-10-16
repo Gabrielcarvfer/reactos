@@ -184,6 +184,9 @@ KiSystemStartupBootStack(VOID)
     {
         /* Initialize the startup thread */
         KiInitializeHandBuiltThread(Thread, Process, KernelStack);
+
+        /* No hyper-threading support: each processor is its own set */
+        Prcb->MultiThreadSetMaster = Prcb;
     }
 
     /* Calculate the CPU frequency */
@@ -194,6 +197,14 @@ KiSystemStartupBootStack(VOID)
 
     /* Set the Idle Priority to 0. This will jump into Phase 1 */
     KeSetPriorityThread(Thread, 0);
+
+    if (Prcb->Number != 0)
+    {
+        /* This application processor can now take part in IPIs (TLB flushes).
+           Anything changed in the page tables before is flushed here. */
+        InterlockedOr64((PLONG64)&KeActiveProcessors, (LONG64)Prcb->SetMember);
+        KeFlushCurrentTb();
+    }
 
     /* If there's no thread scheduled, put this CPU in the Idle summary */
     KiAcquirePrcbLock(Prcb);
