@@ -2248,12 +2248,21 @@ MiProtectVirtualMemory(IN PEPROCESS Process,
         goto FailPath;
     }
 
-    /* Check for a VAD whose protection can't be changed */
+    /* A VAD whose protection can't be changed freely: as Windows, check its
+       secured range (the PEB and TEBs stay writable, but another process may
+       make them executable too, as WriteProcessMemory does: Chromium's
+       sandbox writes PEB->pShimData of its children, error 72 otherwise) */
     if (Vad->u.VadFlags.NoChange == 1)
     {
-        DPRINT1("Trying to change protection of a NoChange VAD\n");
-        Status = STATUS_INVALID_PAGE_PROTECTION;
-        goto FailPath;
+        Status = MiCheckSecuredVad(Vad,
+                                   (PVOID)StartingAddress,
+                                   EndingAddress - StartingAddress + 1,
+                                   ProtectionMask);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Trying to change protection of a NoChange VAD\n");
+            goto FailPath;
+        }
     }
 
     /* Is this section, or private memory? */
