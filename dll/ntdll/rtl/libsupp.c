@@ -1158,6 +1158,12 @@ LdrpApplyFileNameRedirection(
     {
         ApisetVersion = APISET_WIN10;
     }
+    else if (OriginalName->Length > 15 * sizeof(WCHAR) &&
+             !_wcsnicmp(OriginalName->Buffer, L"api-ms-win-crt-", 15))
+    {
+        /* Also for programs told Windows 7 to 8.1 (Inkscape's gdbus.exe) */
+        ApisetVersion |= APISET_WIN10;
+    }
 
     if (ApisetVersion)
     {
