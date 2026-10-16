@@ -241,6 +241,13 @@ RtlDeregisterWaitEx(HANDLE WaitHandle,
         else
             Status = STATUS_PENDING;
     }
+    else if (CompletionEvent != NULL && CompletionEvent != INVALID_HANDLE_VALUE)
+    {
+        /* No callback running: the wait is unregistered now, and the caller's
+           event must say so (Chromium's ObjectWatcher::StopWatching waits on
+           it; the browser's main thread hung forever) */
+        NtSetEvent( CompletionEvent, NULL );
+    }
 
     if (InterlockedIncrement( &Wait->DeleteCount ) == 2 )
     {
