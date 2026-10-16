@@ -731,8 +731,8 @@ NTSTATUS DispTdiQueryInformation(
 				(PCONNECTION_ENDPOINT)TranContext->Handle.ConnectionContext;
             if (Endpoint == NULL || Endpoint->AddressFile == NULL)
             {
-                TI_DbgPrint(MIN_TRACE, ("FIXME: No connection endpoint file object.\n"));
-                ASSERT(Endpoint != NULL && Endpoint->AddressFile != NULL);
+                /* Not a bug of ours: e.g. getsockname() after a refused connection */
+                TI_DbgPrint(MIN_TRACE, ("No address file for this connection.\n"));
                 return STATUS_INVALID_PARAMETER;
             }
 
