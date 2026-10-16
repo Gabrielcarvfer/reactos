@@ -119,6 +119,8 @@
 //
 #define PSP_JOB_CLOSE_DONE      0x00000001
 #define PSP_JOB_TERMINATING     0x00000080
+/* ReactOS-specific: another job has been nested in this one */
+#define PSP_JOB_HAS_CHILD_JOBS  0x80000000
 
 //
 // Thread "Set/Get Context" Context Structure
@@ -434,6 +436,20 @@ NTAPI
 PspAssignProcessToJob(
     _In_ PEPROCESS Process,
     _In_ PEJOB Job
+);
+
+NTSTATUS
+NTAPI
+PspAssignProcessToParentJob(
+    _In_ PEPROCESS Process,
+    _In_ PEPROCESS Parent,
+    _In_ BOOLEAN Breakaway
+);
+
+VOID
+NTAPI
+PspSendJobExitProcessMessages(
+    _In_ PEPROCESS Process
 );
 
 VOID

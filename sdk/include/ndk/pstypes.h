@@ -1667,6 +1667,9 @@ typedef struct _EJOB
     LIST_ENTRY JobSetLinks;
     ULONG MemberLevel;
     ULONG JobFlags;
+    /* ReactOS-specific: the job this one is nested in (Windows 8+ job
+       hierarchies). Set once, holds a reference on the parent job. */
+    struct _EJOB *ParentJob;
 } EJOB, *PEJOB;
 
 //

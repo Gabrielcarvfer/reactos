@@ -25,6 +25,19 @@ POBJECT_TYPE PsJobType = NULL;
 LIST_ENTRY PsJobListHead;
 static FAST_MUTEX PsJobListLock;
 
+/*
+ * Protects the shape of job hierarchies (Windows 8+ nested jobs):
+ * EJOB::ParentJob, and EPROCESS::Job together with the job list that
+ * EPROCESS::JobLinks is linked in. A process only moves between jobs when it
+ * is nested into another job, which happens with this lock held exclusively.
+ * Walking the job chain of a process (its job and that job's ancestors)
+ * requires this lock held at least shared.
+ *
+ * Lock order: this lock first, then the job locks of a chain from the
+ * innermost job outwards. It must never be acquired while a job lock is held.
+ */
+static ERESOURCE PspJobHierarchyLock;
+
 BOOLEAN PspUseJobSchedulingClasses;
 
 CHAR PspJobSchedulingClasses[PSP_JOB_SCHEDULING_CLASSES] =
@@ -129,6 +142,86 @@ PspInitializeJobStructures(VOID)
 {
     InitializeListHead(&PsJobListHead);
     ExInitializeFastMutex(&PsJobListLock);
+    ExInitializeResourceLite(&PspJobHierarchyLock);
+}
+
+static
+VOID
+PspAcquireJobHierarchyShared(VOID)
+{
+    (VOID)ExEnterCriticalRegionAndAcquireResourceShared(&PspJobHierarchyLock);
+}
+
+static
+VOID
+PspAcquireJobHierarchyExclusive(VOID)
+{
+    (VOID)ExEnterCriticalRegionAndAcquireResourceExclusive(&PspJobHierarchyLock);
+}
+
+static
+VOID
+PspReleaseJobHierarchy(VOID)
+{
+    ExReleaseResourceAndLeaveCriticalRegion(&PspJobHierarchyLock);
+}
+
+/*!
+ * Acquires exclusively the locks of a job and all its ancestors, from the
+ * innermost job outwards.
+ *
+ * @remarks
+ *     The caller must hold the job hierarchy lock and be in a critical region.
+ */
+static
+VOID
+PspLockJobChain(
+    _In_ PEJOB Job
+)
+{
+    ASSERT(KeAreApcsDisabled());
+
+    for (; Job != NULL; Job = Job->ParentJob)
+    {
+        ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+    }
+}
+
+/*!
+ * Releases the locks acquired by PspLockJobChain().
+ */
+static
+VOID
+PspUnlockJobChain(
+    _In_ PEJOB Job
+)
+{
+    for (; Job != NULL; Job = Job->ParentJob)
+    {
+        ExReleaseResourceLite(&Job->JobLock);
+    }
+}
+
+/*!
+ * Checks whether a job is the specified job or nested in it at any depth.
+ *
+ * @remarks
+ *     The caller must hold the job hierarchy lock.
+ */
+static
+BOOLEAN
+PspIsJobInChain(
+    _In_opt_ PEJOB Job,
+    _In_ PEJOB Ancestor
+)
+{
+    for (; Job != NULL; Job = Job->ParentJob)
+    {
+        if (Job == Ancestor)
+            return TRUE;
+    }
+
+    return FALSE;
 }
 
 /*!
@@ -220,7 +313,8 @@ PspGetNextProcessInJobLocked(
  *
  *     This relies on job membership remaining fixed until process object deletion.
  *     The reference to PreviousProcess therefore keeps its JobLinks valid until
- *     the next process has been selected.
+ *     the next process has been selected. Nesting a process into another job
+ *     moves it, so the caller must hold the job hierarchy lock shared.
  */
 static
 PEPROCESS
@@ -283,7 +377,8 @@ PspGetNextProcessInJob(
  * @remarks
  *     Enumeration stops when a callback returns an unsuccessful status.
  *
- *     The callback is invoked _without_ the job lock held.
+ *     The callback is invoked _without_ the job lock held, but with the job
+ *     hierarchy lock held shared.
  */
 NTSTATUS
 NTAPI
@@ -295,6 +390,9 @@ PspEnumerateProcessesInJob(
 {
     NTSTATUS Status = STATUS_SUCCESS;
     PEPROCESS Process;
+
+    /* Keep the processes from being nested into other jobs meanwhile */
+    PspAcquireJobHierarchyShared();
 
     /* Iterate through all processes in the job */
     for (Process = PspGetNextProcessInJob(Job, NULL);
@@ -312,6 +410,8 @@ PspEnumerateProcessesInJob(
             break;
         }
     }
+
+    PspReleaseJobHierarchy();
 
     return Status;
 }
@@ -415,8 +515,120 @@ PspSendJobMessageLocked(
 }
 
 /*!
- * Assigns a process to a job object.
- 
+ * Checks that a process may join a job.
+ *
+ * @param[in] Job
+ *     A pointer to the job the process is joining.
+ *
+ * @param[in, optional] StopJob
+ *     The job the process is already in, an ancestor of Job, or NULL if the
+ *     process is in no job yet. The active process limits of StopJob and its
+ *     ancestors already account for the process.
+ *
+ * @returns
+ *     STATUS_SUCCESS if the process may join the job.
+ *     An appropriate NTSTATUS error code otherwise.
+ *
+ * @remarks
+ *     The caller must hold the job hierarchy lock and the locks of the job
+ *     chain of Job.
+ */
+static
+NTSTATUS
+PspCheckJobChainForNewProcess(
+    _In_ PEJOB Job,
+    _In_opt_ PEJOB StopJob
+)
+{
+    PEJOB Current;
+
+    for (Current = Job; Current != NULL; Current = Current->ParentJob)
+    {
+        ASSERT(ExIsResourceAcquiredExclusiveLite(&Current->JobLock) != 0);
+
+        /* https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-assignprocesstojobobject:
+           "If the job or any of its parent jobs in the job chain is terminating
+           when AssignProcessToJob is called, the function fails" */
+        if (FlagOn(Current->JobFlags, PSP_JOB_TERMINATING))
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        /* Prevent processes from being added to the job if it is flagged
+           for closing and has a limit on process termination on closing */
+        if (FlagOn(Current->LimitFlags, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) &&
+            FlagOn(Current->JobFlags, PSP_JOB_CLOSE_DONE))
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+    }
+
+    /* Check the limits on the number of active processes of the jobs that
+       the process is not in yet */
+    for (Current = Job; Current != StopJob; Current = Current->ParentJob)
+    {
+        ASSERT(Current != NULL);
+
+        if (FlagOn(Current->LimitFlags, JOB_OBJECT_LIMIT_ACTIVE_PROCESS) &&
+            Current->ActiveProcesses >= Current->ActiveProcessLimit)
+        {
+            if (Current->CompletionPort)
+            {
+                /* If the job has a completion port, notify the job that the
+                   limit on the number of active processes has been exceeded */
+                (VOID)PspSendJobMessageLocked(Current,
+                                              JOB_OBJECT_MSG_ACTIVE_PROCESS_LIMIT,
+                                              NULL,
+                                              TRUE);
+            }
+
+            return STATUS_QUOTA_EXCEEDED;
+        }
+    }
+
+    return STATUS_SUCCESS;
+}
+
+/*!
+ * Counts a process that joined a job in that job and the ancestors it was not
+ * in before. The counts of a job include the processes of its nested jobs.
+ *
+ * @remarks
+ *     The caller must hold the job hierarchy lock and the locks of the job
+ *     chain of Job.
+ */
+static
+VOID
+PspAccountNewProcessInJobChain(
+    _In_ PEPROCESS Process,
+    _In_ PEJOB Job,
+    _In_opt_ PEJOB StopJob
+)
+{
+    PEJOB Current;
+
+    for (Current = Job; Current != StopJob; Current = Current->ParentJob)
+    {
+        ASSERT(Current != NULL);
+
+        Current->TotalProcesses++;
+        Current->ActiveProcesses++;
+
+        if (Current->CompletionPort && Process->UniqueProcessId)
+        {
+            /* If the job has a completion port and the process has a unique ID,
+               notify the job of the new process */
+            (VOID)PspSendJobMessageLocked(Current,
+                                          JOB_OBJECT_MSG_NEW_PROCESS,
+                                          Process->UniqueProcessId,
+                                          FALSE);
+        }
+    }
+}
+
+/*!
+ * Assigns a process that is in no job yet to a job object.
+
  * @param[in] Process
  *     Pointer to the process to be assigned to the job.
  *
@@ -425,7 +637,11 @@ PspSendJobMessageLocked(
  *
  * @returns
  *     STATUS_SUCCESS if the process is successfully assigned to the job.
+ *     STATUS_ACCESS_DENIED if the process is already in a job.
  *     An appropriate NTSTATUS error code otherwise.
+ *
+ * @remarks
+ *     The process also becomes part of all the jobs Job is nested in.
  */
 NTSTATUS
 NTAPI
@@ -443,42 +659,12 @@ PspAssignProcessToJob(
         return STATUS_PROCESS_IS_TERMINATING;
     }
 
-    ExEnterCriticalRegionAndAcquireResourceExclusive(&Job->JobLock);
+    PspAcquireJobHierarchyShared();
+    PspLockJobChain(Job);
 
-    /* https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-assignprocesstojobobject:
-       "If the job or any of its parent jobs in the job chain is terminating
-       when AssignProcessToJob is called, the function fails" */
-    if (FlagOn(Job->JobFlags, PSP_JOB_TERMINATING))
+    Status = PspCheckJobChainForNewProcess(Job, NULL);
+    if (!NT_SUCCESS(Status))
     {
-        Status = STATUS_INVALID_PARAMETER;
-        goto Exit;
-    }
-
-    /* Prevent processes from being added to the job if it is flagged
-       for closing and has a limit on process termination on closing */
-    if (FlagOn(Job->LimitFlags, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) &&
-        FlagOn(Job->JobFlags, PSP_JOB_CLOSE_DONE))
-    {
-        Status = STATUS_INVALID_PARAMETER;
-        goto Exit;
-    }
-
-    /* Check if the job has a limit on the number of active processes */
-    if (FlagOn(Job->LimitFlags, JOB_OBJECT_LIMIT_ACTIVE_PROCESS) &&
-        Job->ActiveProcesses >= Job->ActiveProcessLimit)
-    {
-        /* Check if job limit on active processes has been reached */
-        if (Job->CompletionPort)
-        {
-            /* If the job has a completion port, notify the job that the
-               limit on the number of active processes has been exceeded */
-            (VOID)PspSendJobMessageLocked(Job,
-                                          JOB_OBJECT_MSG_ACTIVE_PROCESS_LIMIT,
-                                          NULL,
-                                          TRUE);
-        }
-
-        Status = STATUS_QUOTA_EXCEEDED;
         goto Exit;
     }
 
@@ -488,8 +674,9 @@ PspAssignProcessToJob(
        release the unused reference. */
     ObReferenceObject(Job);
 
-    /* JobLock protects the target job, but another caller may simultaneously
-       hold a different job's lock while trying to assign the same process */
+    /* The job locks protect the target job chain, but another caller may
+       simultaneously hold a different job's lock while trying to assign the
+       same process */
     PreviousJob = InterlockedCompareExchangePointer((PVOID)&Process->Job,
                                                     Job,
                                                     NULL);
@@ -510,18 +697,7 @@ PspAssignProcessToJob(
 
     InsertTailList(&Job->ProcessListHead, &Process->JobLinks);
 
-    Job->TotalProcesses++;
-    Job->ActiveProcesses++;
-
-    if (Job->CompletionPort && Process->UniqueProcessId)
-    {
-        /* If the job has a completion port and the process has a unique ID,
-           notify the job of the new process */
-        (VOID)PspSendJobMessageLocked(Job,
-                                      JOB_OBJECT_MSG_NEW_PROCESS,
-                                      Process->UniqueProcessId,
-                                      FALSE);
-    }
+    PspAccountNewProcessInJobChain(Process, Job, NULL);
 
     /* Hand the process to win32k, which enforces the UI restrictions. One
        that has not connected to win32k yet is picked up when it does. */
@@ -533,7 +709,8 @@ PspAssignProcessToJob(
     }
 
 Exit:
-    ExReleaseResourceAndLeaveCriticalRegion(&Job->JobLock);
+    PspUnlockJobChain(Job);
+    PspReleaseJobHierarchy();
     ExReleaseRundownProtection(&Process->RundownProtect);
 
     /* The assignment is committed, but win32k will not be enforcing the UI
@@ -554,44 +731,272 @@ Exit:
 }
 
 /*!
- * Marks a process inactive in its assigned job.
+ * Assigns a process that is already in a job to another job, nesting the
+ * jobs (Windows 8+ job hierarchies).
+ *
+ * @param[in] Process
+ *     Pointer to the process to be assigned to the job.
  *
  * @param[in] Job
- *     A pointer to the process's assigned job.
+ *     Pointer to the job object to which the process is to be assigned.
+ *
+ * @returns
+ *     STATUS_SUCCESS if the process is successfully assigned to the job.
+ *     STATUS_ACCESS_DENIED if the jobs can't form a hierarchy.
+ *     An appropriate NTSTATUS error code otherwise.
+ *
+ * @remarks
+ *     https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs
+ *     The process stays in its current job and joins Job, which becomes its
+ *     immediate job. Job must either be nested in the current job of the
+ *     process already, or be in no hierarchy and empty, in which case it
+ *     becomes a child job of the current job of the process. A job with UI
+ *     restrictions can't be part of a hierarchy this way.
+ */
+static
+NTSTATUS
+PspNestProcessInJob(
+    _In_ PEPROCESS Process,
+    _In_ PEJOB Job
+)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    PEJOB CurrentJob;
+    PEJOB ReleaseJob = NULL;
+    BOOLEAN NewParent = FALSE;
+
+    if (!ExAcquireRundownProtection(&Process->RundownProtect))
+    {
+        return STATUS_PROCESS_IS_TERMINATING;
+    }
+
+    /* Nothing walks job chains or moves processes while we hold this */
+    PspAcquireJobHierarchyExclusive();
+
+    /* Process->Job is only cleared on process deletion */
+    CurrentJob = Process->Job;
+    ASSERT(CurrentJob != NULL);
+
+    /* The process is in that job already */
+    if (Job == CurrentJob)
+    {
+        goto Exit;
+    }
+
+    /* Its exit has been accounted for already */
+    if (FlagOn(Process->JobStatus, PSP_JOB_NOT_REALLY_ACTIVE))
+    {
+        Status = STATUS_PROCESS_IS_TERMINATING;
+        goto Exit;
+    }
+
+    if (Job->UIRestrictionsClass != 0)
+    {
+        Status = STATUS_ACCESS_DENIED;
+        goto Exit;
+    }
+
+    if (Job->ParentJob != NULL)
+    {
+        /* The job is part of a hierarchy: the process can only move to a job
+           nested in its current one. This also rejects any ancestor. */
+        if (!PspIsJobInChain(Job->ParentJob, CurrentJob))
+        {
+            Status = STATUS_ACCESS_DENIED;
+            goto Exit;
+        }
+    }
+    else
+    {
+        /* The job becomes a child of the current job, it must be empty.
+           A job with nested jobs, so any ancestor of the current job, is
+           never empty. */
+        if (Job->ActiveProcesses != 0 ||
+            FlagOn(Job->JobFlags, PSP_JOB_HAS_CHILD_JOBS))
+        {
+            Status = STATUS_ACCESS_DENIED;
+            goto Exit;
+        }
+
+        Job->ParentJob = CurrentJob;
+        NewParent = TRUE;
+    }
+
+    /* The chain of Job includes CurrentJob, so the locks protecting both
+       process lists are held */
+    PspLockJobChain(Job);
+
+    Status = PspCheckJobChainForNewProcess(Job, CurrentJob);
+    if (!NT_SUCCESS(Status))
+    {
+        PspUnlockJobChain(Job);
+
+        if (NewParent)
+        {
+            Job->ParentJob = NULL;
+        }
+
+        goto Exit;
+    }
+
+    /* Commit the move. The process remains part of CurrentJob and its
+       ancestors through the job chain. */
+    RemoveEntryList(&Process->JobLinks);
+    InsertTailList(&Job->ProcessListHead, &Process->JobLinks);
+
+    ObReferenceObject(Job);
+    (VOID)InterlockedExchangePointer((PVOID *)&Process->Job, Job);
+
+    PspAccountNewProcessInJobChain(Process, Job, CurrentJob);
+
+    if (NewParent)
+    {
+        /* The reference of the process on its former job now belongs to
+           Job->ParentJob */
+        InterlockedOr((PLONG)&CurrentJob->JobFlags, PSP_JOB_HAS_CHILD_JOBS);
+    }
+    else
+    {
+        /* CurrentJob stays referenced by the chain of Job */
+        ReleaseJob = CurrentJob;
+    }
+
+    PspUnlockJobChain(Job);
+
+Exit:
+    PspReleaseJobHierarchy();
+    ExReleaseRundownProtection(&Process->RundownProtect);
+
+    if (ReleaseJob != NULL)
+    {
+        ObDereferenceObject(ReleaseJob);
+    }
+
+    return Status;
+}
+
+/*!
+ * Assigns a new process to the job of its parent process.
+ *
+ * @param[in] Process
+ *     Pointer to the new process.
+ *
+ * @param[in] Parent
+ *     Pointer to the parent process, which is in a job.
+ *
+ * @param[in] Breakaway
+ *     TRUE if the creator asked for the process to break away from the job
+ *     (CREATE_BREAKAWAY_FROM_JOB).
+ *
+ * @returns
+ *     STATUS_SUCCESS if the process was assigned to a job or broke away.
+ *     STATUS_ACCESS_DENIED if a breakaway was asked for, but a job of the
+ *     hierarchy doesn't allow it.
+ *     An appropriate NTSTATUS error code otherwise.
+ *
+ * @remarks
+ *     The process joins the innermost job of the parent's job chain that it
+ *     can't break away from. A job with JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
+ *     is always left, one with JOB_OBJECT_LIMIT_BREAKAWAY_OK only when asked.
+ *     Without nested jobs, this is the Windows 7 behaviour.
+ */
+NTSTATUS
+NTAPI
+PspAssignProcessToParentJob(
+    _In_ PEPROCESS Process,
+    _In_ PEPROCESS Parent,
+    _In_ BOOLEAN Breakaway
+)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    PEJOB Job;
+
+    PspAcquireJobHierarchyShared();
+
+    for (Job = Parent->Job; Job != NULL; Job = Job->ParentJob)
+    {
+        if (FlagOn(Job->LimitFlags, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK))
+            continue;
+
+        if (Breakaway)
+        {
+            if (FlagOn(Job->LimitFlags, JOB_OBJECT_LIMIT_BREAKAWAY_OK))
+                continue;
+
+            /* Deny if the job forbids breakaway */
+            Status = STATUS_ACCESS_DENIED;
+        }
+
+        break;
+    }
+
+    /* The parent keeps its job chain referenced */
+    if (NT_SUCCESS(Status) && Job != NULL)
+    {
+        Status = PspAssignProcessToJob(Process, Job);
+    }
+
+    PspReleaseJobHierarchy();
+
+    return Status;
+}
+
+/*!
+ * Marks a process inactive in its job and all the jobs that job is nested in.
  *
  * @param[in] Process
  *     A pointer to the process being marked inactive.
  *
- * @return
- *     TRUE if this call performed the active-to-inactive transition and
- *     reduced the job's active process count to zero; otherwise, FALSE.
+ * @param[in] Terminating
+ *     TRUE if the process is being terminated through a job, which signals
+ *     the jobs whose active process count drops to zero.
  *
  * @remarks
- *     The caller must hold the job lock exclusively.
+ *     The caller must hold the job hierarchy lock and the locks of the job
+ *     chain of the process. Only the first call for a process has an effect.
  */
-static 
-BOOLEAN
-PspDeactivateProcessFromJobLocked(
-    _In_ PEJOB Job,
-    _In_ PEPROCESS Process
+static
+VOID
+PspDeactivateProcessInJobChainLocked(
+    _In_ PEPROCESS Process,
+    _In_ BOOLEAN Terminating
 )
 {
-    ASSERT(Process->Job == Job);
+    PEJOB Job;
+    LONG PreviousStatus;
 
-    ASSERT(ExIsResourceAcquiredExclusiveLite(&Job->JobLock) != 0);
-
-    if (FlagOn(Process->JobStatus, PSP_JOB_NOT_REALLY_ACTIVE))
+    PreviousStatus = InterlockedOr((PLONG)&Process->JobStatus, PSP_JOB_NOT_REALLY_ACTIVE);
+    if (PreviousStatus & PSP_JOB_NOT_REALLY_ACTIVE)
     {
-        return FALSE;
+        return;
     }
 
-    ASSERT(Job->ActiveProcesses != 0);
+    for (Job = Process->Job; Job != NULL; Job = Job->ParentJob)
+    {
+        ASSERT(ExIsResourceAcquiredExclusiveLite(&Job->JobLock) != 0);
+        ASSERT(Job->ActiveProcesses != 0);
 
-    Job->ActiveProcesses--;
+        Job->ActiveProcesses--;
 
-    InterlockedOr((PLONG)&Process->JobStatus, PSP_JOB_NOT_REALLY_ACTIVE);
+        if (Job->ActiveProcesses != 0)
+            continue;
 
-    return Job->ActiveProcesses == 0;
+        /* It is intended that the event is set to a signaled
+           state only in the termination path */
+        if (Terminating)
+        {
+            KeSetEvent(&Job->Event, IO_NO_INCREMENT, FALSE);
+        }
+
+        /* If no active processes remain, notify the job completion port */
+        if (Job->CompletionPort)
+        {
+            (VOID)PspSendJobMessageLocked(Job,
+                                          JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
+                                          NULL,
+                                          FALSE);
+        }
+    }
 }
 
 /*!
@@ -611,14 +1016,14 @@ PspRemoveProcessFromJob(
 )
 {
     PEJOB Job;
-    BOOLEAN ActiveProcessZero;
+
+    PspAcquireJobHierarchyShared();
 
     Job = Process->Job;
     ASSERT(Job != NULL);
 
-    ExEnterCriticalRegionAndAcquireResourceExclusive(&Job->JobLock);
+    PspLockJobChain(Job);
 
-    ASSERT(Process->Job == Job);
     ASSERT(Process->JobLinks.Flink != NULL);
     ASSERT(Process->JobLinks.Blink != NULL);
     ASSERT(!IsListEmpty(&Process->JobLinks));
@@ -627,21 +1032,13 @@ PspRemoveProcessFromJob(
     RemoveEntryList(&Process->JobLinks);
     InitializeListHead(&Process->JobLinks);
 
-    /* Decrement the job's active process count if it is still active */
-    ActiveProcessZero = PspDeactivateProcessFromJobLocked(Job, Process);
+    /* Decrement the active process counts if it is still active */
+    PspDeactivateProcessInJobChainLocked(Process, FALSE);
 
     /* TODO: Ensure that job limits are respected */
 
-    /* If no active processes remain, notify the job completion port */
-    if (ActiveProcessZero && Job->CompletionPort)
-    {
-        (VOID)PspSendJobMessageLocked(Job,
-                                      JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
-                                      NULL,
-                                      FALSE);
-    }
-
-    ExReleaseResourceAndLeaveCriticalRegion(&Job->JobLock);
+    PspUnlockJobChain(Job);
+    PspReleaseJobHierarchy();
 }
 
 /*!
@@ -661,36 +1058,64 @@ PspExitProcessFromJob(
 )
 {
     PEJOB Job;
-    BOOLEAN ActiveProcessZero;
+
+    PspAcquireJobHierarchyShared();
 
     Job = Process->Job;
     ASSERT(Job != NULL);
 
-    ExEnterCriticalRegionAndAcquireResourceExclusive(&Job->JobLock);
+    PspLockJobChain(Job);
 
-    /* Job membership is immutable in the current implementation */
-    ASSERT(Process->Job == Job);
-
-    /* Decrement the job's active process count if the process is still active */
-    ActiveProcessZero = PspDeactivateProcessFromJobLocked(Job, Process);
-
-    /* If no active processes remain, notify the job completion port */
-    if (ActiveProcessZero && Job->CompletionPort)
-    {
-        (VOID)PspSendJobMessageLocked(Job,
-                                      JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
-                                      NULL,
-                                      FALSE);
-    }
+    /* Decrement the active process counts if the process is still active */
+    PspDeactivateProcessInJobChainLocked(Process, FALSE);
 
     /* TODO: Ensure that job limits are respected */
 
-    ExReleaseResourceAndLeaveCriticalRegion(&Job->JobLock);
+    PspUnlockJobChain(Job);
+    PspReleaseJobHierarchy();
 }
 
 /*!
- * Callback function to terminate a process and update the job's
- * active process counter.
+ * Notifies the completion ports of the jobs of an exiting process.
+ *
+ * @param[in] Process
+ *     A pointer to the exiting process, which is in a job.
+ *
+ * @remark
+ *     This function is called from PspExitProcess() for the last thread.
+ */
+VOID
+NTAPI
+PspSendJobExitProcessMessages(
+    _In_ PEPROCESS Process
+)
+{
+    PEJOB Job;
+
+    PspAcquireJobHierarchyShared();
+
+    for (Job = Process->Job; Job != NULL; Job = Job->ParentJob)
+    {
+        ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+
+        if (Job->CompletionPort &&
+            !FlagOn(Process->JobStatus, PSP_JOB_NOT_REALLY_ACTIVE))
+        {
+            (VOID)PspSendJobMessageLocked(Job,
+                                          JOB_OBJECT_MSG_EXIT_PROCESS,
+                                          Process->UniqueProcessId,
+                                          FALSE);
+        }
+
+        ExReleaseResourceLite(&Job->JobLock);
+    }
+
+    PspReleaseJobHierarchy();
+}
+
+/*!
+ * Callback function to terminate a process and update the active process
+ * counters of its jobs.
  *
  * @param[in] Process
  *     A pointer to the process object to be terminated.
@@ -702,8 +1127,9 @@ PspExitProcessFromJob(
  *     STATUS_SUCCESS.
  *
  * @remark
- *     The callback is invoked _without_ the job lock held. Process carries the
- *     reference acquired by the job enumerator for the duration of the call.
+ *     The callback is invoked with the job hierarchy lock held shared and
+ *     _without_ any job lock held. Process is referenced for the duration of
+ *     the call and is in the terminated job or a job nested in it.
  */
 static
 NTSTATUS
@@ -714,21 +1140,18 @@ PspTerminateProcessCallback(
 )
 {
     NTSTATUS Status;
-    BOOLEAN ActiveProcessZero;
     PPSP_TERMINATE_PROCESS_CONTEXT TerminateContext = (PPSP_TERMINATE_PROCESS_CONTEXT)Context;
     PEJOB Job = TerminateContext->Job;
     NTSTATUS ExitStatus = TerminateContext->ExitStatus;
 
     ASSERT(Job != NULL);
-    ASSERT(Process->Job == Job);
+    ASSERT(PspIsJobInChain(Process->Job, Job));
 
     /* Avoid entering process termination when the process has already
        completed its active job transition */
-    ExEnterCriticalRegionAndAcquireResourceExclusive(&Job->JobLock);
-
     if (FlagOn(Process->JobStatus, PSP_JOB_NOT_REALLY_ACTIVE))
     {
-        goto Exit;
+        return STATUS_SUCCESS;
     }
 
     /* Terminate the process */
@@ -740,38 +1163,21 @@ PspTerminateProcessCallback(
        that should be treated as a no-op for job traversal */
     if (!NT_SUCCESS(Status))
     {
-        goto Exit;
+        return STATUS_SUCCESS;
     }
 
-    /* Decrement the job's active process count if the process is still active */
-    ActiveProcessZero = PspDeactivateProcessFromJobLocked(Job, Process);
-
-    /* If there are no active processes left in the job, notify anyone waiting
-       for the job object by signaling completion */
-    if (ActiveProcessZero)
-    {
-        /* It is intended that the event is set to a signaled
-           state only in the termination path */
-        KeSetEvent(&Job->Event, IO_NO_INCREMENT, FALSE);
-
-        if (Job->CompletionPort)
-        {
-            (VOID)PspSendJobMessageLocked(Job,
-                                          JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
-                                          NULL,
-                                          FALSE);
-        }
-    }
-
-Exit:
-
-    ExReleaseResourceAndLeaveCriticalRegion(&Job->JobLock);
+    /* Decrement the active process counts if the process is still active,
+       signaling the jobs that have no active process left */
+    PspLockJobChain(Process->Job);
+    PspDeactivateProcessInJobChainLocked(Process, TRUE);
+    PspUnlockJobChain(Process->Job);
 
     return STATUS_SUCCESS;
 }
 
 /*!
- * Terminates all processes currently associated with the specified job object.
+ * Terminates all processes currently associated with the specified job object,
+ * including the processes of the jobs nested in it.
  *
  * @param[in] Job
  *     A pointer to the job object to be terminated.
@@ -792,6 +1198,7 @@ PspTerminateJobObject(
 {
     NTSTATUS Status;
     LONG PreviousFlags;
+    PEPROCESS Process;
     PSP_TERMINATE_PROCESS_CONTEXT Context;
 
     PreviousFlags = InterlockedOr((PLONG)&Job->JobFlags, PSP_JOB_TERMINATING);
@@ -805,6 +1212,9 @@ PspTerminateJobObject(
     Context.Job = Job;
     Context.ExitStatus = ExitStatus;
 
+    /* Keep the processes in their jobs during the traversal */
+    PspAcquireJobHierarchyShared();
+
     Status = PspEnumerateProcessesInJob(Job,
                                         PspTerminateProcessCallback,
                                         &Context);
@@ -812,6 +1222,25 @@ PspTerminateJobObject(
     /* The termination callback always returns STATUS_SUCCESS because
        per-process termination failures are handled locally */
     ASSERT(NT_SUCCESS(Status));
+
+    /* Terminate the processes of the nested jobs, at any depth. Jobs keep
+       no list of their nested jobs, find them through the processes. */
+    if (FlagOn(Job->JobFlags, PSP_JOB_HAS_CHILD_JOBS))
+    {
+        for (Process = PsGetNextProcess(NULL);
+             Process != NULL;
+             Process = PsGetNextProcess(Process))
+        {
+            if (Process->Job != NULL &&
+                Process->Job != Job &&
+                PspIsJobInChain(Process->Job, Job))
+            {
+                (VOID)PspTerminateProcessCallback(Process, &Context);
+            }
+        }
+    }
+
+    PspReleaseJobHierarchy();
 
     InterlockedAnd((PLONG)&Job->JobFlags, ~PSP_JOB_TERMINATING);
 
@@ -942,6 +1371,14 @@ PspDeleteJob(_In_ PVOID ObjectBody)
 
     /* Delete the resource associated with the job object */
     ExDeleteResource(&Job->JobLock);
+
+    /* Drop the reference on the job this one was nested in. A job with
+       nested jobs is referenced by them, so it is deleted after them. */
+    if (Job->ParentJob != NULL)
+    {
+        ObDereferenceObject(Job->ParentJob);
+        Job->ParentJob = NULL;
+    }
 }
 
 /*!
@@ -1460,9 +1897,10 @@ PspQueryJobProcessIdListCallback(
        assigned - such a process is not representable in this information class */
     if (Process->UniqueProcessId == NULL)
     {
-        ASSERT(QueryContext->ProcessIdList->NumberOfAssignedProcesses != 0);
-
-        QueryContext->ProcessIdList->NumberOfAssignedProcesses--;
+        /* The count of a job with nested jobs is not taken atomically with
+           the enumeration of their processes */
+        if (QueryContext->ProcessIdList->NumberOfAssignedProcesses != 0)
+            QueryContext->ProcessIdList->NumberOfAssignedProcesses--;
 
         return STATUS_SUCCESS;
     }
@@ -1515,6 +1953,7 @@ PspQueryJobProcessIdList(
 )
 {
     NTSTATUS Status;
+    PEPROCESS Process;
     PSP_QUERY_JOB_PROCESS_ID_CONTEXT QueryContext;
 
     /* Check if the buffer provided is large enough to hold at least the
@@ -1531,10 +1970,13 @@ PspQueryJobProcessIdList(
 
     Status = STATUS_SUCCESS;
 
-    ExEnterCriticalRegionAndAcquireResourceShared(&Job->JobLock);
+    /* Keep the processes in their jobs during the enumeration */
+    PspAcquireJobHierarchyShared();
+    ExAcquireResourceSharedLite(&Job->JobLock, TRUE);
 
     _SEH2_TRY
     {
+        /* The count includes the processes of the nested jobs */
         ProcIdList->NumberOfAssignedProcesses = Job->ActiveProcesses;
         ProcIdList->NumberOfProcessIdsInList = 0;
 
@@ -1548,7 +1990,42 @@ PspQueryJobProcessIdList(
     }
     _SEH2_END;
 
-    ExReleaseResourceAndLeaveCriticalRegion(&Job->JobLock);
+    ExReleaseResourceLite(&Job->JobLock);
+
+    /* Add the processes of the jobs nested in this one, at any depth. No job
+       lock may be held here, as releasing a process can delete it. */
+    if (NT_SUCCESS(Status) && FlagOn(Job->JobFlags, PSP_JOB_HAS_CHILD_JOBS))
+    {
+        for (Process = PsGetNextProcess(NULL);
+             Process != NULL;
+             Process = PsGetNextProcess(Process))
+        {
+            if (Process->Job == NULL ||
+                Process->Job == Job ||
+                !PspIsJobInChain(Process->Job, Job))
+            {
+                continue;
+            }
+
+            _SEH2_TRY
+            {
+                Status = PspQueryJobProcessIdListCallback(Process, &QueryContext);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+
+            if (!NT_SUCCESS(Status))
+            {
+                ObDereferenceObject(Process);
+                break;
+            }
+        }
+    }
+
+    PspReleaseJobHierarchy();
 
     if (NT_SUCCESS(Status) || Status == STATUS_BUFFER_OVERFLOW)
     {
@@ -1970,16 +2447,26 @@ NtAssignProcessToJobObject(
     /* Get the session ID - it must match the process and the job creator */
     SessionId = PsGetProcessSessionId(Process);
 
-    if (Process->Job != NULL || SessionId != Job->SessionId)
+    if (SessionId != Job->SessionId)
     {
-        /* Return STATUS_ACCESS_DENIED if the process is already assigned
-           to a job or the session ID is different */
+        /* Return STATUS_ACCESS_DENIED if the session ID is different */
         ObDereferenceObject(Job);
         ObDereferenceObject(Process);
         return STATUS_ACCESS_DENIED;
     }
 
-    Status = PspAssignProcessToJob(Process, Job);
+    /* A process that is already in a job can be assigned to another one
+       since Windows 8, which nests the jobs */
+    Status = STATUS_ACCESS_DENIED;
+    if (Process->Job == NULL)
+    {
+        Status = PspAssignProcessToJob(Process, Job);
+    }
+
+    if (Status == STATUS_ACCESS_DENIED && Process->Job != NULL)
+    {
+        Status = PspNestProcessInJob(Process, Job);
+    }
 
     if (Status == STATUS_QUOTA_EXCEEDED)
     {
@@ -2070,8 +2557,11 @@ NtIsProcessInJob(
                                                NULL);
             if (NT_SUCCESS(Status))
             {
-                /* Compare the job objects */
-                if ((ProcessJob == JobObjectFromHandle))
+                /* The process is in its job and all the jobs that one
+                   is nested in */
+                PspAcquireJobHierarchyShared();
+
+                if (PspIsJobInChain(Process->Job, JobObjectFromHandle))
                 {
                     Status = STATUS_PROCESS_IN_JOB;
                 }
@@ -2079,6 +2569,8 @@ NtIsProcessInJob(
                 {
                     Status = STATUS_PROCESS_NOT_IN_JOB;
                 }
+
+                PspReleaseJobHierarchy();
 
                 /* Dereference the job object handle */
                 ObDereferenceObject(JobObjectFromHandle);
