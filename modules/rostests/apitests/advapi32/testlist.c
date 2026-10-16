@@ -3,9 +3,11 @@
 #include <apitest.h>
 
 extern void func_BuildSecurityDescriptor(void);
+extern void func_CheckTokenMembership(void);
 extern void func_CreateService(void);
 extern void func_DuplicateTokenEx(void);
 extern void func_eventlog_supp(void);
+extern void func_FileSecurity(void);
 extern void func_Hash(void);
 extern void func_HKEY_CLASSES_ROOT(void);
 extern void func_IsTextUnicode(void);
@@ -14,9 +16,13 @@ extern void func_QueryServiceConfig2(void);
 extern void func_RegCreateKeyEx(void);
 extern void func_RegEnumKey(void);
 extern void func_RegEnumValueW(void);
+extern void func_RegKeySecurity(void);
+extern void func_RegNotifyChangeKeyValue(void);
 extern void func_RegOpenKeyExW(void);
 extern void func_RegQueryInfoKey(void);
 extern void func_RegQueryValueExW(void);
+extern void func_RegWow64Views(void);
+extern void func_RestrictedToken(void);
 extern void func_RtlEncryptMemory(void);
 extern void func_SaferIdentifyLevel(void);
 extern void func_ServiceArgs(void);
@@ -26,9 +32,11 @@ extern void func_ServiceNetwork(void);
 const struct test winetest_testlist[] =
 {
     { "BuildSecurityDescriptor", func_BuildSecurityDescriptor },
+    { "CheckTokenMembership", func_CheckTokenMembership },
     { "CreateService", func_CreateService },
     { "DuplicateTokenEx", func_DuplicateTokenEx },
     { "eventlog_supp", func_eventlog_supp },
+    { "FileSecurity", func_FileSecurity },
     { "Hash", func_Hash },
     { "HKEY_CLASSES_ROOT", func_HKEY_CLASSES_ROOT },
     { "IsTextUnicode" , func_IsTextUnicode },
@@ -37,9 +45,13 @@ const struct test winetest_testlist[] =
     { "RegCreateKeyEx", func_RegCreateKeyEx },
     { "RegEnumKey", func_RegEnumKey },
     { "RegEnumValueW", func_RegEnumValueW },
+    { "RegKeySecurity", func_RegKeySecurity },
+    { "RegNotifyChangeKeyValue", func_RegNotifyChangeKeyValue },
     { "RegQueryInfoKey", func_RegQueryInfoKey },
     { "RegOpenKeyExW", func_RegOpenKeyExW },
     { "RegQueryValueExW", func_RegQueryValueExW },
+    { "RegWow64Views", func_RegWow64Views },
+    { "RestrictedToken", func_RestrictedToken },
     { "RtlEncryptMemory", func_RtlEncryptMemory },
     { "SaferIdentifyLevel", func_SaferIdentifyLevel },
     { "ServiceArgs", func_ServiceArgs },

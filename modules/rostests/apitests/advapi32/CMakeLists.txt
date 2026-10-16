@@ -1,9 +1,11 @@
 
 list(APPEND SOURCE
     BuildSecurityDescriptor.c
+    CheckTokenMembership.c
     CreateService.c
     DuplicateTokenEx.c
     eventlog.c
+    FileSecurity.c
     Hash.c
     HKEY_CLASSES_ROOT.c
     IsTextUnicode.c
@@ -12,9 +14,13 @@ list(APPEND SOURCE
     RegCreateKeyEx.c
     RegEnumKey.c
     RegEnumValueW.c
+    RegKeySecurity.c
+    RegNotifyChangeKeyValue.c
     RegOpenKeyExW.c
     RegQueryInfoKey.c
     RegQueryValueExW.c
+    RegWow64Views.c
+    RestrictedToken.c
     RtlEncryptMemory.c
     SaferIdentifyLevel.c
     ServiceArgs.c
