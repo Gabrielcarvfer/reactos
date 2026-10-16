@@ -30,6 +30,7 @@ extern void func_LdrEnumResources(void);
 extern void func_LdrFindResource_U(void);
 extern void func_LdrLoadDll(void);
 extern void func_load_notifications(void);
+extern void func_LoaderLock(void);
 extern void func_NtAcceptConnectPort(void);
 extern void func_NtAccessCheck(void);
 extern void func_NtAccessCheckByType(void);
@@ -139,6 +140,7 @@ extern void func_RtlValidateUnicodeString(void);
 extern void func_RtlVirtualUnwind(void);
 extern void func_RtlxUnicodeStringToAnsiSize(void);
 extern void func_RtlxUnicodeStringToOemSize(void);
+extern void func_ProcessHandleTable(void);
 extern void func_StackOverflow(void);
 extern void func_TimerResolution(void);
 extern void func_UserModeException(void);
@@ -174,6 +176,7 @@ const struct test winetest_testlist[] =
     { "LdrFindResource_U",              func_LdrFindResource_U },
     { "LdrLoadDll",                     func_LdrLoadDll },
     { "load_notifications",             func_load_notifications },
+    { "LoaderLock",                     func_LoaderLock },
     { "NtAcceptConnectPort",            func_NtAcceptConnectPort },
     { "NtAccessCheck",                  func_NtAccessCheck },
     { "NtAccessCheckByType",            func_NtAccessCheckByType },
@@ -280,6 +283,7 @@ const struct test winetest_testlist[] =
     { "RtlUnicodeToOemN",               func_RtlUnicodeToOemN },
     { "RtlUpcaseUnicodeStringToCountedOemString", func_RtlUpcaseUnicodeStringToCountedOemString },
     { "RtlValidateUnicodeString",       func_RtlValidateUnicodeString },
+    { "ProcessHandleTable",             func_ProcessHandleTable },
     { "StackOverflow",                  func_StackOverflow },
     { "TimerResolution",                func_TimerResolution },
     { "UserModeException",              func_UserModeException },

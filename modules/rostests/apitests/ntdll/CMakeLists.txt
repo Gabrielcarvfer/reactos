@@ -41,6 +41,7 @@ list(APPEND SOURCE
     LdrFindResource_U.c
     LdrLoadDll.c
     load_notifications.c
+    LoaderLock.c
     locale.c
     NtAcceptConnectPort.c
     NtAccessCheck.c
@@ -98,6 +99,7 @@ list(APPEND SOURCE
     NtUnloadDriver.c
     NtWriteFile.c
     probelib.c
+    ProcessHandleTable.c
     RtlAllocateHeap.c
     RtlBitmap.c
     RtlComputePrivatizedDllName_U.c
