@@ -3667,8 +3667,11 @@ WSPStringToAddress(IN LPWSTR AddressString,
             *lpAddressLength = sizeof(*sockaddr);
             memset(lpAddress, 0, sizeof(*sockaddr));
             sockaddr->sin_family = AF_INET;
-            sockaddr->sin_addr.s_addr = inetaddr;
-            sockaddr->sin_port = port;
+            /* Network byte order ("127.0.0.1" was 1.0.0.127: Python's
+               asyncio, which parses addresses with WSAStringToAddress,
+               connected nowhere) */
+            sockaddr->sin_addr.s_addr = htonl(inetaddr);
+            sockaddr->sin_port = htons((USHORT)port);
         }
     }
 
