@@ -238,6 +238,28 @@ GetVersionInfoString(IN LPCWSTR szFileName,
     return bRet;
 }
 
+/* TRUE when the "Eleven" visual style (eleven.msstyles, any color scheme) is
+ * active: the Windows 11 look of the taskbar only applies then. With the classic
+ * look or any other visual style, the taskbar looks and sizes like ReactOS's own.
+ * Not cached: the theme can change at any time (WM_THEMECHANGED). */
+BOOL IsElevenStyleActive()
+{
+    static const WCHAR szEleven[] = L"eleven.msstyles";
+    WCHAR szFile[MAX_PATH];
+    SIZE_T cchFile, cchEleven = _countof(szEleven) - 1;
+
+    if (!IsThemeActive() || FAILED(GetCurrentThemeName(szFile, _countof(szFile), NULL, 0, NULL, 0)))
+        return FALSE;
+
+    cchFile = wcslen(szFile);
+    if (cchFile < cchEleven || _wcsicmp(szFile + cchFile - cchEleven, szEleven) != 0)
+        return FALSE;
+
+    /* The whole file name, not just its end ("noteleven.msstyles") */
+    return cchFile == cchEleven || szFile[cchFile - cchEleven - 1] == L'\\' ||
+           szFile[cchFile - cchEleven - 1] == L'/';
+}
+
 /* Windows 11 light/dark mode for explorer's own drawn UI (Start menu, Quick Settings...):
  * dark when the visual style's color scheme is "Dark" (e.g. Eleven Dark) */
 BOOL IsDarkTheme()

@@ -1350,9 +1350,13 @@ public:
 
 static CStartMenu7 *g_pStartMenu7 = NULL;
 
+/* The Windows 7/11 style Start menu goes with the Eleven style; the classic look
+ * and other visual styles get ReactOS's original Start menu */
 BOOL StartMenu7_IsEnabled()
 {
     DWORD dwValue = 0, cb = sizeof(dwValue);
+    if (!IsElevenStyleActive())
+        return FALSE;
     SHGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
                 L"ReactOSClassicStartMenu", NULL, &dwValue, &cb);
     return dwValue == 0;

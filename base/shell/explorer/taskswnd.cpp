@@ -491,6 +491,9 @@ class CTaskSwitchWnd :
     SIZE m_ButtonSize;
     INT m_cyLastButton = 0;
 
+    /* Eleven visual style active (Windows 11 look): updated on WM_THEMECHANGED */
+    BOOL m_bElevenStyle = FALSE;
+
     /* Pinned apps */
     CTaskToolbar m_PinBar;
     HIMAGELIST m_PinImageList = NULL;
@@ -1452,10 +1455,66 @@ public:
     }
 
     /* Windows 11 style: icon-only buttons (title shown as tooltip) on a horizontal
-     * taskbar. The alignment setting (left/center) only moves them, like on Windows 11. */
+     * taskbar, with the Eleven visual style only (other looks keep the classic text
+     * buttons). The alignment setting (left/center) only moves them, like on Windows 11. */
     BOOL IsIconOnly()
     {
-        return m_Tray->IsHorizontal();
+        return m_bElevenStyle && m_Tray->IsHorizontal();
+    }
+
+    /* The visual style changed between Eleven and another look (or the classic
+     * one): switch the buttons between icon-only tiles and classic text buttons */
+    VOID UpdateElevenStyle()
+    {
+        BOOL bEleven = IsElevenStyleActive();
+        if (bEleven == m_bElevenStyle)
+            return;
+        m_bElevenStyle = bEleven;
+
+        if (!m_TaskBar.m_hWnd)
+            return;
+
+        m_TaskBar.BeginUpdate();
+        if (!IsIconOnly())
+        {
+            /* Back to the toolbar's default padding (SetIconOnlyButtonSize changed it),
+             * so the buttons get their classic height again */
+            TBMETRICS tbm = { sizeof(tbm), TBMF_PAD };
+            tbm.cxPad = 7;
+            tbm.cyPad = 6;
+            m_TaskBar.SendMessageW(TB_SETMETRICS, 0, (LPARAM)&tbm);
+            m_cyLastButton = 0;
+        }
+        else
+        {
+            /* As in OnCreate: the band is tall enough even without any button */
+            SetIconOnlyButtonSize(m_TaskBar, GetButtonImageSize());
+        }
+
+        /* Text (classic) or icon only (Eleven) */
+        for (INT i = 0; i < m_TaskItemCount; i++)
+        {
+            PTASK_ITEM TaskItem = &m_TaskItems[i];
+            TBBUTTONINFOW tbbi = { sizeof(tbbi) };
+
+            if (TaskItem->Index < 0)
+                continue;
+            tbbi.dwMask = TBIF_BYINDEX | TBIF_STYLE;
+            if ((INT)m_TaskBar.GetButtonInfo(TaskItem->Index, &tbbi) < 0)
+                continue;
+            if (IsIconOnly())
+                tbbi.fsStyle &= ~BTNS_SHOWTEXT;
+            else
+                tbbi.fsStyle |= BTNS_SHOWTEXT;
+            m_TaskBar.SetButtonInfo(TaskItem->Index, &tbbi);
+        }
+        m_TaskBar.EndUpdate();
+
+        /* Pinned apps only exist in the Eleven look: show/hide them, then give the
+         * windows of pinned apps their own buttons again (or hand them to the pins) */
+        RebuildPinBar();
+        LayoutBars();
+        RematchPins();
     }
 
     /* The toolbar recomputes its button height as icon height + vertical padding,
@@ -2110,7 +2169,7 @@ public:
         m_TaskBar.EndUpdate();
 
         /* The centered taskbar layout depends on the number of buttons */
-        if (IsIconOnly() && g_TaskbarSettings.bCenterTaskbar)
+        if (g_TaskbarSettings.bCenterTaskbar && m_Tray->IsHorizontal())
             ::PostMessageW(GetAncestor(m_hWnd, GA_ROOT), TWM_REALIGNCONTROLS, 0, 0);
     }
 
@@ -2150,11 +2209,15 @@ public:
         else
             m_Theme = NULL;
 
+        UpdateElevenStyle();
+
         return TRUE;
     }
 
     LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
+        m_bElevenStyle = IsElevenStyleActive();
+
         /* Pinned apps toolbar. Created first: other code finds the task toolbar as
          * this window's first child (the most recently created one) */
         if (m_PinBar.Initialize(m_hWnd))

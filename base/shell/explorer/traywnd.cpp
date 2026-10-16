@@ -212,15 +212,16 @@ public:
         return m_Size;
     }
 
-    /* Themes may draw the whole Start button as one image ("Start::Button",
+    /* The Eleven style draws the whole Start button as one image ("Start::Button",
      * SizingType TrueSize). Then the button is exactly that image and we paint
-     * it ourselves, without the classic logo and "Start" text on top. */
+     * it ourselves, without the classic logo and "Start" text on top. Other
+     * visual styles and the classic look keep the original Start button. */
     BOOL GetThemeImageSize(SIZE *pSize)
     {
         HTHEME hTheme = GetWindowTheme(m_hWnd);
         int iSizingType = ST_STRETCH;
 
-        if (!hTheme ||
+        if (!hTheme || !IsElevenStyleActive() ||
             FAILED(GetThemeEnumValue(hTheme, BP_PUSHBUTTON, PBS_NORMAL, TMT_SIZINGTYPE, &iSizingType)) ||
             iSizingType != ST_TRUESIZE)
         {
@@ -1788,7 +1789,9 @@ ChangePos:
         rcScreen = g_TaskbarSettings.sr.Rect;
         GetScreenRectFromRect(&rcScreen, MONITOR_DEFAULTTONEAREST);
 
-        if (!g_TaskbarSettings.sr.Size.cx || !g_TaskbarSettings.sr.Size.cy)
+        /* The saved size is only ever this computed minimum, so recompute it for the
+         * current look: a size saved while the Eleven style was active (taller, from
+         * its Start image) must not make the classic or another theme's taskbar thick. */
         {
             /* Use the minimum size of the taskbar, we'll use the start
                button as a minimum for now. Make sure we calculate the
@@ -1802,9 +1805,11 @@ ChangePos:
             }
             else
             {
-                /* Themed: the taskbar is as tall as the Start button (image) */
                 g_TaskbarSettings.sr.Size.cx = StartBtnSize.cx - EdgeSize.cx;
-                g_TaskbarSettings.sr.Size.cy = StartBtnSize.cy;
+                g_TaskbarSettings.sr.Size.cy = StartBtnSize.cy - EdgeSize.cy;
+                /* Eleven style: the taskbar is as tall as the Start button (image) */
+                if (IsElevenStyleActive())
+                    g_TaskbarSettings.sr.Size.cy = StartBtnSize.cy;
                 if(!g_TaskbarSettings.bLock)
                     g_TaskbarSettings.sr.Size.cy += GetSystemMetrics(SM_CYSIZEFRAME);
             }
@@ -1823,7 +1828,7 @@ ChangePos:
         else
         {
             WndSize.cx = StartBtnSize.cx;
-            WndSize.cy = StartBtnSize.cy;
+            WndSize.cy = StartBtnSize.cy - (IsElevenStyleActive() ? 0 : EdgeSize.cy);
         }
 
         if (WndSize.cx < g_TaskbarSettings.sr.Size.cx)
@@ -1870,6 +1875,7 @@ ChangePos:
         SIZE TraySize, StartSize;
         POINT ptTrayNotify = { 0, 0 };
         BOOL Horizontal;
+        BOOL bEleven = IsElevenStyleActive();
         HDWP dwp;
 
         m_StartButton.UpdateSize();
@@ -1910,16 +1916,16 @@ ChangePos:
             /* Themed button covers Edge area as well */
             INT cyButtons = HIWORD(size) + (m_Theme ? GetSystemMetrics(SM_CYEDGE) : 0);
 
-            /* A horizontal (Windows 11 style) taskbar keeps the full height of the Start image,
+            /* A horizontal Eleven style taskbar keeps the full height of the Start image,
              * whether it is left aligned or centered */
-            if (IsPosHorizontal())
+            if (bEleven && IsPosHorizontal())
                 StartSize.cy = max(StartSize.cy, cyButtons);
             else
                 StartSize.cy = cyButtons;
         }
 
         /* Never taller than the taskbar, so nothing gets cut off */
-        if (Horizontal && StartSize.cy > rcClient.bottom)
+        if (bEleven && Horizontal && StartSize.cy > rcClient.bottom)
             StartSize.cy = rcClient.bottom;
 
         /* Determine the size that the tray notification window needs */
@@ -1982,7 +1988,7 @@ ChangePos:
             dwp = m_StartButton.DeferWindowPos(dwp,
                                                NULL,
                                                xGroup,
-                                               Horizontal ? (rcClient.bottom - StartSize.cy) / 2 : 0,
+                                               (bEleven && Horizontal) ? (rcClient.bottom - StartSize.cy) / 2 : 0,
                                                StartSize.cx,
                                                StartSize.cy,
                                                SWP_NOZORDER | SWP_NOACTIVATE);
@@ -2077,7 +2083,7 @@ ChangePos:
          * image, the same height RegLoadSettings uses at startup. The rebar's own
          * height (buttons + band padding) is a bit taller and made the bar grow after
          * every settings change. */
-        if (m_Theme && (m_Position == ABE_TOP || m_Position == ABE_BOTTOM))
+        if (m_Theme && IsElevenStyleActive() && (m_Position == ABE_TOP || m_Position == ABE_BOTTOM))
         {
             INT cy = m_StartButton.GetSize().cy;
             if (!g_TaskbarSettings.bLock)
@@ -2719,6 +2725,11 @@ ChangePos:
             SetWindowStyle(m_hWnd, WS_THICKFRAME | WS_BORDER, WS_THICKFRAME | WS_BORDER);
         }
         SetWindowPos(NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER);
+
+        /* The Windows 11 look (size, buttons) only applies to the Eleven style: re-layout
+         * once the child windows have handled the theme change too */
+        if (m_Rebar)
+            PostMessage(TWM_REALIGNCONTROLS, 2, 0);
 
         return TRUE;
     }
@@ -3649,6 +3660,14 @@ HandleTrayContextMenu:
 
     LRESULT OnRealignControls(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
+        /* wParam = 2: the visual style changed (e.g. Eleven <-> classic). Recompute
+         * the Start button and taskbar sizes for the new look, then the layout. */
+        if (wParam == 2)
+        {
+            m_StartButton.UpdateSize();
+            RegLoadSettings();
+        }
+
         /* wParam = 1: the task buttons changed size, the band height must follow */
         if (wParam)
         {
@@ -3658,8 +3677,9 @@ HandleTrayContextMenu:
         }
 
         /* Sent by the task switch window when its buttons changed. Only re-center
-         * if their width actually changed, to avoid layout ping-pong. */
-        if (g_TaskbarSettings.bCenterTaskbar && GetTaskButtonsWidth() != m_cxCenteredTasks)
+         * if their width actually changed, to avoid layout ping-pong (classic text
+         * buttons fill the band, so allow for a pixel of rounding). */
+        if (g_TaskbarSettings.bCenterTaskbar && abs(GetTaskButtonsWidth() - m_cxCenteredTasks) > 1)
             AlignControls(NULL);
         return 0;
     }

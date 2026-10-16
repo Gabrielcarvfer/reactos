@@ -256,7 +256,9 @@ extern SIZE g_StartImageSize;
 /* quicksettings.cpp: the Windows 11 style Quick Settings panel */
 VOID QuickSettings_Toggle(HWND hwndOwner);
 
-/* util.cpp: light/dark mode of explorer's own drawn UI */
+/* util.cpp: is the Eleven visual style active (Windows 11 look); light/dark
+ * mode of explorer's own drawn UI */
+BOOL IsElevenStyleActive();
 BOOL IsDarkTheme();
 COLORREF UIC(COLORREF cr);
 

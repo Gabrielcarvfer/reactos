@@ -150,7 +150,8 @@ public:
 
             /* Same as ptMinSize above: never report the toolbar's old, smaller height,
              * or the band stays too short and cuts the bottom of the buttons */
-            if (!(dwViewMode & DBIF_VIEWMODE_VERTICAL) && pdbi->ptActual.y < pdbi->ptMinSize.y)
+            if (!(dwViewMode & DBIF_VIEWMODE_VERTICAL) && g_StartImageSize.cy > 0 &&
+                pdbi->ptActual.y < pdbi->ptMinSize.y)
                 pdbi->ptActual.y = pdbi->ptMinSize.y;
 
             TRACE("H: %d, Min: %d,%d, Integral.y: %d Actual: %d,%d\n", (dwViewMode & DBIF_VIEWMODE_VERTICAL) == 0,

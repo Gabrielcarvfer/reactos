@@ -41,7 +41,7 @@ INT CTrayShowDesktopButton::WidthOrHeight() const
                 //TODO: DPI scaling - return logical-to-physical conversion of 24, not fixed value
                 return 24;
             }
-            else
+            else if (IsElevenStyleActive())
             {
                 /* Slim strip, like Windows 11 (12px at 100%) */
                 HDC hdc = ::GetDC(NULL);
@@ -49,6 +49,8 @@ INT CTrayShowDesktopButton::WidthOrHeight() const
                 ::ReleaseDC(NULL, hdc);
                 return cx;
             }
+            else
+                return 15;
         }
         else
         {

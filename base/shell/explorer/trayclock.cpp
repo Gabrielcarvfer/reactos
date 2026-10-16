@@ -101,6 +101,7 @@ private:
     LRESULT OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnTaskbarSettingsChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnLButtonDblClick(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnMouseMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnMouseLeave(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     BOOL m_bHover = FALSE;
@@ -147,7 +148,7 @@ public:
         MESSAGE_HANDLER(TNWM_GETMINIMUMSIZE, OnGetMinimumSize)
         MESSAGE_HANDLER(TWM_SETTINGSCHANGED, OnTaskbarSettingsChanged)
         MESSAGE_HANDLER(WM_LBUTTONDBLCLK, OnLButtonDblClick)
-        MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDblClick)
+        MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
         MESSAGE_HANDLER(WM_MOUSEMOVE, OnMouseMove)
         MESSAGE_HANDLER(WM_MOUSELEAVE, OnMouseLeave)
     END_MSG_MAP()
@@ -538,7 +539,7 @@ LRESULT CTrayClockWnd::OnPaint(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bH
 
         /* Windows 11 style: on hover, the same rounded tile as the taskbar buttons
          * (the clock opens Quick Settings) */
-        if (m_bHover && IsAppThemed())
+        if (m_bHover && IsElevenStyleActive())
         {
             INT k = GetDeviceCaps(hDC, LOGPIXELSY);
             INT inset = max(1, (rcClient.bottom - MulDiv(40, k, 96)) / 2);
@@ -773,18 +774,34 @@ LRESULT CTrayClockWnd::OnTaskbarSettingsChanged(UINT uMsg, WPARAM wParam, LPARAM
     return 0;
 }
 
-/* Like Windows 11: each press on the clock opens (or closes) Quick Settings; the
- * date/time settings are one click away in it. A double click is two presses. */
+/* Eleven style, like Windows 11: each press on the clock opens (or closes) Quick
+ * Settings; the date/time settings are one click away in it. A double click is two
+ * presses. Other looks: the original behaviour, a double click opens Date/Time. */
 LRESULT CTrayClockWnd::OnLButtonDblClick(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 {
     if (IsWindowVisible())
-        QuickSettings_Toggle(GetAncestor(m_hWnd, GA_ROOT));
+    {
+        if (IsElevenStyleActive())
+            QuickSettings_Toggle(GetAncestor(m_hWnd, GA_ROOT));
+        else
+            ShellExecuteW(m_hWnd, NULL, L"timedate.cpl", NULL, NULL, SW_NORMAL);
+    }
     return TRUE;
+}
+
+LRESULT CTrayClockWnd::OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+{
+    if (!IsElevenStyleActive())
+    {
+        bHandled = FALSE;
+        return 0;
+    }
+    return OnLButtonDblClick(uMsg, wParam, lParam, bHandled);
 }
 
 LRESULT CTrayClockWnd::OnMouseMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 {
-    if (!m_bHover)
+    if (!m_bHover && IsElevenStyleActive())
     {
         TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, m_hWnd, 0 };
         m_bHover = TRUE;
@@ -796,8 +813,11 @@ LRESULT CTrayClockWnd::OnMouseMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL
 
 LRESULT CTrayClockWnd::OnMouseLeave(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 {
-    m_bHover = FALSE;
-    InvalidateRect(NULL, TRUE);
+    if (m_bHover)
+    {
+        m_bHover = FALSE;
+        InvalidateRect(NULL, TRUE);
+    }
     return 0;
 }
 
