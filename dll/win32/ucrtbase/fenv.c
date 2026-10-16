@@ -245,10 +245,13 @@ float __cdecl copysignf(float x, float y)
     return ux.f;
 }
 
-/* Splitting a float through double is exact (Blender calls it) */
+/* Splitting a float through double is exact (Blender calls it).
+   x86 has no modff export: there the CRT header defines it inline */
+#ifndef _M_IX86
 float __cdecl modff(float x, float *iptr)
 {
     double ip, frac = modf(x, &ip);
     *iptr = (float)ip;
     return (float)frac;
 }
+#endif
