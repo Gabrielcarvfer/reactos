@@ -908,6 +908,10 @@ IntWindowFromDC(HDC hDc)
             Ret = NULL;
          else
             Ret = Dce->hwndCurrent;
+         /* GetDC(NULL) is the desktop window's DC, as on Windows: ANGLE
+            (Chromium's GPU process) only takes a display DC with a window */
+         if (!Ret && (Dce->DCXFlags & DCX_DCEBUSY) && !(Dce->DCXFlags & DCX_INDESTROY))
+            Ret = IntGetDesktopWindow();
          break;
       }
   }
