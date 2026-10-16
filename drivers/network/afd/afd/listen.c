@@ -140,10 +140,14 @@ static NTSTATUS SatisfySuperAccept(PAFD_FCB FCB, PIRP Irp, PAFD_TDI_OBJECT_QELT 
     }
     _SEH2_END;
 
+    /* The query's IRP frees the MDL, not the buffer */
     Status = TdiQueryInformation(
         Qelt->Object.Object, TDI_QUERY_ADDRESS_INFO, Mdl);
     if (!NT_SUCCESS(Status))
+    {
+        ExFreePool(Buffer);
         goto end;
+    }
 
     /* Write the local address */
     LONG LocalAddressLength = min(AcceptInfo->LocalAddressLength, Buffer->Address.Address->AddressLength);
@@ -311,6 +315,7 @@ static NTSTATUS NTAPI ListenComplete( PDEVICE_OBJECT DeviceObject,
         {
             RemoveEntryList(PendingConn);
             SatisfySuperAccept(FCB, PendingIrpPtr, ConnectionData);
+            ExFreePoolWithTag(ConnectionData, TAG_AFD_ACCEPT_QUEUE);
         }
         else
         {
@@ -610,6 +615,33 @@ NTSTATUS AfdSuperAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     
     /* Proceed later in SatisfyAcceptEx */
     SocketStateUnlock(Fcb2);
+
+    /* A connection is already waiting (it came before AcceptEx, as with
+       Python's asyncio): take it now, not when the next one comes */
+    if (!IsListEmpty(&Fcb->PendingConnections))
+    {
+        PLIST_ENTRY PendingConn = RemoveHeadList(&Fcb->PendingConnections);
+        PAFD_TDI_OBJECT_QELT Qelt = CONTAINING_RECORD(PendingConn, AFD_TDI_OBJECT_QELT, ListEntry);
+
+        /* Completed now, or when the data asked for has come */
+        IoMarkIrpPending(Irp);
+        SatisfySuperAccept(Fcb, Irp, Qelt);
+        ExFreePoolWithTag(Qelt, TAG_AFD_ACCEPT_QUEUE);
+
+        if (!IsListEmpty(&Fcb->PendingConnections))
+        {
+            Fcb->PollState |= AFD_EVENT_ACCEPT;
+            Fcb->PollStatus[FD_ACCEPT_BIT] = STATUS_SUCCESS;
+            PollReeval(Fcb->DeviceExt, Fcb->FileObject);
+        }
+        else
+        {
+            Fcb->PollState &= ~AFD_EVENT_ACCEPT;
+        }
+
+        SocketStateUnlock(Fcb);
+        return STATUS_PENDING;
+    }
 
     return LeaveIrpUntilLater(Fcb, Irp, FUNCTION_PREACCEPT);
 }

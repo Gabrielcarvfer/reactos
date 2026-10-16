@@ -260,17 +260,19 @@ AfdGetSockName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
         } _SEH2_END;
 
         if( NT_SUCCESS(Status) ) {
+                /* The query's IRP owns the MDL: the I/O manager unlocks and
+                 * frees it when the IRP completes, also on failure (freeing
+                 * it here too corrupted the pool when getsockname() failed,
+                 * e.g. after a refused connection) */
                 Status = TdiQueryInformation( FCB->Connection.Object
                                                 ? FCB->Connection.Object
                                                 : FCB->AddressFile.Object,
                                               TDI_QUERY_ADDRESS_INFO,
                                               Mdl );
-        }
-
-        /* Check if MmProbeAndLockPages or TdiQueryInformation failed and
-         * clean up Mdl */
-        if (!NT_SUCCESS(Status) && Irp->MdlAddress != Mdl)
+        } else {
+            /* MmProbeAndLockPages failed: the MDL is still ours */
             IoFreeMdl(Mdl);
+        }
     } else
         Status = STATUS_INSUFFICIENT_RESOURCES;
 
