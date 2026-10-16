@@ -2,12 +2,29 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 STRINGTABLE
 BEGIN
-    IDS_USAGE "FINDSTR: Prints all lines of a file that contain a string.\n\n\
-  FIND [ /C ] [ /I ] [ /N ] [ /V ] ""string"" [ file... ]\n\
-    /C  Count the number of lines that contain string\n\
-    /I  Ignore case\n\
-    /N  Number the displayed lines, starting at 1\n\
-    /V  Print lines that do not contain the string"
+    IDS_USAGE "Searches for strings in files.\n\n\
+FINDSTR [/B] [/E] [/L | /R] [/S] [/I] [/X] [/V] [/N] [/M] [/O] [/P] [/F:file]\n\
+        [/C:string] [/G:file] [/D:dir list] [/A:color attributes] [/OFF[LINE]]\n\
+        strings [[drive:][path]filename[ ...]]\n\n\
+  /B   Matches the pattern at the beginning of a line.\n\
+  /E   Matches the pattern at the end of a line.\n\
+  /L   Uses search strings literally.\n\
+  /R   Uses search strings as regular expressions.\n\
+  /S   Searches the current directory and all subdirectories.\n\
+  /I   The search is not case-sensitive.\n\
+  /X   Prints lines that match exactly.\n\
+  /V   Prints only lines that do not contain a match.\n\
+  /N   Prints the line number before each line that matches.\n\
+  /M   Prints only the file name if a file contains a match.\n\
+  /O   Prints the character offset before each matching line.\n\
+  /P   Skips files with non-printable characters.\n\
+  /F:file  Reads the file list from the file (/ stands for console).\n\
+  /C:string  Uses the string as a search string.\n\
+  /G:file  Gets search strings from the file (/ stands for console).\n\
+  /D:dir  Searches a semicolon delimited list of directories.\n\n\
+  strings  Text to be searched for (any of them, separated by spaces).\n\n\
+Regular expressions: . any character, * repeat, ^ line start, $ line end,\n\
+[class] [^class] [x-y], \\x literal x, \\< word start, \\> word end.\n"
     IDS_NO_SUCH_FILE "FINDSTR: %s: No such file\n"
     IDS_CANNOT_OPEN "FINDSTR: %s: Cannot open file\n"
 END
