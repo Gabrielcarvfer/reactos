@@ -58,6 +58,7 @@ target_compile_definitions(ucrtbase_msun PRIVATE _USE_MATH_DEFINES)
 add_dependencies(ucrtbase_msun psdk)
 
 add_library(ucrtbase SHARED
+    fenv.c
     printf.c
     stubs.c
     ucrtbase_stubs.c

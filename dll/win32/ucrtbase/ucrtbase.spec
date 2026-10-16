@@ -377,7 +377,7 @@
 @ cdecl _fpclass(double)
 @ cdecl -stub -arch=!i386 _fpclassf(float)
 @ cdecl _fpieee_flt(long ptr ptr)
-@ cdecl -stub _fpreset()
+@ cdecl _fpreset()
 @ cdecl _fputc_nolock(long ptr)
 @ cdecl _fputchar(long)
 @ cdecl _fputwc_nolock(long ptr)
@@ -2310,9 +2310,9 @@
 @ stub conj
 @ stub conjf
 @ stub conjl
-@ cdecl -stub copysign(double double)
-@ cdecl -stub copysignf(float float)
-@ cdecl -stub copysignl(double double) copysign
+@ cdecl copysign(double double)
+@ cdecl copysignf(float float)
+@ cdecl copysignl(double double) copysign
 @ cdecl cos(double)
 @ cdecl -arch=!i386 cosf(float)
 @ cdecl cosh(double)
@@ -2363,17 +2363,17 @@
 @ cdecl -stub fdim(double double)
 @ cdecl -stub fdimf(float float)
 @ cdecl fdiml(double double) fdim
-@ cdecl -stub feclearexcept(long)
-@ cdecl -stub fegetenv(ptr)
-@ cdecl -stub fegetexceptflag(ptr long)
-@ cdecl -stub fegetround()
-@ cdecl -stub feholdexcept(ptr)
+@ cdecl feclearexcept(long)
+@ cdecl fegetenv(ptr)
+@ cdecl fegetexceptflag(ptr long)
+@ cdecl fegetround()
+@ cdecl feholdexcept(ptr)
 @ cdecl feof(ptr)
 @ cdecl ferror(ptr)
-@ cdecl -stub fesetenv(ptr)
-@ cdecl -stub fesetexceptflag(ptr long)
-@ cdecl -stub fesetround(long)
-@ cdecl -stub fetestexcept(long)
+@ cdecl fesetenv(ptr)
+@ cdecl fesetexceptflag(ptr long)
+@ cdecl fesetround(long)
+@ cdecl fetestexcept(long)
 @ cdecl fflush(ptr)
 @ cdecl fgetc(ptr)
 @ cdecl fgetpos(ptr ptr)
@@ -2505,7 +2505,7 @@
 @ cdecl memmove_s(ptr long ptr long)
 @ cdecl memset(ptr long long)
 @ cdecl modf(double ptr)
-@ cdecl -stub -arch=!i386 modff(float ptr)
+@ cdecl -arch=!i386 modff(float ptr)
 @ cdecl nan(str)
 @ cdecl nanf(str)
 @ cdecl nanl(str) nan
