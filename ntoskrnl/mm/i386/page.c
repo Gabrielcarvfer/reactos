@@ -911,7 +911,18 @@ MmSetDirtyBit(PEPROCESS Process, PVOID Address, BOOLEAN Bit)
         KeBugCheck(MEMORY_MANAGEMENT);
     }
 
-    PointerPte->u.Hard.Dirty = !!Bit;
+    /* Atomically: another processor may set the accessed/dirty bits meanwhile */
+#ifdef _WIN64
+    if (Bit)
+        InterlockedOr64((PLONG64)&PointerPte->u.Long, 0x40);
+    else
+        InterlockedAnd64((PLONG64)&PointerPte->u.Long, ~(LONG64)0x40);
+#else
+    if (Bit)
+        InterlockedOr((PLONG)&PointerPte->u.Long, 0x40);
+    else
+        InterlockedAnd((PLONG)&PointerPte->u.Long, ~0x40);
+#endif
 
     if (!Bit)
         KeInvalidateTlbEntry(Address);
