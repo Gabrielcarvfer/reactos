@@ -35,10 +35,12 @@ list(APPEND SOURCE
     LoadImage.c
     LoadImageGCC.c
     LookupIconIdFromDirectoryEx.c
+    MdiAnsi.c
     MenuUI.c
     MessageStateAnalyzer.c
     NcPaintRgn.c
     NextDlgItem.c
+    NotepadWindow.c
     PrivateExtractIcons.c
     RealGetWindowClass.c
     RedrawWindow.c
@@ -65,6 +67,7 @@ list(APPEND SOURCE
     TrackPopupMenuEx.c
     UserHandleGrantAccess.c
     VirtualKey.c
+    WindowHooks.c
     WndProc.c
     wsprintf.c)
 

@@ -35,10 +35,12 @@ extern void func_keybd_event(void);
 extern void func_LoadImage(void);
 extern void func_LoadImageGCC(void);
 extern void func_LookupIconIdFromDirectoryEx(void);
+extern void func_MdiAnsi(void);
 extern void func_MenuUI(void);
 extern void func_MessageStateAnalyzer(void);
 extern void func_NcPaintRgn(void);
 extern void func_NextDlgItem(void);
+extern void func_NotepadWindow(void);
 extern void func_PrivateExtractIcons(void);
 extern void func_RealGetWindowClass(void);
 extern void func_RedrawWindow(void);
@@ -65,6 +67,7 @@ extern void func_TrackMouseEvent(void);
 extern void func_TrackPopupMenuEx(void);
 extern void func_UserHandleGrantAccess(void);
 extern void func_VirtualKey(void);
+extern void func_WindowHooks(void);
 extern void func_WndProc(void);
 extern void func_wsprintfApi(void);
 
@@ -103,10 +106,12 @@ const struct test winetest_testlist[] =
     { "LoadImage", func_LoadImage },
     { "LoadImageGCC", func_LoadImageGCC },
     { "LookupIconIdFromDirectoryEx", func_LookupIconIdFromDirectoryEx },
+    { "MdiAnsi", func_MdiAnsi },
     { "MenuUI", func_MenuUI },
     { "MessageStateAnalyzer", func_MessageStateAnalyzer },
     { "NcPaintRgn", func_NcPaintRgn },
     { "NextDlgItem", func_NextDlgItem },
+    { "NotepadWindow", func_NotepadWindow },
     { "PrivateExtractIcons", func_PrivateExtractIcons },
     { "RealGetWindowClass", func_RealGetWindowClass },
     { "RedrawWindow", func_RedrawWindow },
@@ -133,6 +138,7 @@ const struct test winetest_testlist[] =
     { "TrackPopupMenuEx", func_TrackPopupMenuEx },
     { "UserHandleGrantAccess", func_UserHandleGrantAccess },
     { "VirtualKey", func_VirtualKey },
+    { "WindowHooks", func_WindowHooks },
     { "WndProc", func_WndProc },
     { "wsprintfApi", func_wsprintfApi },
     { 0, 0 }
