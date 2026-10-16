@@ -259,6 +259,7 @@ STRINGTABLE
 BEGIN
     IDS_CLASSIC "经典"
     IDS_LAUTUS "现代"
+    IDS_ELEVEN "Eleven"
     IDS_LUNAR "月光"
     IDS_MIZU "水流"
 END

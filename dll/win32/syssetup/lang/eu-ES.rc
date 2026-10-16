@@ -255,6 +255,7 @@ STRINGTABLE
 BEGIN
     IDS_CLASSIC "Klasikoa"
     IDS_LAUTUS "Lautus-a"
+    IDS_ELEVEN "Eleven"
     IDS_LUNAR "Lunar-a"
     IDS_MIZU "Mizu-a"
 END

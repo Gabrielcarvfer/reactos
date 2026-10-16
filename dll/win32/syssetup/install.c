@@ -1065,8 +1065,9 @@ PreprocessUnattend(
     if (!bDefaultThemesOff)
     {
         /* Retrieve the complete path to a .theme (or for ReactOS, a .msstyles) file */
+        /* None specified: the Eleven theme (DefaultThemesOff = yes gives the classic one) */
         if (!GetPrivateProfileStringW(L"Shell", L"CustomDefaultThemeFile", NULL, szValue, _countof(szValue), szPath) || !*szValue)
-            bDefaultThemesOff = TRUE; // None specified, fall back to the classic theme.
+            wcscpy(szValue, L"%WINDIR%\\Resources\\Themes\\Eleven\\eleven.msstyles");
     }
 
     /* Enable the chosen theme, or use the classic theme */
@@ -1074,6 +1075,30 @@ PreprocessUnattend(
 
     if (IsInstall)
         ProcessDetachedProgram(szPath);
+}
+
+/*
+ * The machine ID that Windows creates at install time (programs read it:
+ * VS Code logged "Unable to open registry key" without it)
+ */
+static VOID
+CreateSqmMachineId(VOID)
+{
+    GUID Guid;
+    WCHAR szGuid[40];
+    HKEY hKey;
+
+    if (UuidCreate(&Guid) != RPC_S_OK ||
+        !StringFromGUID2(&Guid, szGuid, _countof(szGuid)))
+        return;
+
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\SQMClient", 0, NULL,
+                        REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        RegSetValueExW(hKey, L"MachineId", 0, REG_SZ, (PBYTE)szGuid,
+                       (DWORD)(wcslen(szGuid) + 1) * sizeof(WCHAR));
+        RegCloseKey(hKey);
+    }
 }
 
 static BOOL
@@ -1642,6 +1667,8 @@ InstallReactOS(VOID)
 
     CreateTempDir(L"TEMP");
     CreateTempDir(L"TMP");
+
+    CreateSqmMachineId();
 
     if (!InitializeProgramFilesDir())
     {

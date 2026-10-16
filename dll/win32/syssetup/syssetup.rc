@@ -20,6 +20,7 @@ IDB_WATERMARK BITMAP "resources/watermark.bmp"
 IDB_HEADER BITMAP "resources/header.bmp"
 IDB_CLASSIC BITMAP "resources/thmclassic.bmp"
 IDB_LAUTUS BITMAP "resources/thmlautus.bmp"
+IDB_ELEVEN BITMAP "resources/thmeleven.bmp"
 IDB_LUNAR BITMAP "resources/thmlunar.bmp"
 IDB_MIZU BITMAP "resources/thmmizu.bmp"
 

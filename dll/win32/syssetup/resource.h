@@ -26,6 +26,7 @@
 #define IDB_MIZU      105
 #define IDB_REACTOS   106
 #define IDB_LINE      107
+#define IDB_ELEVEN    108
 
 #define IDI_ICON1 10
 #define IDI_ICON2 11
@@ -172,6 +173,7 @@
 #define IDS_LAUTUS  3801
 #define IDS_LUNAR   3802
 #define IDS_MIZU    3803
+#define IDS_ELEVEN  3804
 
 #define IDS_INSTALLATIONTITLE           3900
 #define IDS_INSTALLATIONSUBTITLE        3901
