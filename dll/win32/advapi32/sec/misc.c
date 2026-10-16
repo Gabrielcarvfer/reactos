@@ -1516,6 +1516,8 @@ TreeResetNamedSecurityInfoW(LPWSTR pObjectName,
             {
                 case SE_FILE_OBJECT:
                 case SE_REGISTRY_KEY:
+                case SE_REGISTRY_WOW64_32KEY:
+                case SE_REGISTRY_WOW64_64KEY:
                 {
                     /* check the SecurityInfo flags for sanity (both, the protected
                        and unprotected dacl/sacl flag must not be passed together) */

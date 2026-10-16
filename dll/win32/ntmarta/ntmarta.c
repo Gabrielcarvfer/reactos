@@ -702,6 +702,8 @@ AccRewriteGetHandleRights(HANDLE handle,
         switch (ObjectType)
         {
             case SE_REGISTRY_KEY:
+            case SE_REGISTRY_WOW64_32KEY:
+            case SE_REGISTRY_WOW64_64KEY:
             {
                 Ret = (DWORD)RegGetKeySecurity((HKEY)handle,
                                                SecurityInfo,
@@ -856,6 +858,8 @@ AccRewriteSetHandleRights(HANDLE handle,
     switch (ObjectType)
     {
         case SE_REGISTRY_KEY:
+        case SE_REGISTRY_WOW64_32KEY:
+        case SE_REGISTRY_WOW64_64KEY:
         {
             Ret = (DWORD)RegSetKeySecurity((HKEY)handle,
                                            SecurityInfo,
@@ -932,6 +936,8 @@ AccpOpenNamedObject(LPWSTR pObjectName,
     switch (ObjectType)
     {
         case SE_REGISTRY_KEY:
+        case SE_REGISTRY_WOW64_32KEY:
+        case SE_REGISTRY_WOW64_64KEY:
         case SE_FILE_OBJECT:
         case SE_KERNEL_OBJECT:
         case SE_SERVICE:
@@ -956,6 +962,8 @@ AccpOpenNamedObject(LPWSTR pObjectName,
     switch (ObjectType)
     {
         case SE_REGISTRY_KEY:
+        case SE_REGISTRY_WOW64_32KEY:
+        case SE_REGISTRY_WOW64_64KEY:
         case SE_SERVICE:
             lpPath = (LPWSTR)LocalAlloc(LMEM_FIXED,
                                         (wcslen(pObjectName) + 1) * sizeof(WCHAR));
@@ -1017,6 +1025,8 @@ AccpOpenNamedObject(LPWSTR pObjectName,
         }
 
         case SE_REGISTRY_KEY:
+        case SE_REGISTRY_WOW64_32KEY:
+        case SE_REGISTRY_WOW64_64KEY:
         {
             static const struct
             {
@@ -1091,6 +1101,13 @@ ParseRegErr:
 
                 hRootKey = (HKEY)(*Handle2);
             }
+
+            /* the WOW64 types name a key of the 32-bit or the 64-bit view
+               (installers like Opera's use them) */
+            if (ObjectType == SE_REGISTRY_WOW64_32KEY)
+                DesiredAccess |= KEY_WOW64_32KEY;
+            else if (ObjectType == SE_REGISTRY_WOW64_64KEY)
+                DesiredAccess |= KEY_WOW64_64KEY;
 
             Ret = RegOpenKeyEx(hRootKey,
                                lpKeyName,
@@ -1193,6 +1210,8 @@ AccpCloseObjectHandle(SE_OBJECT_TYPE ObjectType,
     switch (ObjectType)
     {
         case SE_REGISTRY_KEY:
+        case SE_REGISTRY_WOW64_32KEY:
+        case SE_REGISTRY_WOW64_64KEY:
             RegCloseKey((HKEY)Handle);
             if (Handle2 != NULL)
                 RegCloseKey((HKEY)Handle2);
