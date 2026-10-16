@@ -132,9 +132,22 @@ KiIdleLoop(VOID)
             /* Enable interrupts */
             _enable();
 
+#ifdef CONFIG_SMP
+            /* Other processors change NextThread under the PRCB lock
+               (KiDeferredReadyThread may replace it with a better one) */
+            KiAcquirePrcbLock(Prcb);
+            NewThread = Prcb->NextThread;
+            if (NewThread == NULL)
+            {
+                KiReleasePrcbLock(Prcb);
+                continue;
+            }
+#else
+            NewThread = Prcb->NextThread;
+#endif
+
             /* Capture current thread data */
             OldThread = Prcb->CurrentThread;
-            NewThread = Prcb->NextThread;
 
             /* Set new thread data */
             Prcb->NextThread = NULL;
@@ -144,6 +157,10 @@ KiIdleLoop(VOID)
             NewThread->State = Running;
 
 #ifdef CONFIG_SMP
+            /* We are not idle anymore */
+            InterlockedAnd64((PLONG64)&KiIdleSummary, ~(LONG64)Prcb->SetMember);
+            KiReleasePrcbLock(Prcb);
+
             /* Do the swap at SYNCH_LEVEL */
             KfRaiseIrql(SYNCH_LEVEL);
 #endif

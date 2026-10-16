@@ -64,6 +64,16 @@ KiDpcInterruptHandler(VOID)
         OldThread = Prcb->CurrentThread;
         NewThread = Prcb->NextThread;
 
+        /* Another processor may have taken it back meanwhile */
+        if (NewThread == NULL)
+        {
+            KiReleasePrcbLock(Prcb);
+            goto Exit;
+        }
+
+        /* Nobody may switch to the old thread before its context is saved */
+        KiSetThreadSwapBusy(OldThread);
+
         /* Set new thread data */
         Prcb->NextThread = NULL;
         Prcb->CurrentThread = NewThread;
@@ -79,6 +89,7 @@ KiDpcInterruptHandler(VOID)
         KiSwapContext(APC_LEVEL, OldThread);
     }
 
+Exit:
     /* Disable interrupts and go back to old irql */
     _disable();
     KeLowerIrql(OldIrql);

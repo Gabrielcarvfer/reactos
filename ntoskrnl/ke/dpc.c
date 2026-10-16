@@ -864,6 +864,15 @@ KeInsertQueueDpc(IN PKDPC Dpc,
             HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
         }
     }
+#ifdef CONFIG_SMP
+    else if (DpcConfigured && (Prcb != CurrentPrcb) &&
+             (Prcb->CurrentThread == Prcb->IdleThread))
+    {
+        /* The idle loop of that processor retires it, but it may be halted:
+           wake it up */
+        KiIpiSend(AFFINITY_MASK(Cpu), IPI_DPC);
+    }
+#endif
 
     /* Lower IRQL */
     KeLowerIrql(OldIrql);

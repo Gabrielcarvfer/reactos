@@ -1487,7 +1487,9 @@ KeQueryTotalCycleTimeThread(
         {
             /* FIXME: On SMP, if the thread runs on a different CPU we need to
                send an IPI to update the threads cycle time */
-            DPRINT1("Warning: Thread cycle time for remote thread %p is inaccurate!\n", Thread);
+            /* (Silent: debug prints stop the other processors, and programs
+               like Chromium ask often) */
+            DPRINT("Warning: Thread cycle time for remote thread %p is inaccurate!\n", Thread);
         }
 #endif
 
