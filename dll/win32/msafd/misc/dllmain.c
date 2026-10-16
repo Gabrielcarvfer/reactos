@@ -333,10 +333,10 @@ WSPSocket(int AddressFamily,
         }
     }
 
-    /* Set up Object Attributes */
+    /* Set up Object Attributes (WSA_FLAG_NO_HANDLE_INHERIT: as CPython's sockets) */
     InitializeObjectAttributes (&Object,
                                 &DevName,
-                                OBJ_CASE_INSENSITIVE | OBJ_INHERIT,
+                                OBJ_CASE_INSENSITIVE | ((dwFlags & 0x80) ? 0 : OBJ_INHERIT),
                                 0,
                                 0);
 
@@ -1465,6 +1465,7 @@ WSPAccept(
     NTSTATUS                    Status;
     struct fd_set               ReadSet;
     struct timeval              Timeout;
+    INT                         Ready;
     PVOID                       PendingData = NULL;
     ULONG                       PendingDataLength = 0;
     PVOID                       CalleeDataBuffer;
@@ -1519,13 +1520,15 @@ WSPAccept(
         Timeout.tv_sec=0;
         Timeout.tv_usec=0;
 
-        if (WSPSelect(0, &ReadSet, NULL, NULL, &Timeout, lpErrno) == SOCKET_ERROR)
+        /* The count says whether it is readable: fd_array keeps the handle */
+        Ready = WSPSelect(0, &ReadSet, NULL, NULL, &Timeout, lpErrno);
+        if (Ready == SOCKET_ERROR)
         {
             NtClose(SockEvent);
             return SOCKET_ERROR;
         }
 
-        if (ReadSet.fd_array[0] != Socket->Handle)
+        if (Ready == 0 || ReadSet.fd_count == 0 || ReadSet.fd_array[0] != Socket->Handle)
         {
             NtClose(SockEvent);
             if (lpErrno) *lpErrno = WSAEWOULDBLOCK;
@@ -1907,7 +1910,7 @@ WSPAcceptEx(
     Status = NtDeviceIoControlFile((HANDLE)ListenSocket->Handle,
                                    lpOverlapped->hEvent,
                                    NULL,
-                                   lpOverlapped->hEvent ? NULL : lpOverlapped,
+                                   MSAFD_OVERLAPPED_CONTEXT(lpOverlapped),
                                    IoStatusBlock,
                                    IOCTL_AFD_SUPER_ACCEPT,
                                    &AcceptInfo,
@@ -2379,7 +2382,7 @@ WSPConnectEx(
     Status = NtDeviceIoControlFile((HANDLE)Handle,
                                    lpOverlapped->hEvent,
                                    NULL,
-                                   lpOverlapped->hEvent ? NULL : lpOverlapped,
+                                   MSAFD_OVERLAPPED_CONTEXT(lpOverlapped),
                                    IOSB,
                                    IOCTL_AFD_SUPER_CONNECT,
                                    ConnectInfo,

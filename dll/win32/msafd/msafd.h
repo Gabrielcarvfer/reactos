@@ -407,6 +407,15 @@ WSPAcceptEx(
     OUT LPDWORD lpdwBytesReceived,
     IN OUT LPOVERLAPPED lpOverlapped);
 
+/*
+ * The ApcContext of overlapped socket I/O, as kernel32 for files: the
+ * OVERLAPPED, which a completion port gives back; none when the low bit of
+ * its event is set (no completion packet). An event alone does not mean no
+ * completion port: Python's asyncio sets one on every OVERLAPPED.
+ */
+#define MSAFD_OVERLAPPED_CONTEXT(Overlapped) \
+    ((((ULONG_PTR)(Overlapped)->hEvent) & 1) ? NULL : (PVOID)(Overlapped))
+
 BOOL
 WSPAPI
 WSPConnectEx(

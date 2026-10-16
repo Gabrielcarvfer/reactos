@@ -344,14 +344,7 @@ WSPRecv(SOCKET Handle,
             Event = lpOverlapped->hEvent;
             
             APCFunction = NULL;
-            if (Event)
-            {
-                APCContext = NULL;
-            }
-            else
-            {
-                APCContext = (PMSAFD_RECV_APC_CONTEXT)lpOverlapped;
-            }
+            APCContext = (PMSAFD_RECV_APC_CONTEXT)MSAFD_OVERLAPPED_CONTEXT(lpOverlapped);
         }
 
         RecvInfo.AfdFlags |= AFD_OVERLAPPED;
@@ -581,14 +574,7 @@ WSPRecvFrom(SOCKET Handle,
             Event = lpOverlapped->hEvent;
             
             APCFunction = NULL;
-            if (Event)
-            {
-                APCContext = NULL;
-            }
-            else
-            {
-                APCContext = (PMSAFD_RECV_APC_CONTEXT)lpOverlapped;
-            }
+            APCContext = (PMSAFD_RECV_APC_CONTEXT)MSAFD_OVERLAPPED_CONTEXT(lpOverlapped);
         }
 
         RecvInfo.AfdFlags |= AFD_OVERLAPPED;
@@ -776,24 +762,9 @@ WSPSend(SOCKET Handle,
             Event = lpOverlapped->hEvent;
             
             APCFunction = NULL;
-            if (Event)
-            {
-                APCContext = NULL;
-            }
-            else
-            {
-                APCContext = (PMSAFD_SEND_APC_CONTEXT)lpOverlapped;
-            }
+            APCContext = (PMSAFD_SEND_APC_CONTEXT)MSAFD_OVERLAPPED_CONTEXT(lpOverlapped);
         }
         
-        Event = lpOverlapped->hEvent;
-        // APCContext is unsupported when using event
-        if (Event)
-        {
-            if (lpCompletionRoutine)
-                HeapFree(GetProcessHeap(), 0, APCContext);
-            APCContext = NULL;
-        }
 
         SendInfo.AfdFlags |= AFD_OVERLAPPED;
     }
@@ -994,14 +965,7 @@ WSPSendTo(SOCKET Handle,
             Event = lpOverlapped->hEvent;
             
             APCFunction = NULL;
-            if (Event)
-            {
-                APCContext = NULL;
-            }
-            else
-            {
-                APCContext = (PMSAFD_SEND_APC_CONTEXT)lpOverlapped;
-            }
+            APCContext = (PMSAFD_SEND_APC_CONTEXT)MSAFD_OVERLAPPED_CONTEXT(lpOverlapped);
         }
 
         SendInfo.AfdFlags |= AFD_OVERLAPPED;
