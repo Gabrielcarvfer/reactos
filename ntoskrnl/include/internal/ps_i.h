@@ -354,6 +354,49 @@ static const INFORMATION_CLASS_INFO PsProcessInfoClass[] =
 
     /* ProcessMemoryAllocationMode */
     IQS_NONE,
+
+    /* The classes below are newer than the PROCESSINFOCLASS of our headers */
+
+    /* ProcessGroupInformation */
+    IQS_NONE,
+
+    /* ProcessTokenVirtualizationEnabled */
+    IQS_NONE,
+
+    /* ProcessConsoleHostProcess */
+    IQS_NONE,
+
+    /* ProcessWindowInformation */
+    IQS_NONE,
+
+    /* ProcessHandleInformation */
+    IQS_NONE,
+
+    /* ProcessMitigationPolicy */
+    IQS_NONE,
+
+    /* ProcessDynamicFunctionTableInformation */
+    IQS_NONE,
+
+    /* ProcessHandleCheckingMode */
+    IQS_NONE,
+
+    /* ProcessKeepAliveCount */
+    IQS_NONE,
+
+    /* ProcessRevokeFileHandles */
+    IQS_NONE,
+
+    /* ProcessWorkingSetControl */
+    IQS_NONE,
+
+    /* ProcessHandleTable (Windows 8.1): the handle values, as ULONGs */
+    IQS_SAME
+    (
+        ULONG,
+        ULONG,
+        ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE
+    ),
 };
 
 //

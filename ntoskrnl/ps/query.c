@@ -19,6 +19,101 @@ ULONG PspTraceLevel = 0;
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
+/* Newer than the PROCESSINFOCLASS of our headers (Windows 8.1) */
+#define ProcessHandleTable ((PROCESSINFOCLASS)58)
+
+typedef struct _PSP_HANDLE_LIST
+{
+    PULONG Handles;
+    ULONG Count;
+    ULONG Max;
+} PSP_HANDLE_LIST, *PPSP_HANDLE_LIST;
+
+static
+BOOLEAN
+NTAPI
+PspCollectHandle(
+    _In_ PHANDLE_TABLE_ENTRY HandleTableEntry,
+    _In_ HANDLE Handle,
+    _In_ PVOID Context)
+{
+    PPSP_HANDLE_LIST List = Context;
+
+    UNREFERENCED_PARAMETER(HandleTableEntry);
+
+    /* Count them all; store as many as fit */
+    if (List->Count < List->Max)
+        List->Handles[List->Count] = HandleToUlong(Handle);
+    List->Count++;
+    return FALSE;
+}
+
+/* ProcessHandleTable: the values of the handles a process has open */
+static
+NTSTATUS
+PspQueryHandleTable(
+    _In_ HANDLE ProcessHandle,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength)
+{
+    PEPROCESS Process;
+    PHANDLE_TABLE HandleTable;
+    PSP_HANDLE_LIST List;
+    NTSTATUS Status;
+
+    *ReturnLength = 0;
+    Status = ObReferenceObjectByHandle(ProcessHandle,
+                                       PROCESS_QUERY_INFORMATION,
+                                       PsProcessType,
+                                       PreviousMode,
+                                       (PVOID*)&Process,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    List.Count = 0;
+    /* At most 1M handles (the buffer is only allocated as big as asked) */
+    List.Max = min(Length / sizeof(ULONG), 0x100000);
+    List.Handles = ExAllocatePoolWithTag(PagedPool,
+                                         max(List.Max, 1) * sizeof(ULONG),
+                                         TAG_PS_QUERY);
+    if (!List.Handles)
+    {
+        ObDereferenceObject(Process);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    HandleTable = ObReferenceProcessHandleTable(Process);
+    if (HandleTable)
+    {
+        ExEnumHandleTable(HandleTable, PspCollectHandle, &List, NULL);
+        ObDereferenceProcessHandleTable(Process);
+    }
+    ObDereferenceObject(Process);
+
+    *ReturnLength = List.Count * sizeof(ULONG);
+    if (List.Count > List.Max)
+    {
+        Status = STATUS_INFO_LENGTH_MISMATCH;
+    }
+    else
+    {
+        _SEH2_TRY
+        {
+            RtlCopyMemory(Buffer, List.Handles, List.Count * sizeof(ULONG));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    ExFreePoolWithTag(List.Handles, TAG_PS_QUERY);
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 PsReferenceProcessFilePointer(
@@ -252,6 +347,16 @@ NtQueryInformationProcess(
          * a real handle actually represents the current process.
          */
         return STATUS_INVALID_PARAMETER;
+    }
+
+    if (ProcessInformationClass == ProcessHandleTable)
+    {
+        Status = PspQueryHandleTable(ProcessHandle,
+                                     PreviousMode,
+                                     ProcessInformation,
+                                     ProcessInformationLength,
+                                     &Length);
+        goto WriteReturnLength;
     }
 
     /* Check the information class */
@@ -1394,6 +1499,7 @@ NtQueryInformationProcess(
             Status = STATUS_INVALID_INFO_CLASS;
     }
 
+WriteReturnLength:
     /* Check if caller wants the return length and if there is one */
     if (ReturnLength != NULL && Length != 0)
     {
