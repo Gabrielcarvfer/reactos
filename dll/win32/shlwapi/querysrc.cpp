@@ -100,22 +100,11 @@ class CRegistrySource
 
     template<WORD Ver> static bool ExposeFeature()
     {
-        if (Ver >= _WIN32_WINNT_VISTA && SHELL32_CAssocElement_Version >= _WIN32_WINNT_VISTA)
-            return true;
-        if (Ver < _WIN32_WINNT_VISTA && SHELL32_CAssocElement_Version < _WIN32_WINNT_VISTA)
-            return true;
-
-        DWORD packed = GetVersion();
-        WORD W32Nt = MAKEWORD(HIBYTE(packed), LOBYTE(packed));
-        if (Ver >= _WIN32_WINNT_VISTA)
-            return W32Nt >= _WIN32_WINNT_VISTA;
-#if 0
-        if (Ver < _WIN32_WINNT_VISTA)
-            return W32Nt < _WIN32_WINNT_VISTA;
-        return false;
-#else
-        return Ver < _WIN32_WINNT_VISTA; // FIXME: The apitest currently only uses the NT5 interface
-#endif
+        /* The interfaces our shell32 uses (SHELL32_CAssocElement_Version), not the
+           Windows version the program is told: shell32 expecting IQuerySourceOld
+           got an IQuerySource for programs shown Windows Vista or later (Notepad++,
+           manifested for Windows 10, crashed in AssocQueryString) */
+        return (Ver >= _WIN32_WINNT_VISTA) == (SHELL32_CAssocElement_Version >= _WIN32_WINNT_VISTA);
     }
 
 public:
