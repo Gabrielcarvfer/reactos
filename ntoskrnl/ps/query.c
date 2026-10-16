@@ -19,6 +19,73 @@ ULONG PspTraceLevel = 0;
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
+/*
+ * References a process for the query classes that Windows Vista and later
+ * allow with PROCESS_QUERY_LIMITED_INFORMATION (times, image name, basic
+ * information...). Chromium duplicates its process handle with only that
+ * right and treats a failing GetProcessTimes as unreachable (Spotify).
+ * A handle with PROCESS_QUERY_INFORMATION is accepted too.
+ */
+static
+NTSTATUS
+PspReferenceProcessForQuery(
+    _In_ HANDLE ProcessHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_TYPE ObjectType,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PVOID *Object,
+    _Out_opt_ POBJECT_HANDLE_INFORMATION HandleInformation)
+{
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(DesiredAccess);
+
+    Status = ObReferenceObjectByHandle(ProcessHandle,
+                                       PROCESS_QUERY_LIMITED_INFORMATION,
+                                       ObjectType,
+                                       AccessMode,
+                                       Object,
+                                       HandleInformation);
+    if (Status == STATUS_ACCESS_DENIED)
+    {
+        Status = ObReferenceObjectByHandle(ProcessHandle,
+                                           PROCESS_QUERY_INFORMATION,
+                                           ObjectType,
+                                           AccessMode,
+                                           Object,
+                                           HandleInformation);
+    }
+    return Status;
+}
+
+/* The same for threads: THREAD_QUERY_LIMITED_INFORMATION (GetThreadTimes...) */
+static
+NTSTATUS
+PspReferenceThreadForQuery(
+    _In_ HANDLE ThreadHandle,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PETHREAD *Thread)
+{
+    NTSTATUS Status;
+
+    Status = ObReferenceObjectByHandle(ThreadHandle,
+                                       THREAD_QUERY_LIMITED_INFORMATION,
+                                       PsThreadType,
+                                       AccessMode,
+                                       (PVOID*)Thread,
+                                       NULL);
+    if (Status == STATUS_ACCESS_DENIED)
+    {
+        Status = ObReferenceObjectByHandle(ThreadHandle,
+                                           THREAD_QUERY_INFORMATION,
+                                           PsThreadType,
+                                           AccessMode,
+                                           (PVOID*)Thread,
+                                           NULL);
+    }
+    return Status;
+}
+
 /* Newer than the PROCESSINFOCLASS of our headers (Windows 8.1) */
 #define ProcessHandleTable ((PROCESSINFOCLASS)58)
 
@@ -64,7 +131,7 @@ PspQueryHandleTable(
     NTSTATUS Status;
 
     *ReturnLength = 0;
-    Status = ObReferenceObjectByHandle(ProcessHandle,
+    Status = PspReferenceProcessForQuery(ProcessHandle,
                                        PROCESS_QUERY_INFORMATION,
                                        PsProcessType,
                                        PreviousMode,
@@ -377,7 +444,7 @@ NtQueryInformationProcess(
             Length = sizeof(PROCESS_BASIC_INFORMATION);
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -514,7 +581,7 @@ NtQueryInformationProcess(
             Length = sizeof(IO_COUNTERS);
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -559,7 +626,7 @@ NtQueryInformationProcess(
             Length = sizeof(KERNEL_USER_TIMES);
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -642,7 +709,7 @@ NtQueryInformationProcess(
             Length = sizeof(ULONG);
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -686,7 +753,7 @@ NtQueryInformationProcess(
             Length = sizeof(PROCESS_SESSION_INFORMATION);
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -726,7 +793,7 @@ NtQueryInformationProcess(
             }
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -925,7 +992,7 @@ NtQueryInformationProcess(
             Length = sizeof(PROCESS_PRIORITY_CLASS);
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -957,7 +1024,7 @@ NtQueryInformationProcess(
             PUNICODE_STRING ImageName;
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -1016,8 +1083,7 @@ NtQueryInformationProcess(
             POBJECT_NAME_INFORMATION ObjectNameInformation;
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
-            // FIXME: Use PROCESS_QUERY_LIMITED_INFORMATION when implemented
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -1368,7 +1434,7 @@ NtQueryInformationProcess(
             Length = sizeof(ULONG_PTR);
 
             /* Reference the process */
-            Status = ObReferenceObjectByHandle(ProcessHandle,
+            Status = PspReferenceProcessForQuery(ProcessHandle,
                                                PROCESS_QUERY_INFORMATION,
                                                PsProcessType,
                                                PreviousMode,
@@ -3177,12 +3243,7 @@ NtQueryInformationThread(
             }
 
             /* Reference the thread */
-            Status = ObReferenceObjectByHandle(ThreadHandle,
-                                               Access,
-                                               PsThreadType,
-                                               PreviousMode,
-                                               (PVOID*)&Thread,
-                                               NULL);
+            Status = PspReferenceThreadForQuery(ThreadHandle, PreviousMode, &Thread);
             if (!NT_SUCCESS(Status))
                 break;
 
@@ -3224,12 +3285,7 @@ NtQueryInformationThread(
             }
 
             /* Reference the thread */
-            Status = ObReferenceObjectByHandle(ThreadHandle,
-                                               Access,
-                                               PsThreadType,
-                                               PreviousMode,
-                                               (PVOID*)&Thread,
-                                               NULL);
+            Status = PspReferenceThreadForQuery(ThreadHandle, PreviousMode, &Thread);
             if (!NT_SUCCESS(Status))
                 break;
 
