@@ -163,7 +163,7 @@ ConDrvWriteConsoleInput(IN PCONSOLE Console,
                         IN PINPUT_RECORD InputRecord,
                         IN ULONG NumEventsToWrite,
                         OUT PULONG NumEventsWritten OPTIONAL);
-static NTSTATUS
+NTSTATUS
 ConioAddInputEvents(PCONSRV_CONSOLE Console,
                     PINPUT_RECORD InputRecords, // InputEvent
                     ULONG NumEventsToWrite,
@@ -224,6 +224,34 @@ ConioProcessInputEvent(PCONSRV_CONSOLE Console,
                 Console->LineComplete = TRUE;
             }
             return STATUS_SUCCESS; // STATUS_CONTROL_C_EXIT;
+        }
+
+        /* VT input: keys without a character become escape sequences */
+        if (GetConsoleInputBufferMode(Console) & ENABLE_VIRTUAL_TERMINAL_INPUT)
+        {
+            WCHAR Sequence[32];
+
+            if (VtTranslateKey(Console, &InputEvent->Event.KeyEvent, Sequence, ARRAYSIZE(Sequence)))
+            {
+                INPUT_RECORD Records[ARRAYSIZE(Sequence)];
+                ULONG Count, Repeat;
+
+                /* Only the key presses: one event per character */
+                if (!Down) return STATUS_SUCCESS;
+                for (Repeat = max(InputEvent->Event.KeyEvent.wRepeatCount, 1); Repeat > 0; Repeat--)
+                {
+                    for (Count = 0; Sequence[Count]; Count++)
+                    {
+                        RtlZeroMemory(&Records[Count], sizeof(INPUT_RECORD));
+                        Records[Count].EventType = KEY_EVENT;
+                        Records[Count].Event.KeyEvent.bKeyDown = TRUE;
+                        Records[Count].Event.KeyEvent.wRepeatCount = 1;
+                        Records[Count].Event.KeyEvent.uChar.UnicodeChar = Sequence[Count];
+                    }
+                    ConioAddInputEvents(Console, Records, Count, &NumEventsWritten, TRUE);
+                }
+                return STATUS_SUCCESS;
+            }
         }
     }
 

@@ -160,6 +160,7 @@ typedef struct _CONSRV_CONSOLE
 
     BOOLEAN InsertMode;
     BOOLEAN QuickEdit;
+    BOOLEAN VtApplicationCursorKeys;        /* DECCKM: cursor keys send ESC O x (VT input) */
 
 /************************ Virtual DOS Machine support *************************/
     COORD   VDMBufferSize;             /* Real size of the VDM buffer, in units of ??? */
@@ -209,11 +210,22 @@ DWORD ConioEffectiveCursorSize(PCONSRV_CONSOLE Console,
 NTSTATUS
 ConioProcessInputEvent(PCONSRV_CONSOLE Console,
                        PINPUT_RECORD InputEvent);
+NTSTATUS
+ConioAddInputEvents(PCONSRV_CONSOLE Console,
+                    PINPUT_RECORD InputRecords,
+                    ULONG NumEventsToWrite,
+                    PULONG NumEventsWritten,
+                    BOOLEAN AppendToEnd);
 
 /* conoutput.c */
 PCHAR_INFO ConioCoordToPointer(PTEXTMODE_SCREEN_BUFFER Buff, ULONG X, ULONG Y);
 
 /* terminal.c */
 VOID ConioDrawConsole(PCONSRV_CONSOLE Console);
+
+/* vtterm.c */
+NTSTATUS VtWriteConsole(PFRONTEND FrontEnd, PTEXTMODE_SCREEN_BUFFER Buff, PWCHAR Buffer, DWORD Length);
+BOOLEAN VtTranslateKey(PCONSRV_CONSOLE Console, PKEY_EVENT_RECORD Key, PWCHAR Sequence, ULONG SequenceSize);
+VOID VtFreeState(PTEXTMODE_SCREEN_BUFFER Buff);
 
 /* EOF */

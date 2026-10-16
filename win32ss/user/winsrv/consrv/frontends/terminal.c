@@ -499,7 +499,7 @@ ConioNextLine(PTEXTMODE_SCREEN_BUFFER Buff, PSMALL_RECT UpdateRect, PUINT Scroll
     UpdateRect->Bottom = Buff->CursorPosition.Y;
 }
 
-static NTSTATUS
+NTSTATUS
 ConioWriteConsole(PFRONTEND FrontEnd,
                   PTEXTMODE_SCREEN_BUFFER Buff,
                   PWCHAR Buffer,
@@ -849,6 +849,14 @@ ConSrvTermWriteStream(IN OUT PTERMINAL This,
                       BOOL Attrib)
 {
     PFRONTEND FrontEnd = This->Context;
+
+    /* Virtual terminal sequences (WriteConsole/WriteFile, not WriteConsoleOutput*) */
+    if (Attrib && (Buff->Mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) &&
+        (Buff->Mode & ENABLE_PROCESSED_OUTPUT))
+    {
+        return VtWriteConsole(FrontEnd, Buff, Buffer, Length);
+    }
+
     return ConioWriteConsole(FrontEnd,
                              Buff,
                              Buffer,

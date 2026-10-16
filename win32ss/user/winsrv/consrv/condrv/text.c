@@ -133,6 +133,7 @@ TEXTMODE_BUFFER_Destroy(IN OUT PCONSOLE_SCREEN_BUFFER Buffer)
      */
     Buffer->Header.Type = SCREEN_BUFFER;
 
+    VtFreeState(Buff);
     ConsoleFreeHeap(Buff->Buffer);
 
     CONSOLE_SCREEN_BUFFER_Destroy(Buffer);
