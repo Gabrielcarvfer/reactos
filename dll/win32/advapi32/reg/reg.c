@@ -3232,7 +3232,7 @@ Cleanup:
 /************************************************************************
  *  RegNotifyChangeKeyValue
  *
- * @unimplemented
+ * @implemented
  */
 LONG WINAPI
 RegNotifyChangeKeyValue(HKEY hKey,
@@ -3241,6 +3241,12 @@ RegNotifyChangeKeyValue(HKEY hKey,
                         HANDLE hEvent,
                         BOOL fAsynchronous)
 {
+    /*
+     * An asynchronous request completes after we have returned, and the
+     * kernel then writes its status block: give it one that outlives this
+     * call. Nobody reads it, so all asynchronous requests can share it.
+     */
+    static IO_STATUS_BLOCK AsyncIoStatusBlock;
     IO_STATUS_BLOCK IoStatusBlock;
     HANDLE KeyHandle;
     NTSTATUS Status;
@@ -3269,7 +3275,7 @@ RegNotifyChangeKeyValue(HKEY hKey,
                                hEvent,
                                0,
                                0,
-                               &IoStatusBlock,
+                               fAsynchronous ? &AsyncIoStatusBlock : &IoStatusBlock,
                                dwNotifyFilter,
                                bWatchSubtree,
                                0,

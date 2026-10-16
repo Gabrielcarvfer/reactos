@@ -329,9 +329,9 @@ typedef struct _CM_NOTIFY_BLOCK
     LIST_ENTRY PostList;
     PCM_KEY_CONTROL_BLOCK KeyControlBlock;
     PCM_KEY_BODY KeyBody;
-    ULONG Filter:29;
-    ULONG WatchTree:30;
-    ULONG NotifyPending:31;
+    ULONG Filter;
+    BOOLEAN WatchTree;
+    BOOLEAN NotifyPending;
 } CM_NOTIFY_BLOCK, *PCM_NOTIFY_BLOCK;
 
 //
@@ -637,6 +637,34 @@ NTAPI
 CmpFlushNotify(
     IN PCM_KEY_BODY KeyBody,
     IN BOOLEAN LockHeld
+);
+
+VOID
+NTAPI
+CmpFlushNotifyWithStatus(
+    IN PCM_KEY_BODY KeyBody,
+    IN NTSTATUS Status
+);
+
+NTSTATUS
+NTAPI
+CmpNotifyChangeKey(
+    IN PCM_KEY_BODY KeyBody,
+    IN PKEVENT Event OPTIONAL,
+    IN PIO_APC_ROUTINE ApcRoutine OPTIONAL,
+    IN PVOID ApcContext OPTIONAL,
+    IN PIO_STATUS_BLOCK IoStatusBlock,
+    IN ULONG CompletionFilter,
+    IN BOOLEAN WatchTree,
+    IN BOOLEAN Asynchronous,
+    IN KPROCESSOR_MODE PreviousMode
+);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+CmpInitializeNotify(
+    VOID
 );
 
 CODE_SEG("INIT")

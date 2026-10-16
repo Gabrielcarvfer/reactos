@@ -284,6 +284,7 @@ CmpDoCreateChild(IN PHHIVE Hive,
     KeyBody = (PCM_KEY_BODY)(*Object);
     KeyBody->Type = CM_KEY_BODY_TYPE;
     KeyBody->KeyControlBlock = NULL;
+    KeyBody->NotifyBlock = NULL;
     KeyBody->KcbLocked = FALSE;
 
     /* Check if we had a class */

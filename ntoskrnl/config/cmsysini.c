@@ -118,6 +118,10 @@ CmpDeleteKeyObject(PVOID DeletedObject)
     NTSTATUS Status;
     PAGED_CODE();
 
+    /* Complete any notification still pending on this key body */
+    if (KeyBody->Type == CM_KEY_BODY_TYPE)
+        CmpFlushNotifyWithStatus(KeyBody, STATUS_NOTIFY_CLEANUP);
+
     /* First off, prepare the handle close information callback */
     PostOperationInfo.Object = KeyBody;
     KeyHandleCloseInfo.Object = KeyBody;
@@ -177,8 +181,8 @@ CmpCloseKeyObject(IN PEPROCESS Process OPTIONAL,
         /* Don't do anything if we don't have a notify block */
         if (!KeyBody->NotifyBlock) return;
 
-        /* This shouldn't happen yet */
-        ASSERT(FALSE);
+        /* Complete the pending notifications of this key */
+        CmpFlushNotifyWithStatus(KeyBody, STATUS_NOTIFY_CLEANUP);
     }
 }
 
@@ -1677,8 +1681,9 @@ CmInitSystem1(VOID)
     CmpInitCmPrivateDelayAlloc();
     CmpInitDelayDerefKCBEngine();
 
-    /* Initialize callbacks */
+    /* Initialize callbacks and change notifications */
     CmpInitCallback();
+    CmpInitializeNotify();
 
     /* Initialize self healing */
     KeInitializeGuardedMutex(&CmpSelfHealQueueLock);

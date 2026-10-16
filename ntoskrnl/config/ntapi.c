@@ -17,6 +17,12 @@ BOOLEAN CmBootAcceptFirstTime = TRUE;
 BOOLEAN CmFirstTime = TRUE;
 extern ULONG InitSafeBootMode;
 
+/* Windows 8 added REG_NOTIFY_THREAD_AGNOSTIC to the legal change filter */
+#ifndef REG_NOTIFY_THREAD_AGNOSTIC
+#define REG_NOTIFY_THREAD_AGNOSTIC 0x10000000L
+#endif
+#define CMP_LEGAL_CHANGE_FILTER (REG_LEGAL_CHANGE_FILTER | REG_NOTIFY_THREAD_AGNOSTIC)
+
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
@@ -1467,8 +1473,80 @@ NtNotifyChangeMultipleKeys(IN HANDLE MasterKeyHandle,
                            IN ULONG Length,
                            IN BOOLEAN Asynchronous)
 {
-    UNIMPLEMENTED_ONCE;
-    return STATUS_NOT_IMPLEMENTED;
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PCM_KEY_BODY KeyBody;
+    PKEVENT EventObject = NULL;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    /* The buffer is reserved, no change information is returned */
+    UNREFERENCED_PARAMETER(Buffer);
+    UNREFERENCED_PARAMETER(Length);
+
+    /* At most one slave key */
+    if (Count > 1) return STATUS_INVALID_PARAMETER;
+    if (Count == 1)
+    {
+        DPRINT1("NtNotifyChangeMultipleKeys: slave keys are not supported\n");
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    /* Validate the filter */
+    if (CompletionFilter & ~CMP_LEGAL_CHANGE_FILTER) return STATUS_INVALID_PARAMETER;
+
+    /* Probe the status block for user mode callers */
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(IoStatusBlock, sizeof(*IoStatusBlock), sizeof(ULONG));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+    else if (!IoStatusBlock)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* Get the key object */
+    Status = ObReferenceObjectByHandle(MasterKeyHandle,
+                                       KEY_NOTIFY,
+                                       CmpKeyObjectType,
+                                       PreviousMode,
+                                       (PVOID*)&KeyBody,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    /* Get the event object, if any */
+    if (Event)
+    {
+        Status = ObReferenceObjectByHandle(Event,
+                                           EVENT_MODIFY_STATE,
+                                           ExEventObjectType,
+                                           PreviousMode,
+                                           (PVOID*)&EventObject,
+                                           NULL);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(KeyBody);
+            return Status;
+        }
+    }
+
+    /* Arm the notification; this consumes both references */
+    return CmpNotifyChangeKey(KeyBody,
+                              EventObject,
+                              ApcRoutine,
+                              ApcContext,
+                              IoStatusBlock,
+                              CompletionFilter & REG_LEGAL_CHANGE_FILTER,
+                              WatchTree,
+                              Asynchronous,
+                              PreviousMode);
 }
 
 NTSTATUS
