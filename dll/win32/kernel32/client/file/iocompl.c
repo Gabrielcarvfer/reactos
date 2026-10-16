@@ -22,6 +22,9 @@
 #define FILE_SKIP_COMPLETION_PORT_ON_SUCCESS 0x1
 #define FILE_SKIP_SET_EVENT_ON_HANDLE        0x2
 #endif
+#ifndef FILE_SKIP_SET_USER_EVENT_ON_FAST_IO
+#define FILE_SKIP_SET_USER_EVENT_ON_FAST_IO  0x4
+#endif
 
 /*
  * @implemented
@@ -35,7 +38,8 @@ SetFileCompletionNotificationModes(IN HANDLE FileHandle,
     FILE_IO_COMPLETION_NOTIFICATION_INFORMATION FileInformation;
     IO_STATUS_BLOCK IoStatusBlock;
 
-    if (Flags & ~(FILE_SKIP_COMPLETION_PORT_ON_SUCCESS | FILE_SKIP_SET_EVENT_ON_HANDLE))
+    if (Flags & ~(FILE_SKIP_COMPLETION_PORT_ON_SUCCESS | FILE_SKIP_SET_EVENT_ON_HANDLE |
+                  FILE_SKIP_SET_USER_EVENT_ON_FAST_IO))
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;

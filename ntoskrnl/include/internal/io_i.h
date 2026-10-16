@@ -66,6 +66,16 @@ UCHAR IopQueryOperationLength[] =
     0xFF
 };
 
+/* Vista+ classes the kernel handles itself (the headers hide them before Vista) */
+#if (NTDDI_VERSION < NTDDI_VISTA)
+#define FileIoCompletionNotificationInformation ((FILE_INFORMATION_CLASS)41)
+#endif
+#ifndef FILE_SKIP_COMPLETION_PORT_ON_SUCCESS
+#define FILE_SKIP_COMPLETION_PORT_ON_SUCCESS 0x1
+#define FILE_SKIP_SET_EVENT_ON_HANDLE        0x2
+#define FILE_SKIP_SET_USER_EVENT_ON_FAST_IO  0x4
+#endif
+
 UCHAR IopSetOperationLength[] =
 {
     0,
@@ -109,6 +119,7 @@ UCHAR IopSetOperationLength[] =
     0,
     sizeof(FILE_VALID_DATA_LENGTH_INFORMATION),
     sizeof(UNICODE_STRING),
+    sizeof(FILE_IO_COMPLETION_NOTIFICATION_INFORMATION),
     0xFF
 };
 
@@ -201,6 +212,7 @@ ACCESS_MASK IopSetOperationAccess[] =
     0,
     FILE_WRITE_DATA,
     DELETE,
+    0,
     0xFFFFFFFF
 };
 

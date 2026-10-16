@@ -3124,7 +3124,9 @@ NtSetInformationFile(IN HANDLE FileHandle,
     {
         /* Validate the information class */
         if ((FileInformationClass < 0) ||
-            (FileInformationClass >= FileMaximumInformation) ||
+            /* The tables, not FileMaximumInformation of the 2003 headers
+               (41), say which classes exist */
+            ((ULONG)FileInformationClass >= RTL_NUMBER_OF(IopSetOperationLength) - 1) ||
             !(IopSetOperationLength[FileInformationClass]))
         {
             /* Invalid class */
@@ -3161,7 +3163,9 @@ NtSetInformationFile(IN HANDLE FileHandle,
     {
         /* Validate the information class */
         if ((FileInformationClass < 0) ||
-            (FileInformationClass >= FileMaximumInformation) ||
+            /* The tables, not FileMaximumInformation of the 2003 headers
+               (41), say which classes exist */
+            ((ULONG)FileInformationClass >= RTL_NUMBER_OF(IopSetOperationLength) - 1) ||
             !(IopSetOperationLength[FileInformationClass]))
         {
             /* Invalid class */
@@ -3369,6 +3373,33 @@ NtSetInformationFile(IN HANDLE FileHandle,
                     Status = STATUS_INSUFFICIENT_RESOURCES;
                 }
             }
+        }
+
+        /* Set the IRP Status */
+        Irp->IoStatus.Status = Status;
+        Irp->IoStatus.Information = 0;
+    }
+    else if (FileInformationClass == FileIoCompletionNotificationInformation)
+    {
+        /* SetFileCompletionNotificationModes (libuv/Node.js, Go, .NET):
+           kept in the file object, the I/O manager honors them */
+        PFILE_IO_COMPLETION_NOTIFICATION_INFORMATION Notification = Irp->AssociatedIrp.SystemBuffer;
+
+        if (Notification->Flags & ~(FILE_SKIP_COMPLETION_PORT_ON_SUCCESS |
+                                    FILE_SKIP_SET_EVENT_ON_HANDLE |
+                                    FILE_SKIP_SET_USER_EVENT_ON_FAST_IO))
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
+        else
+        {
+            if (Notification->Flags & FILE_SKIP_COMPLETION_PORT_ON_SUCCESS)
+                InterlockedOr((PLONG)&FileObject->Flags, FO_SKIP_COMPLETION_PORT);
+            if (Notification->Flags & FILE_SKIP_SET_EVENT_ON_HANDLE)
+                InterlockedOr((PLONG)&FileObject->Flags, FO_SKIP_SET_EVENT);
+            if (Notification->Flags & FILE_SKIP_SET_USER_EVENT_ON_FAST_IO)
+                InterlockedOr((PLONG)&FileObject->Flags, FO_SKIP_SET_FAST_IO);
+            Status = STATUS_SUCCESS;
         }
 
         /* Set the IRP Status */

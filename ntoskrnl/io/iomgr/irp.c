@@ -491,8 +491,13 @@ IopCompleteRequest(IN PKAPC Apc,
         }
         else if (FileObject)
         {
-            /* Signal the file object and set the status */
-            KeSetEvent(&FileObject->Event, 0, FALSE);
+            /* Signal the file object (unless FILE_SKIP_SET_EVENT_ON_HANDLE
+               for an asynchronous handle) and set the status */
+            if (!(FileObject->Flags & FO_SKIP_SET_EVENT) ||
+                (FileObject->Flags & FO_SYNCHRONOUS_IO))
+            {
+                KeSetEvent(&FileObject->Event, 0, FALSE);
+            }
             FileObject->FinalStatus = Irp->IoStatus.Status;
 
             /*
@@ -552,7 +557,13 @@ IopCompleteRequest(IN PKAPC Apc,
             KeInsertQueueApc(&Irp->Tail.Apc, Irp->UserIosb, NULL, 2);
         }
         else if ((Port) &&
-                 (Irp->Overlay.AsynchronousParameters.UserApcContext))
+                 (Irp->Overlay.AsynchronousParameters.UserApcContext) &&
+                 /* FILE_SKIP_COMPLETION_PORT_ON_SUCCESS: none for an I/O
+                    that succeeded without returning STATUS_PENDING, the
+                    caller handles it at once */
+                 !((FileObject->Flags & FO_SKIP_COMPLETION_PORT) &&
+                   !(Irp->PendingReturned) &&
+                   NT_SUCCESS(Irp->IoStatus.Status)))
         {
             /* We have an I/O Completion setup... create the special Overlay */
             Irp->Tail.CompletionKey = Key;
