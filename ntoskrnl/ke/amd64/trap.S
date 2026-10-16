@@ -20,6 +20,7 @@ EXTERN KiGeneralProtectionFaultHandler:PROC
 EXTERN KiXmmExceptionHandler:PROC
 EXTERN KiDeliverApc:PROC
 EXTERN KiDpcInterruptHandler:PROC
+EXTERN KiIpiInterruptHandler:PROC
 EXTERN PsConvertToGuiThread:PROC
 EXTERN MmCreateKernelStack:PROC
 EXTERN MmDeleteKernelStack:PROC
@@ -712,7 +713,14 @@ PUBLIC KiIpiInterrupt
     /* End the interrupt */
     mov dword ptr [APIC_EOI], 0
 
-    int 3
+    /* Run the requests other processors sent us (interrupts stay disabled) */
+    mov rcx, rbp
+    call KiIpiInterruptHandler
+
+    /* Go back to the previous IRQL (ExitTrap checks it) */
+    cli
+    movzx rax, byte ptr [rbp + KTRAP_FRAME_PreviousIrql]
+    mov cr8, rax
 
     /* Return */
     ExitTrap (TF_SAVE_ALL or TF_IRQL)

@@ -266,23 +266,40 @@ KeRestoreInterrupts(BOOLEAN WereEnabled)
     if (WereEnabled) _enable();
 }
 
+#ifdef CONFIG_SMP
+/* ipi.c: flush here and on the other processors (TLB shootdown) */
+VOID NTAPI KiFlushSingleTbAll(_In_ PVOID Address);
+VOID NTAPI KiFlushRangeTbAll(_In_ PVOID Start, _In_ ULONG_PTR PageCount);
+VOID NTAPI KiFlushProcessTbAll(VOID);
+VOID NTAPI KiFlushEntireTbAll(_In_ BOOLEAN AllProcessors);
+#endif
+
 //
 // Invalidates the TLB entry for a specified address
+// (on all processors: another one may have cached it)
 //
 FORCEINLINE
 VOID
 KeInvalidateTlbEntry(IN PVOID Address)
 {
+#ifdef CONFIG_SMP
+    KiFlushSingleTbAll(Address);
+#else
     /* Invalidate the TLB entry for this address */
     __invlpg(Address);
+#endif
 }
 
 FORCEINLINE
 VOID
 KeFlushProcessTb(VOID)
 {
+#ifdef CONFIG_SMP
+    KiFlushProcessTbAll();
+#else
     /* Flush the TLB by resetting CR3 */
     __writecr3(__readcr3());
+#endif
 }
 
 FORCEINLINE

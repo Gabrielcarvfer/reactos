@@ -563,9 +563,13 @@ NTAPI
 KeFlushEntireTb(IN BOOLEAN Invalid,
                 IN BOOLEAN AllProcessors)
 {
+#ifdef CONFIG_SMP
+    /* Flush everything (global entries too) here and on the other processors */
+    KiFlushEntireTbAll(AllProcessors);
+    InterlockedExchangeAdd(&KiTbFlushTimeStamp, 1);
+#else
     KIRQL OldIrql;
 
-    // FIXME: halfplemented
     /* Raise the IRQL for the TB Flush */
     OldIrql = KeRaiseIrqlToSynchLevel();
 
@@ -575,6 +579,7 @@ KeFlushEntireTb(IN BOOLEAN Invalid,
     /* Update the flush stamp and return to original IRQL */
     InterlockedExchangeAdd(&KiTbFlushTimeStamp, 1);
     KeLowerIrql(OldIrql);
+#endif
 
 }
 
