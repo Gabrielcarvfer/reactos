@@ -5,11 +5,15 @@ add_message_headers(ANSI FormatMessage.mc)
 
 list(APPEND SOURCE
     ConsoleCP.c
+    ConsoleCtrlEvent.c
+    ConsoleVT.c
+    CreateEventEx.c
     CreateProcess.c
     DefaultActCtx.c
     DeviceIoControl.c
     dosdev.c
     EnumSystemCodePages.c
+    FastFail.c
     FindActCtxSectionStringW.c
     FindFiles.c
     FindFirstFileEx.c
@@ -25,6 +29,7 @@ list(APPEND SOURCE
     GetLocaleInfo.c
     GetModuleFileName.c
     GetVolumeInformation.c
+    InheritHandleList.c
     InitOnce.c
     interlck.c
     IsDBCSLeadByteEx.c
@@ -33,15 +38,23 @@ list(APPEND SOURCE
     LCMapString.c
     LoadLibraryExW.c
     LocaleNameToLCID.c
+    LockFileEx.c
     lstrcpynW.c
     lstrlen.c
     Mailslot.c
     MultiByteToWideChar.c
+    NestedJobs.c
+    NewApis.c
+    PipeCompletionPort.c
     Pipes.c
     PrivMoveFileIdentityW.c
     ProcThreadAttributeList.c
+    QueryLimitedInformation.c
+    QueryPerformanceCounter.c
     QueueUserAPC.c
+    ReadDirectoryChanges.c
     ReadFile.c
+    ReadOnlySection.c
     SecurityLabel.c
     SetComputerNameExW.c
     SetConsoleWindowInfo.c
@@ -49,12 +62,17 @@ list(APPEND SOURCE
     SetSearchPathMode.c
     SetUnhandledExceptionFilter.c
     StackGuard.c
+    SuspendedChildPeb.c
     SystemFirmware.c
     TerminateProcess.c
     TunnelCache.c
     UEFIFirmware.c
+    UnregisterWaitEx.c
     WideCharToMultiByte.c
+    Wow64Basics.c
+    Wow64FsRedirection.c
     WriteFile.c
+    WriteProcessMemoryCow.c
 )
 
 list(APPEND PCH_SKIP_SOURCE
