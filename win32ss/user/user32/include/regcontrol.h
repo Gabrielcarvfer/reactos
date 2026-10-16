@@ -26,6 +26,8 @@ extern DWORD RegisterDefaultClasses;
 BOOL WINAPI RegisterSystemControls(VOID);
 #ifdef KPTR_64BIT_LAYOUT
 WNDPROC FASTCALL Wow64MapClientProc(WNDPROC Proc);
+BOOL FASTCALL Wow64IsAnsiClientProc(WNDPROC Proc, BOOL IsAnsi);
+WNDPROC FASTCALL Wow64GetClientProcAW(WNDPROC Proc, BOOL Ansi);
 #endif
 
 extern const struct builtin_class_descr BUTTON_builtin_class;

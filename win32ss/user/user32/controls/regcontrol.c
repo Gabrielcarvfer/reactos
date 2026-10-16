@@ -50,6 +50,65 @@ Wow64MapClientProc(WNDPROC Proc)
 
     return Proc;
 }
+
+/*
+ * The system classes of a 32-bit program are registered with our own
+ * procedures, which win32k does not know (its tables are the 64-bit user32's,
+ * see above). So when an ANSI API creates or subclasses such a window,
+ * win32k cannot swap in the procedure of the right A/W type: an ANSI window
+ * can end up with our Unicode procedure (or the reverse). Tell the A/W type
+ * of a procedure of ours from our own tables, it is a property of the
+ * procedure itself; return IsAnsi unchanged for anything else.
+ */
+BOOL FASTCALL
+Wow64IsAnsiClientProc(WNDPROC Proc, BOOL IsAnsi)
+{
+    ULONG64 *LocalA = (ULONG64 *)&pfnClientA;
+    ULONG64 *LocalW = (ULONG64 *)&pfnClientW;
+    ULONG i;
+
+    if (!Proc)
+        return IsAnsi;
+
+    for (i = 0; i < sizeof(PFNCLIENT) / sizeof(ULONG64); i++)
+    {
+        /* Same procedure for both (IconTitleWndProc...): no type */
+        if (LocalA[i] == LocalW[i])
+            continue;
+        if (LocalA[i] == (ULONG_PTR)Proc)
+            return TRUE;
+        if (LocalW[i] == (ULONG_PTR)Proc)
+            return FALSE;
+    }
+
+    return IsAnsi;
+}
+
+/*
+ * Same reason: give the A or W twin of a procedure of ours, as win32k does
+ * on a 32-bit system (GetWindowLongPtrA(GWLP_WNDPROC) of an ANSI button gives
+ * ButtonWndProcA, so the program can subclass it and call it directly).
+ */
+WNDPROC FASTCALL
+Wow64GetClientProcAW(WNDPROC Proc, BOOL Ansi)
+{
+    ULONG64 *LocalA = (ULONG64 *)&pfnClientA;
+    ULONG64 *LocalW = (ULONG64 *)&pfnClientW;
+    ULONG i;
+
+    if (!Proc)
+        return Proc;
+
+    for (i = 0; i < sizeof(PFNCLIENT) / sizeof(ULONG64); i++)
+    {
+        if (Ansi && LocalW[i] == (ULONG_PTR)Proc && LocalA[i])
+            return (WNDPROC)(ULONG_PTR)LocalA[i];
+        if (!Ansi && LocalA[i] == (ULONG_PTR)Proc && LocalW[i])
+            return (WNDPROC)(ULONG_PTR)LocalW[i];
+    }
+
+    return Proc;
+}
 #endif
 
 

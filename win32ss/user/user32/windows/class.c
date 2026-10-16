@@ -550,8 +550,17 @@ IntGetClsWndProc(PWND pWnd, PCLS Class, BOOL Ansi)
                     Ret = (ULONG_PTR)GETPFNCLIENTW(i);
             }
         }
+#ifdef KPTR_64BIT_LAYOUT
+        Ret = (ULONG_PTR)Wow64MapClientProc((WNDPROC)Ret);
+#endif
          return Ret;
     }
+#ifdef KPTR_64BIT_LAYOUT
+    // A system class procedure of ours: give its twin of the asked type.
+    Ret = (ULONG_PTR)Wow64GetClientProcAW(Class->lpfnWndProc, Ansi);
+    if (Wow64IsAnsiClientProc((WNDPROC)Ret, !Ansi) == Ansi)
+        return Ret;
+#endif
     // Set return proc.
     Ret = (ULONG_PTR)Class->lpfnWndProc;
     // Return the proc if one of the FnId default class type.
@@ -606,8 +615,17 @@ IntGetWndProc(PWND pWnd, BOOL Ansi)
                     Ret = GETPFNCLIENTW(i);
             }
         }
+#ifdef KPTR_64BIT_LAYOUT
+        Ret = Wow64MapClientProc(Ret);
+#endif
         return Ret;
     }
+#ifdef KPTR_64BIT_LAYOUT
+    // A system class procedure of ours: give its twin of the asked type.
+    Ret = Wow64GetClientProcAW(pWnd->lpfnWndProc, Ansi);
+    if (Wow64IsAnsiClientProc(Ret, !Ansi) == Ansi)
+        return Ret;
+#endif
     // Wine Class tests:
     /*  Edit controls are special - they return a wndproc handle when
         GetWindowLongPtr is called with a different A/W.
@@ -1693,8 +1711,16 @@ SetWindowLongA(
   int nIndex,
   LONG dwNewLong)
 {
+    LONG Ret;
+
     /* DO NOT USE NtUserSetWindowLongPtr! */
-    return NtUserSetWindowLong(hWnd, nIndex, dwNewLong, TRUE);
+    Ret = NtUserSetWindowLong(hWnd, nIndex, dwNewLong, TRUE);
+#ifdef KPTR_64BIT_LAYOUT
+    /* The previous procedure, as win32k could not give it: see IntGetWndProc */
+    if (nIndex == GWL_WNDPROC)
+        Ret = (LONG)Wow64GetClientProcAW(Wow64MapClientProc((WNDPROC)Ret), TRUE);
+#endif
+    return Ret;
 }
 
 /*
@@ -1707,8 +1733,16 @@ SetWindowLongW(
   int nIndex,
   LONG dwNewLong)
 {
+    LONG Ret;
+
     /* DO NOT USE NtUserSetWindowLongPtr! */
-    return NtUserSetWindowLong(hWnd, nIndex, dwNewLong, FALSE);
+    Ret = NtUserSetWindowLong(hWnd, nIndex, dwNewLong, FALSE);
+#ifdef KPTR_64BIT_LAYOUT
+    /* The previous procedure, as win32k could not give it: see IntGetWndProc */
+    if (nIndex == GWL_WNDPROC)
+        Ret = (LONG)Wow64GetClientProcAW(Wow64MapClientProc((WNDPROC)Ret), FALSE);
+#endif
+    return Ret;
 }
 
 #ifdef _WIN64

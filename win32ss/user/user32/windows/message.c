@@ -1438,6 +1438,7 @@ IntCallWindowProcW(BOOL IsAnsiProc,
 
 #ifdef KPTR_64BIT_LAYOUT
   WndProc = Wow64MapClientProc(WndProc);
+  IsAnsiProc = Wow64IsAnsiClientProc(WndProc, IsAnsiProc);
 #endif
 
   if (WndProc == NULL)
@@ -1601,6 +1602,7 @@ IntCallWindowProcA(BOOL IsAnsiProc,
 
 #ifdef KPTR_64BIT_LAYOUT
   WndProc = Wow64MapClientProc(WndProc);
+  IsAnsiProc = Wow64IsAnsiClientProc(WndProc, IsAnsiProc);
 #endif
 
   TRACE("IntCallWindowProcA: IsAnsiProc : %s, WndProc %p, pWnd %p, hWnd %p, Msg %u, wParam %Iu, lParam %Iu.\n",
