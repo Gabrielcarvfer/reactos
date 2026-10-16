@@ -2353,6 +2353,10 @@ MmInitSectionImplementation(VOID)
     ObjectTypeInitializer.CloseProcedure = MmpCloseSection;
     ObjectTypeInitializer.ValidAccessMask = SECTION_ALL_ACCESS;
     ObjectTypeInitializer.InvalidAttributes = OBJ_OPENLINK;
+    /* Unnamed sections have a security descriptor too, as on Windows 8 and
+     * later: Chromium makes its read-only shared memory with an empty DACL,
+     * so that nobody can duplicate it with write access, and checks that */
+    ObjectTypeInitializer.SecurityRequired = TRUE;
     ObCreateObjectType(&Name, &ObjectTypeInitializer, NULL, &MmSectionObjectType);
 
     MmCreatePhysicalMemorySection();
