@@ -293,7 +293,7 @@ MMRESULT WINAPI timeGetSystemTime(LPMMTIME lpTime, UINT wSize)
 
     if (wSize >= sizeof(*lpTime)) {
 	lpTime->wType = TIME_MS;
-	lpTime->u.ms = GetTickCount();
+	lpTime->u.ms = timeGetTime();
 
     }
 
@@ -425,12 +425,6 @@ MMRESULT WINAPI timeBeginPeriod(UINT wPeriod)
     if (wPeriod < MMSYSTIME_MININTERVAL || wPeriod > MMSYSTIME_MAXINTERVAL)
         return TIMERR_NOCANDO;
 
-    /*  High resolution timer requested, use QPC */
-    if (wPeriod <= 5 && TIME_qpcFreq.QuadPart == 0)
-    {
-        if (QueryPerformanceFrequency(&TIME_qpcFreq))
-            TIME_qpcFreq.QuadPart /= 1000;
-    }
 
     if (wPeriod > MMSYSTIME_MININTERVAL)
     {
@@ -448,9 +442,6 @@ MMRESULT WINAPI timeEndPeriod(UINT wPeriod)
     if (wPeriod < MMSYSTIME_MININTERVAL || wPeriod > MMSYSTIME_MAXINTERVAL)
         return TIMERR_NOCANDO;
 
-    /*  High resolution timer no longer requested, stop using QPC */
-    if (wPeriod <= 5 && TIME_qpcFreq.QuadPart != 0)
-        TIME_qpcFreq.QuadPart = 0;
 
     if (wPeriod > MMSYSTIME_MININTERVAL)
     {
@@ -475,12 +466,18 @@ DWORD WINAPI timeGetTime(void)
     if (pFnReleaseThunkLock) pFnReleaseThunkLock(&count);
     if (pFnRestoreThunkLock) pFnRestoreThunkLock(count);
 #endif
-    /* Use QPC if a high-resolution timer was requested (<= 5ms) */
-    if (TIME_qpcFreq.QuadPart != 0)
+    /* Always the same clock: switching between QPC (after timeBeginPeriod)
+       and GetTickCount, two timelines that disagree by seconds, made the time
+       jump back and forth (Chromium's monotonic-time CHECKs crashed VS Code's
+       renderer; "negative frame latency"). QPC is monotonic, precise and
+       the same in every process. */
+    if (TIME_qpcFreq.QuadPart == 0)
     {
-        QueryPerformanceCounter(&perfCount);
-        return (DWORD)(perfCount.QuadPart / TIME_qpcFreq.QuadPart);
+        LARGE_INTEGER Freq;
+        if (!QueryPerformanceFrequency(&Freq) || Freq.QuadPart < 1000)
+            return GetTickCount();
+        TIME_qpcFreq.QuadPart = Freq.QuadPart / 1000;
     }
-    /* Otherwise continue using GetTickCount */
-    return GetTickCount();
+    QueryPerformanceCounter(&perfCount);
+    return (DWORD)(perfCount.QuadPart / TIME_qpcFreq.QuadPart);
 }
