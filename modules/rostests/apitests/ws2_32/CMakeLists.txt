@@ -10,11 +10,14 @@ list(APPEND SOURCE
     getservbyport.c
     helpers.c
     ioctlsocket.c
+    IoCompletionPort.c
     nonblocking.c
     nostartup.c
     open_osfhandle.c
     recv.c
     send.c
+    SkipCompletionPort.c
+    TcpConnect.c
     WSAAsync.c
     WSAIoctl.c
     WSARecv.c
