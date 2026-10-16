@@ -253,7 +253,10 @@ KiSwapContextResume(
        __writemsr(MSR_GS_SWAP, (ULONG64)NewThread->Teb);
 
 #if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
-       PEPROCESS ENewProcess = (PEPROCESS)NewProcess;
+       /* The thread's own process: it may be attached to another one (a
+          32-bit thread attached to a 64-bit process came back with the FS
+          base of the last 32-bit thread that ran: MediaMonkey's engine) */
+       PEPROCESS ENewProcess = (PEPROCESS)NewThread->Process;
 
        if (ENewProcess->Wow64Process != NULL)
        {
