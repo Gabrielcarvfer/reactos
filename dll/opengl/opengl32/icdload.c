@@ -86,7 +86,11 @@ struct ICD_Data* IntGetIcdData(HDC hdc)
         CustomDriverState = OGL_CD_NONE;
         memset(&CustomDrvInfo, 0, sizeof(Drv_Opengl_Info));
 
+        /* The user's setting, else the machine's (an OpenGL driver installed
+           with the system, like Mesa) */
         ret = RegOpenKeyExW(HKEY_CURRENT_USER, CustomDrivers_Key, 0, KEY_READ, &CustomKey);
+        if(ret != ERROR_SUCCESS)
+            ret = RegOpenKeyExW(HKEY_LOCAL_MACHINE, CustomDrivers_Key, 0, KEY_READ, &CustomKey);
         if(ret != ERROR_SUCCESS)
             goto custom_end;
 

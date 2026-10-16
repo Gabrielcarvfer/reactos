@@ -15,6 +15,9 @@ if(ENABLE_WALLPAPERS)
     add_subdirectory(wallpapers)
 endif()
 
+# Mesa's OpenGL driver, when its DLLs were put in mesa/
+add_subdirectory(mesa)
+
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/AHK_Tests/)
     add_subdirectory(AHK_Tests)
 endif()

@@ -1,0 +1,16 @@
+; Mesa as the OpenGL driver (opengl32 loads the driver named here when the
+; display driver has none), for 64-bit and 32-bit programs
+[AddReg]
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Mesa","Dll",0x00000000,"libgallium_wgl.dll"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Mesa","Version",0x00010001,0x00000002
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Mesa","DriverVersion",0x00010001,0x00000001
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Mesa","Flags",0x00010001,0x00000001
+HKLM,"SOFTWARE\ReactOS\OpenGL","",0x00000000,"Mesa"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Mesa","Dll",0x00000000,"libgallium_wgl.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Mesa","Version",0x00010001,0x00000002
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Mesa","DriverVersion",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Mesa","Flags",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\ReactOS\OpenGL","",0x00000000,"Mesa"
+; Only llvmpipe: Mesa otherwise tries its Direct3D 12 driver first, which on
+; ReactOS runs on wined3d, i.e. on OpenGL, i.e. on Mesa again while it starts
+HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\Environment","GALLIUM_DRIVER",0x00000000,"llvmpipe"
