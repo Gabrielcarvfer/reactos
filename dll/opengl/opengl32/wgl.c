@@ -705,11 +705,15 @@ BOOL WINAPI wglMakeCurrent(HDC hdc, HGLRC hglrc)
                 SetLastError(ERROR_BUSY);
                 return FALSE;
             }
-            /* It is: nothing to do for the same DC. For another DC, the
-             * context draws to that one from now on (wined3d makes its
-             * context current on its hidden setup window, then on the swap
-             * chain's window: Direct3D drew into the hidden window) */
-            if(IntGetCurrentDC() == hdc)
+            /* It is: nothing to do for the same DC of the same window. For
+             * another DC, the context draws to that one from now on (wined3d
+             * makes its context current on its hidden setup window, then on
+             * the swap chain's window: Direct3D drew into the hidden window).
+             * A cache DC handle can come back for another window (wined3d
+             * releases the setup window's DC and gets the swap chain window's
+             * one, often the same handle): the window, not only the handle,
+             * must be the same (Direct2D drew nothing in Notepad++) */
+            if(IntGetCurrentDC() == hdc && IntGetCurrentDcData() == dc_data)
             {
                 release_dc_data(dc_data);
                 return TRUE;
