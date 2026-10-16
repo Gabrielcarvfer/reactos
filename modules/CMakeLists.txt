@@ -18,6 +18,9 @@ endif()
 # Mesa's OpenGL driver, when its DLLs were put in mesa/
 add_subdirectory(mesa)
 
+# Wine Mono, the .NET Framework runtime (downloaded when configuring)
+add_subdirectory(winemono)
+
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/AHK_Tests/)
     add_subdirectory(AHK_Tests)
 endif()

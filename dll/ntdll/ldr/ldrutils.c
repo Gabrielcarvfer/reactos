@@ -1000,7 +1000,6 @@ LdrpSetProtection(PVOID ViewBase,
  * assemblies this way: Paint.NET's setup crashed in one.)
  * In a 32-bit process, the .NET Framework relies on that stub.
  */
-static
 BOOLEAN
 LdrpIsILOnlyImage(PVOID ViewBase)
 {

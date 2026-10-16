@@ -1,0 +1,4 @@
+; Wine Mono, 64-bit ReactOS: also register the 32-bit mscoree (its COM classes
+; for 32-bit programs; it finds the same %SystemRoot%\mono\mono-2.0)
+[AddReg]
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnceEx\WineMono","3",,"||%SystemRoot%\SysWOW64\regsvr32.exe /s mscoree.dll"

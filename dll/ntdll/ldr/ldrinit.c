@@ -3108,11 +3108,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     }
 
-    if (IsDotNetImage)
-    {
-        /* FIXME */
-        DPRINT1("We don't support .NET applications yet\n");
-    }
+    /* (A .NET program: see _CorExeMain below) */
 
 #ifdef _WIN64
     if (LdrpIsWow64Process)
@@ -3359,6 +3355,31 @@ Wow64SkipImage:
                 Status);
         return Status;
     }
+
+#ifdef _WIN64
+    /* A 64-bit .NET program of IL code only has no entry point (and no
+     * imports): like Windows, start it with mscoree's _CorExeMain, which
+     * runs it with the .NET runtime (Wine Mono). The start address is the
+     * first argument of BaseProcessStartup (see BaseInitializeContext).
+     * (A 32-bit one, in WoW64, jumps to _CorExeMain itself) */
+    if (IsDotNetImage && Context && !LdrpIsWow64Process &&
+        LdrpIsILOnlyImage(Peb->ImageBaseAddress))
+    {
+        UNICODE_STRING MscoreeString = RTL_CONSTANT_STRING(L"mscoree.dll");
+        ANSI_STRING CorExeMainName = RTL_CONSTANT_STRING("_CorExeMain");
+        PVOID MscoreeBase, CorExeMain;
+
+        Status = LdrLoadDll(NULL, NULL, &MscoreeString, &MscoreeBase);
+        if (NT_SUCCESS(Status))
+            Status = LdrGetProcedureAddress(MscoreeBase, &CorExeMainName, 0, &CorExeMain);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("LDR: .NET program, but no mscoree!_CorExeMain, Status=0x%08lx\n", Status);
+            return Status;
+        }
+        Context->Rcx = (ULONG_PTR)CorExeMain;
+    }
+#endif
 
     /* Notify Shim Engine */
     if (g_ShimsEnabled)

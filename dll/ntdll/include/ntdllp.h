@@ -156,6 +156,11 @@ LdrpCheckForLoadedDll(IN PWSTR DllPath,
                       IN BOOLEAN RedirectedDll,
                       OUT PLDR_DATA_TABLE_ENTRY *LdrEntry);
 
+#ifdef _WIN64
+BOOLEAN
+LdrpIsILOnlyImage(PVOID ViewBase);
+#endif
+
 NTSTATUS NTAPI
 LdrpMapDll(IN PWSTR SearchPath OPTIONAL,
            IN PWSTR DllPath2,

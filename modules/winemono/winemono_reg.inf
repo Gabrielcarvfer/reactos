@@ -1,0 +1,8 @@
+; Wine Mono: installed on the first boot, after syssetup's Finalize (RunOnceEx
+; runs the subkeys by name and waits for each command). The MSI puts the runtime
+; in %SystemRoot%\mono\mono-2.0 and installs its support MSI; then mscoree
+; registers its COM classes (and installs the support MSI if that failed).
+; (The LiveCD has no MSI: "if exist")
+[AddReg]
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnceEx\WineMono","1",,"||cmd.exe /c if exist %SystemRoot%\3rdParty\wine-mono-9.4.0-x86.msi msiexec.exe /i %SystemRoot%\3rdParty\wine-mono-9.4.0-x86.msi /qn"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnceEx\WineMono","2",,"||regsvr32.exe /s mscoree.dll"
