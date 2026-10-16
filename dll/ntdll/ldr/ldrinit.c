@@ -2298,7 +2298,35 @@ LdrpApplyVersionLayer(VOID)
     {
         LdrpReportVersionLayer(LDRP_VERSION_LAYER_WIN10, "image header");
         LdrpVersionLayerApplied = TRUE;
+        return;
     }
+
+#if defined(DLL_EXPORT_VERSION) && (DLL_EXPORT_VERSION >= 0x0A00)
+    /* The system's own programs (msiexec, rundll32, regsvr32, cmd...) are
+       manifested for Windows 10 on Windows 10: MSI packages check VersionNT
+       in msiexec (Node.js needs Windows 7 or later) */
+    {
+        PCWSTR Root = SharedUserData->NtSystemRoot;
+        PCWSTR Path = Peb->ProcessParameters->ImagePathName.Buffer;
+        SIZE_T Length = wcslen(Root), j;
+        BOOLEAN Match = (Path != NULL) &&
+                        (Peb->ProcessParameters->ImagePathName.Length > (Length + 1) * sizeof(WCHAR));
+
+        /* Case-insensitive by hand: the NLS case tables are not set up yet */
+        for (j = 0; Match && j < Length; j++)
+        {
+            WCHAR a = Path[j], b = Root[j];
+            if (a >= L'a' && a <= L'z') a -= L'a' - L'A';
+            if (b >= L'a' && b <= L'z') b -= L'a' - L'A';
+            Match = (a == b);
+        }
+        if (Match && Path[Length] == L'\\')
+        {
+            LdrpReportVersionLayer(LDRP_VERSION_LAYER_WIN10, "system program");
+            LdrpVersionLayerApplied = TRUE;
+        }
+    }
+#endif
 }
 
 NTSTATUS
