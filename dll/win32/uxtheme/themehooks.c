@@ -785,8 +785,10 @@ ThemeHooksInstall()
         PREGISTER_UAH_WINXP lpfuncxp = (PREGISTER_UAH_WINXP)lpFunc;
         ret = lpfuncxp(hDllInst, ThemeInitApiHook);
     }
-    else if ( osvi.dwMajorVersion == 5 && osvi.dwMinorVersion == 2)
+    else if (osvi.dwMajorVersion > 5 || (osvi.dwMajorVersion == 5 && osvi.dwMinorVersion >= 2))
     {
+        /* Server 2003 and later (our user32): system programs are told a newer
+           Windows than 5.2, and theming must not turn off for them */
         PREGISTER_UUAH_WIN2003 lpfunc2003 = (PREGISTER_UUAH_WIN2003)lpFunc;
         USERAPIHOOKINFO uah;
 
