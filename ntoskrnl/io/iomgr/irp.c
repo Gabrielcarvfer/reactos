@@ -16,6 +16,83 @@
 #include <debug.h>
 
 PIRP IopDeadIrp;
+
+/*
+ * Thread-agnostic I/O (as Windows since Vista): an asynchronous request on a
+ * file with a completion port is not cancelled when the thread that issued it
+ * exits (Chromium's file watcher issues ReadDirectoryChangesW from pool
+ * threads, and CHECKs that no completion fails with ERROR_OPERATION_ABORTED).
+ * IoCancelThreadIo detaches it from the thread (kept referenced), and it is
+ * completed by a worker attached to the thread's process.
+ */
+#define IRP_ROS_THREAD_DETACHED 0x00100000
+
+typedef struct _IOP_DETACHED_COMPLETION
+{
+    WORK_QUEUE_ITEM WorkItem;
+    PIRP Irp;
+    PFILE_OBJECT FileObject;
+    PVOID DataBuffer;
+} IOP_DETACHED_COMPLETION, *PIOP_DETACHED_COMPLETION;
+
+VOID
+NTAPI
+IopCompleteRequest(IN PKAPC Apc,
+                   IN PKNORMAL_ROUTINE* NormalRoutine,
+                   IN PVOID* NormalContext,
+                   IN PVOID* SystemArgument1,
+                   IN PVOID* SystemArgument2);
+
+static
+VOID
+NTAPI
+IopCompleteDetachedIrp(IN PVOID Context)
+{
+    PIOP_DETACHED_COMPLETION Completion = Context;
+    PIRP Irp = Completion->Irp;
+    PETHREAD Thread = Irp->Tail.Overlay.Thread;
+    PVOID FileObject = Completion->FileObject, DataBuffer = Completion->DataBuffer;
+    PKNORMAL_ROUTINE NormalRoutine = NULL;
+    PVOID NormalContext = NULL;
+    KAPC_STATE ApcState;
+    KIRQL OldIrql;
+
+    ExFreePoolWithTag(Completion, TAG_IO);
+
+    /* What the completion APC does in the thread, in its process */
+    KeStackAttachProcess(&Thread->ThreadsProcess->Pcb, &ApcState);
+    KeRaiseIrql(APC_LEVEL, &OldIrql);
+    IopCompleteRequest(&Irp->Tail.Apc, &NormalRoutine, &NormalContext, &FileObject, &DataBuffer);
+    KeLowerIrql(OldIrql);
+    KeUnstackDetachProcess(&ApcState);
+
+    ObDereferenceObject(Thread);
+}
+
+static
+BOOLEAN
+IopQueueDetachedCompletion(IN PIRP Irp,
+                           IN PFILE_OBJECT FileObject,
+                           IN PVOID DataBuffer)
+{
+    PIOP_DETACHED_COMPLETION Completion;
+
+    if (!(Irp->Flags & IRP_ROS_THREAD_DETACHED))
+        return FALSE;
+
+    Completion = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Completion), TAG_IO);
+    if (!Completion)
+    {
+        DPRINT1("Leaking IRP %p of an exited thread: no memory\n", Irp);
+        return TRUE;
+    }
+    Completion->Irp = Irp;
+    Completion->FileObject = FileObject;
+    Completion->DataBuffer = DataBuffer;
+    ExInitializeWorkItem(&Completion->WorkItem, IopCompleteDetachedIrp, Completion);
+    ExQueueWorkItem(&Completion->WorkItem, DelayedWorkQueue);
+    return TRUE;
+}
 RESERVE_IRP_ALLOCATOR IopReserveIrpAllocator;
 
 /* PRIVATE FUNCTIONS  ********************************************************/
@@ -1271,14 +1348,39 @@ IoCancelThreadIo(IN PETHREAD Thread)
     NextEntry = ListHead->Flink;
     while (ListHead != NextEntry)
     {
+        PFILE_OBJECT FileObject;
+
         /* Get the IRP */
         Irp = CONTAINING_RECORD(NextEntry, IRP, ThreadListEntry);
 
-        /* Cancel it */
-        IoCancelIrp(Irp);
-
         /* Move to the next entry */
         NextEntry = NextEntry->Flink;
+
+        /* Asynchronous I/O on a file with a completion port, without APC:
+           it outlives the thread (thread-agnostic I/O) */
+        FileObject = Irp->Tail.Overlay.OriginalFileObject;
+        if (FileObject && FileObject->CompletionContext &&
+            !(FileObject->Flags & FO_SYNCHRONOUS_IO) &&
+            !(Irp->Flags & (IRP_SYNCHRONOUS_API | IRP_ROS_THREAD_DETACHED)) &&
+            !Irp->Overlay.AsynchronousParameters.UserApcRoutine)
+        {
+            /* The I/O completion lock (at DISPATCH_LEVEL) keeps its
+               completion from starting meanwhile */
+            KIRQL LockIrql = KeAcquireQueuedSpinLock(LockQueueIoCompletionLock);
+            if (Irp->CurrentLocation != (Irp->StackCount + 2))
+            {
+                ObReferenceObject(Thread);
+                Irp->Flags |= IRP_ROS_THREAD_DETACHED;
+                RemoveEntryList(&Irp->ThreadListEntry);
+                InitializeListHead(&Irp->ThreadListEntry);
+                KeReleaseQueuedSpinLock(LockQueueIoCompletionLock, LockIrql);
+                continue;
+            }
+            KeReleaseQueuedSpinLock(LockQueueIoCompletionLock, LockIrql);
+        }
+
+        /* Cancel it */
+        IoCancelIrp(Irp);
     }
 
      /* Wait 100 milliseconds */
@@ -1659,6 +1761,10 @@ IofCompleteRequest(IN PIRP Irp,
     /* Get the thread and file object */
     Thread = Irp->Tail.Overlay.Thread;
     FileObject = Irp->Tail.Overlay.OriginalFileObject;
+
+    /* The thread exited: complete it without the thread */
+    if (IopQueueDetachedCompletion(Irp, FileObject, DataBuffer))
+        return;
 
     /* Make sure the IRP isn't canceled */
     if (!Irp->Cancel)
