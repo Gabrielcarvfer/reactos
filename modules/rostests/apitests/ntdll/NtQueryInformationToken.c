@@ -782,6 +782,41 @@ QueryTokenOriginTests(
        Origin.OriginatingLogonSession.HighPart);
 }
 
+static
+VOID
+QueryFixedSizeTests(
+    _In_ HANDLE Token)
+{
+    NTSTATUS Status;
+    ULONG BufferLength, Buffer[4];
+    TOKEN_TYPE Type;
+
+    /* Asking for the size of a fixed-size class (TeamViewer does this for
+     * TokenElevation): STATUS_BUFFER_TOO_SMALL and the size */
+    BufferLength = 0xdeadbeef;
+    Status = NtQueryInformationToken(Token, TokenElevation, NULL, 0, &BufferLength);
+    ok_ntstatus(Status, STATUS_BUFFER_TOO_SMALL);
+    ok(BufferLength == sizeof(TOKEN_ELEVATION), "TokenElevation needs %lu bytes\n", BufferLength);
+
+    BufferLength = 0xdeadbeef;
+    Status = NtQueryInformationToken(Token, TokenType, &Type, 2, &BufferLength);
+    ok_ntstatus(Status, STATUS_BUFFER_TOO_SMALL);
+    ok(BufferLength == sizeof(TOKEN_TYPE), "TokenType needs %lu bytes\n", BufferLength);
+
+    /* A larger buffer is fine */
+    BufferLength = 0xdeadbeef;
+    Buffer[0] = Buffer[1] = 0xdeadbeef;
+    Status = NtQueryInformationToken(Token, TokenElevation, Buffer, sizeof(Buffer), &BufferLength);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    ok(BufferLength == sizeof(TOKEN_ELEVATION), "TokenElevation returned %lu bytes\n", BufferLength);
+    ok(Buffer[0] == 0 || Buffer[0] == 1, "TokenIsElevated is %lu\n", Buffer[0]);
+    ok(Buffer[1] == 0xdeadbeef, "the rest of the buffer was written: 0x%lx\n", Buffer[1]);
+
+    Status = NtQueryInformationToken(Token, TokenSessionId, Buffer, sizeof(Buffer), &BufferLength);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    ok(BufferLength == sizeof(ULONG), "TokenSessionId returned %lu bytes\n", BufferLength);
+}
+
 START_TEST(NtQueryInformationToken)
 {
     NTSTATUS Status;
@@ -825,6 +860,7 @@ START_TEST(NtQueryInformationToken)
 
     /* Now perform tests for each class */
     QueryTokenUserTests(Token);
+    QueryFixedSizeTests(Token);
     QueryTokenGroupsTests(Token);
     QueryTokenPrivilegesTests(Token);
     QueryTokenOwnerTests(Token);
