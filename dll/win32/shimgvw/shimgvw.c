@@ -1413,7 +1413,7 @@ Preview_ToggleSlideShowEx(PPREVIEW_DATA pData, BOOL StartTimer)
 {
     if (!IsWindow(g_hwndFullscreen))
     {
-        DWORD style = WS_POPUP | WS_CLIPSIBLINGS, exstyle = WS_EX_TOPMOST;
+        DWORD style = WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN, exstyle = WS_EX_TOPMOST;
         WCHAR szTitle[256];
         LoadStringW(g_hInstance, IDS_APPTITLE, szTitle, _countof(szTitle));
         g_hwndFullscreen = CreateWindowExW(exstyle, WC_PREVIEW, szTitle, style,
@@ -1768,7 +1768,8 @@ ImageView_Main(HWND hwnd, LPCWSTR szFileName)
     WndClass.style          = CS_HREDRAW | CS_VREDRAW;
     WndClass.hIcon          = LoadIconW(g_hInstance, MAKEINTRESOURCEW(IDI_APP_ICON));
     WndClass.hCursor        = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
-    WndClass.hbrBackground  = GetStockBrush(NULL_BRUSH); /* less flicker */
+    WndClass.hbrBackground  = (HBRUSH)(COLOR_BTNFACE + 1); /* behind the flat (transparent) toolbar;
+                                                      the image is the WC_ZOOM child */
     if (!RegisterClassW(&WndClass))
         return -1;
     WndClass.lpszClassName  = WC_ZOOM;
@@ -1781,7 +1782,7 @@ ImageView_Main(HWND hwnd, LPCWSTR szFileName)
     /* Create the main window */
     LoadStringW(g_hInstance, IDS_APPTITLE, szTitle, _countof(szTitle));
     hMainWnd = CreateWindowExW(WS_EX_WINDOWEDGE, WC_PREVIEW, szTitle,
-                               WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS,
+                               WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
                                g_Settings.X, g_Settings.Y, g_Settings.Width, g_Settings.Height,
                                NULL, NULL, g_hInstance, (LPVOID)szFileName);
 
