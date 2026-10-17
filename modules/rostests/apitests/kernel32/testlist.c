@@ -28,6 +28,7 @@ extern void func_GetFinalPathNameByHandle(void);
 extern void func_GetLocaleInfo(void);
 extern void func_GetModuleFileName(void);
 extern void func_GetVolumeInformation(void);
+extern void func_HeapCreateExecute(void);
 extern void func_InheritHandleList(void);
 extern void func_InitOnce(void);
 extern void func_interlck(void);
@@ -98,6 +99,7 @@ const struct test winetest_testlist[] =
     { "GetLocaleInfo",               func_GetLocaleInfo },
     { "GetModuleFileName",           func_GetModuleFileName },
     { "GetVolumeInformation",        func_GetVolumeInformation },
+    { "HeapCreateExecute",           func_HeapCreateExecute },
     { "InheritHandleList",           func_InheritHandleList },
     { "InitOnce",                    func_InitOnce },
     { "interlck",                    func_interlck },

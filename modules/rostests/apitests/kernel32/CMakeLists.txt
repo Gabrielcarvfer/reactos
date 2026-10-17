@@ -29,6 +29,7 @@ list(APPEND SOURCE
     GetLocaleInfo.c
     GetModuleFileName.c
     GetVolumeInformation.c
+    HeapCreateExecute.c
     InheritHandleList.c
     InitOnce.c
     interlck.c

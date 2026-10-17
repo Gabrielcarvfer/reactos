@@ -54,6 +54,14 @@
 /* Segment flags */
 #define HEAP_USER_ALLOCATED    0x1
 
+/* Page protection for the memory of a heap: HEAP_CREATE_ENABLE_EXECUTE heaps
+   hold code (e.g. JIT compilers like Mono), so their pages must be executable */
+FORCEINLINE ULONG
+RtlpGetHeapProtection(ULONG Flags)
+{
+    return (Flags & HEAP_CREATE_ENABLE_EXECUTE) ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE;
+}
+
 /* A handy inline to distinguis normal heap, special "debug heap" and special "page heap" */
 FORCEINLINE BOOLEAN
 RtlpHeapIsSpecial(ULONG Flags)
