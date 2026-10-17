@@ -18,6 +18,7 @@ EXTERN KiSystemFatalException:PROC
 EXTERN KiNpxNotAvailableFaultHandler:PROC
 EXTERN KiGeneralProtectionFaultHandler:PROC
 EXTERN KiStackFaultHandler:PROC
+EXTERN KiFloatingErrorFaultHandler:PROC
 EXTERN KiXmmExceptionHandler:PROC
 EXTERN KiDeliverApc:PROC
 EXTERN KiDpcInterruptHandler:PROC
@@ -523,9 +524,18 @@ FUNC KiFloatingErrorFault
     /* Push pseudo error code */
     EnterTrap TF_SAVE_ALL
 
-    UNIMPLEMENTED KiFloatingErrorFault
-    int 3
+    /* Call the C handler (it bugchecks for kernel mode) */
+    mov rcx, rbp
+    call KiFloatingErrorFaultHandler
 
+    /* Nothing to raise? */
+    test eax, eax
+    jge KiFloatingErrorExit
+
+    /* Raise the STATUS_FLOAT_* exception in the program */
+    DispatchException eax, 1, 0, 0, 0
+
+KiFloatingErrorExit:
     /* Return */
     ExitTrap TF_SAVE_ALL
 ENDFUNC

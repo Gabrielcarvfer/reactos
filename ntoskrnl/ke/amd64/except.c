@@ -840,8 +840,74 @@ KiGeneralProtectionFaultHandler(
         return STATUS_ACCESS_VIOLATION;
     }
 
-    ASSERT(FALSE);
-    return STATUS_UNSUCCESSFUL;
+    /* Anything else, typically a non-canonical address (a 32-bit pointer
+     * read with garbage in its upper half): an access violation, as on
+     * Windows, so that the faulting code's exception handler gets it */
+    return STATUS_ACCESS_VIOLATION;
+}
+
+/*
+ * An x87 floating point error (#MF), raised at the next x87 instruction after
+ * one that hit an unmasked exception. The x87 state of the interrupted code is
+ * still in the FPU (the trap entry does not touch it): read its status and
+ * control words and raise the matching STATUS_FLOAT_* exception, in the same
+ * order as the i386 handler (KiNpxHandler). 32-bit programs (WOW64) use the
+ * x87 unit a lot; this used to be unimplemented and stopped the system.
+ */
+NTSTATUS
+NTAPI
+KiFloatingErrorFaultHandler(
+    IN PKTRAP_FRAME TrapFrame)
+{
+    USHORT StatusWord, ControlWord, Error;
+    NTSTATUS ExceptionCode;
+
+    __asm__ __volatile__("fnstsw %0" : "=m" (StatusWord));
+    __asm__ __volatile__("fnstcw %0" : "=m" (ControlWord));
+
+    /* The exceptions that are pending and not masked */
+    Error = StatusWord & ~ControlWord & (FSW_INVALID_OPERATION | FSW_DENORMAL |
+                                         FSW_ZERO_DIVIDE | FSW_OVERFLOW |
+                                         FSW_UNDERFLOW | FSW_PRECISION);
+    if (Error & FSW_INVALID_OPERATION)
+    {
+        /* The invalid operation flag is also set for stack over/underflows */
+        ExceptionCode = (StatusWord & FSW_STACK_FAULT) ? STATUS_FLOAT_STACK_CHECK
+                                                       : STATUS_FLOAT_INVALID_OPERATION;
+    }
+    else if (Error & FSW_ZERO_DIVIDE)
+    {
+        ExceptionCode = STATUS_FLOAT_DIVIDE_BY_ZERO;
+    }
+    else if (Error & FSW_DENORMAL)
+    {
+        ExceptionCode = STATUS_FLOAT_INVALID_OPERATION;
+    }
+    else if (Error & FSW_OVERFLOW)
+    {
+        ExceptionCode = STATUS_FLOAT_OVERFLOW;
+    }
+    else if (Error & FSW_UNDERFLOW)
+    {
+        ExceptionCode = STATUS_FLOAT_UNDERFLOW;
+    }
+    else if (Error & FSW_PRECISION)
+    {
+        ExceptionCode = STATUS_FLOAT_INEXACT_RESULT;
+    }
+    else
+    {
+        /* Nothing unmasked is pending (e.g. FNCLEX ran meanwhile): go on */
+        return STATUS_SUCCESS;
+    }
+
+    if (!(TrapFrame->SegCs & 3))
+    {
+        /* The kernel does not use the x87 unit */
+        KeBugCheckWithTf(TRAP_CAUSE_UNKNOWN, 1, Error, 0, 0, TrapFrame);
+    }
+
+    return ExceptionCode;
 }
 
 NTSTATUS
