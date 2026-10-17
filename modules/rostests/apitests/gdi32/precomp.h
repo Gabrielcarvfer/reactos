@@ -10,6 +10,7 @@
 #include <winuser.h>
 #include <winddi.h>
 #include <winnls.h>
+#include <subauth.h> /* UNICODE_STRING, for kptr.h */
 #include <include/ntgdityp.h>
 #include <include/ntgdihdl.h>
 #include <stdio.h>

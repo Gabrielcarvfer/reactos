@@ -1207,6 +1207,137 @@ cleanup:
     return iResult;
 }
 
+/* StretchDIBits SRCCOPY from a bitmap around the DIB's bits. FALSE: use the
+ * general path (nothing was drawn). */
+static
+BOOL
+IntStretchDIBitsDirect(
+    HDC hdc,
+    INT xDst, INT yDst, INT cxDst, INT cyDst,
+    INT xSrc, INT ySrc, INT cxSrc, INT cySrc,
+    PVOID pvBits,
+    UINT cjMaxBits,
+    const BITMAPINFO *pbmi)
+{
+    PDC pdc;
+    PSURFACE psurfDIB, psurfDst;
+    PPALETTE ppalDIB;
+    HBITMAP hbmDIB;
+    RECTL rcDst, rcSrc;
+    EXLATEOBJ exlo;
+    LONG cyDIB = abs(pbmi->bmiHeader.biHeight);
+    BOOL bRet = FALSE;
+
+    hbmDIB = GreCreateBitmapEx(pbmi->bmiHeader.biWidth,
+                               cyDIB,
+                               0,
+                               BitmapFormat(pbmi->bmiHeader.biBitCount,
+                                            pbmi->bmiHeader.biCompression),
+                               pbmi->bmiHeader.biHeight < 0 ? BMF_TOPDOWN : 0,
+                               cjMaxBits,
+                               pvBits,
+                               0);
+    if (!hbmDIB)
+        return FALSE;
+
+    psurfDIB = SURFACE_ShareLockSurface(hbmDIB);
+    if (!psurfDIB)
+    {
+        GreDeleteObject(hbmDIB);
+        return FALSE;
+    }
+
+    pdc = DC_LockDc(hdc);
+    if (!pdc)
+        goto cleanup;
+
+    psurfDst = pdc->dclevel.pSurface;
+    if (!psurfDst)
+        goto cleanup;
+
+    rcDst.left = xDst;
+    rcDst.top = yDst;
+    rcDst.right = xDst + cxDst;
+    rcDst.bottom = yDst + cyDst;
+    IntLPtoDP(pdc, (POINTL*)&rcDst, 2);
+    RECTL_vOffsetRect(&rcDst, pdc->ptlDCOrig.x, pdc->ptlDCOrig.y);
+
+    /* Mirrored by the mapping: leave it to the general path */
+    if (rcDst.right <= rcDst.left || rcDst.bottom <= rcDst.top)
+        goto cleanup;
+
+    /* As the general path: the source y counts from the bottom of the DIB */
+    rcSrc.left = xSrc;
+    rcSrc.top = cyDIB - cySrc - ySrc;
+    rcSrc.right = rcSrc.left + cxSrc;
+    rcSrc.bottom = rcSrc.top + cySrc;
+
+    /* The source must lie in the DIB (the general path clips through BitBlt) */
+    if (rcSrc.left < 0 || rcSrc.top < 0 ||
+        rcSrc.right > pbmi->bmiHeader.biWidth || rcSrc.bottom > cyDIB)
+        goto cleanup;
+
+    ppalDIB = CreateDIBPalette(pbmi, pdc, DIB_RGB_COLORS);
+    if (!ppalDIB)
+        goto cleanup;
+
+    if (pdc->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
+        IntUpdateBoundsRect(pdc, &rcDst);
+
+    DC_vPrepareDCsForBlit(pdc, &rcDst, NULL, NULL);
+    psurfDst = pdc->dclevel.pSurface;
+
+    EXLATEOBJ_vInitialize(&exlo,
+                          ppalDIB,
+                          psurfDst->ppal,
+                          RGB(0xff, 0xff, 0xff),
+                          pdc->pdcattr->crBackgroundClr,
+                          pdc->pdcattr->crForegroundClr);
+
+    if (rcDst.right - rcDst.left == cxSrc && rcDst.bottom - rcDst.top == cySrc)
+    {
+        bRet = IntEngBitBlt(&psurfDst->SurfObj,
+                            &psurfDIB->SurfObj,
+                            NULL,
+                            (CLIPOBJ *)&pdc->co,
+                            &exlo.xlo,
+                            &rcDst,
+                            (POINTL *)&rcSrc,
+                            NULL,
+                            &pdc->eboFill.BrushObject,
+                            NULL,
+                            ROP4_FROM_INDEX(R3_OPINDEX_SRCCOPY));
+    }
+    else
+    {
+        bRet = IntEngStretchBlt(&psurfDst->SurfObj,
+                                &psurfDIB->SurfObj,
+                                NULL,
+                                (CLIPOBJ *)&pdc->co,
+                                &exlo.xlo,
+                                &pdc->dclevel.ca,
+                                &rcDst,
+                                &rcSrc,
+                                NULL,
+                                &pdc->eboFill.BrushObject,
+                                NULL,
+                                ROP4_FROM_INDEX(R3_OPINDEX_SRCCOPY));
+    }
+
+    DC_vFinishBlit(pdc, NULL);
+    EXLATEOBJ_vCleanup(&exlo);
+    PALETTE_ShareUnlockPalette(ppalDIB);
+
+    /* (A failed blit was tried: don't draw it again) */
+    bRet = TRUE;
+
+cleanup:
+    if (pdc) DC_UnlockDc(pdc);
+    SURFACE_ShareUnlockSurface(psurfDIB);
+    GreDeleteObject(hbmDIB);
+    return bRet;
+}
+
 W32KAPI
 INT
 APIENTRY
@@ -1244,7 +1375,6 @@ NtGdiStretchDIBitsInternal(
     HPALETTE hPal = NULL;
     ULONG BmpFormat = 0;
     INT LinesCopied = 0;
-    BOOL bDirect = FALSE;
     ULONG iDstFormat;
 
     /* Check for bad iUsage */
@@ -1347,8 +1477,36 @@ NtGdiStretchDIBitsInternal(
         pvBits = NULL;
     }
 
+    /* Uncompressed 16/24/32 bpp DIB with RGB colors to a 16/24/32 bpp target
+     * (no mono or palette conversion rules), unmirrored: blit straight from a
+     * bitmap around the captured bits. Converting them into a compatible
+     * bitmap first (allocate, zero, IntSetDIBits) costs more than the blit
+     * itself. (The bitmap can't be selected into a DC: a DDB of another
+     * format than the device's is refused, so blit with the Eng functions.) */
+    if (dwRop == SRCCOPY &&
+        pvBits &&
+        cxSrc > 0 && cySrc > 0 && cxDst > 0 && cyDst > 0 &&
+        dwUsage == DIB_RGB_COLORS &&
+        (iDstFormat == BMF_16BPP || iDstFormat == BMF_24BPP || iDstFormat == BMF_32BPP) &&
+        pbmiSafe->bmiHeader.biSize >= sizeof(BITMAPINFOHEADER) &&
+        pbmiSafe->bmiHeader.biWidth > 0 &&
+        pbmiSafe->bmiHeader.biHeight != 0 &&
+        (pbmiSafe->bmiHeader.biBitCount == 16 ||
+         pbmiSafe->bmiHeader.biBitCount == 24 ||
+         pbmiSafe->bmiHeader.biBitCount == 32) &&
+        (pbmiSafe->bmiHeader.biCompression == BI_RGB ||
+         (pbmiSafe->bmiHeader.biCompression == BI_BITFIELDS &&
+          pbmiSafe->bmiHeader.biBitCount != 24)) &&
+        (ULONGLONG)WIDTH_BYTES_ALIGN32(pbmiSafe->bmiHeader.biWidth,
+                                       pbmiSafe->bmiHeader.biBitCount) *
+            abs(pbmiSafe->bmiHeader.biHeight) <= cjMaxBits &&
+        IntStretchDIBitsDirect(hdc, xDst, yDst, cxDst, cyDst, xSrc, ySrc, cxSrc, cySrc,
+                               pvBits, cjMaxBits, pbmiSafe))
+    {
+        /* Done */
+    }
     /* Here we select between the dwRop with SRCCOPY or not. */
-    if (dwRop == SRCCOPY)
+    else if (dwRop == SRCCOPY)
     {
         hdcMem = NtGdiCreateCompatibleDC(hdc);
         if (hdcMem == NULL)
@@ -1358,63 +1516,9 @@ NtGdiStretchDIBitsInternal(
             return 0;
         }
 
-        /* Uncompressed 16/24/32 bpp DIB with RGB colors, 16/24/32 bpp target
-         * (no mono or palette conversion rules), no mirroring: blit straight
-         * from a bitmap around the captured bits. Converting them into a
-         * compatible bitmap first (allocate, zero, IntSetDIBits; a DIB section
-         * when hdc is a memory DC with one) costs more than the blit itself. */
-        hBitmap = NULL;
-        if (pvBits &&
-            cxSrc > 0 && cySrc > 0 && cxDst > 0 && cyDst > 0 &&
-            dwUsage == DIB_RGB_COLORS &&
-            (iDstFormat == BMF_16BPP || iDstFormat == BMF_24BPP || iDstFormat == BMF_32BPP) &&
-            pbmiSafe->bmiHeader.biSize >= sizeof(BITMAPINFOHEADER) &&
-            pbmiSafe->bmiHeader.biWidth > 0 &&
-            pbmiSafe->bmiHeader.biHeight != 0 &&
-            (pbmiSafe->bmiHeader.biBitCount == 16 ||
-             pbmiSafe->bmiHeader.biBitCount == 24 ||
-             pbmiSafe->bmiHeader.biBitCount == 32) &&
-            (pbmiSafe->bmiHeader.biCompression == BI_RGB ||
-             (pbmiSafe->bmiHeader.biCompression == BI_BITFIELDS &&
-              pbmiSafe->bmiHeader.biBitCount != 24)) &&
-            (ULONGLONG)WIDTH_BYTES_ALIGN32(pbmiSafe->bmiHeader.biWidth,
-                                           pbmiSafe->bmiHeader.biBitCount) *
-                abs(pbmiSafe->bmiHeader.biHeight) <= cjMaxBits)
-        {
-            hBitmap = GreCreateBitmapEx(pbmiSafe->bmiHeader.biWidth,
-                                        abs(pbmiSafe->bmiHeader.biHeight),
-                                        0,
-                                        BitmapFormat(pbmiSafe->bmiHeader.biBitCount,
-                                                     pbmiSafe->bmiHeader.biCompression),
-                                        pbmiSafe->bmiHeader.biHeight < 0 ? BMF_TOPDOWN : 0,
-                                        cjMaxBits,
-                                        pvBits,
-                                        0);
-            if (hBitmap)
-            {
-                PSURFACE psurfDIB = SURFACE_ShareLockSurface(hBitmap);
-                PPALETTE ppalBits = CreateDIBPalette(pbmiSafe, NULL, dwUsage);
-                if (psurfDIB && ppalBits)
-                {
-                    SURFACE_vSetPalette(psurfDIB, ppalBits);
-                    bDirect = TRUE;
-                }
-                if (ppalBits) PALETTE_ShareUnlockPalette(ppalBits);
-                if (psurfDIB) SURFACE_ShareUnlockSurface(psurfDIB);
-                if (!bDirect)
-                {
-                    GreDeleteObject(hBitmap);
-                    hBitmap = NULL;
-                }
-            }
-        }
-
-        if (hBitmap == NULL)
-        {
-            hBitmap = NtGdiCreateCompatibleBitmap(hdc,
-                                                  abs(pbmiSafe->bmiHeader.biWidth),
-                                                  abs(pbmiSafe->bmiHeader.biHeight));
-        }
+        hBitmap = NtGdiCreateCompatibleBitmap(hdc,
+                                              abs(pbmiSafe->bmiHeader.biWidth),
+                                              abs(pbmiSafe->bmiHeader.biHeight));
         if (hBitmap == NULL)
         {
             DPRINT1("NtGdiCreateCompatibleBitmap failed to create bitmap.\n");
@@ -1434,7 +1538,7 @@ NtGdiStretchDIBitsInternal(
             hPal = GdiSelectPalette(hdcMem, hPal, FALSE);
         }
 
-        pdc = bDirect ? NULL : DC_LockDc(hdcMem);
+        pdc = DC_LockDc(hdcMem);
         if (pdc != NULL)
         {
             IntSetDIBits(pdc, hBitmap, 0, abs(pbmiSafe->bmiHeader.biHeight), pvBits,

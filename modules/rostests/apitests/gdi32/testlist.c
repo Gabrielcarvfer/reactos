@@ -78,6 +78,7 @@ extern void func_SetSysColors(void);
 extern void func_SetWindowExtEx(void);
 extern void func_SetWorldTransform(void);
 extern void func_StretchBlt(void);
+extern void func_StretchDIBits(void);
 extern void func_TextTransform(void);
 
 const struct test winetest_testlist[] =
@@ -158,6 +159,7 @@ const struct test winetest_testlist[] =
     { "SetWindowExtEx", func_SetWindowExtEx },
     { "SetWorldTransform", func_SetWorldTransform },
     { "StretchBlt", func_StretchBlt },
+    { "StretchDIBits", func_StretchDIBits },
     { "TextTransform", func_TextTransform },
 
     { 0, 0 }
