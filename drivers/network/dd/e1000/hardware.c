@@ -617,10 +617,15 @@ NICEnableTxRx(
     /* Receive descriptor tail / head */
     E1000WriteUlong(Adapter, E1000_REG_RDH, 0);
     E1000WriteUlong(Adapter, E1000_REG_RDT, NUM_RECEIVE_DESCRIPTORS - 1);
+    Adapter->ReceiveTail = NUM_RECEIVE_DESCRIPTORS - 1;
 
     /* Set up interrupt timers */
     E1000WriteUlong(Adapter, E1000_REG_RADV, 96);
     E1000WriteUlong(Adapter, E1000_REG_RDTR, 16);
+
+    /* At most MAX_INTS_PER_SEC interrupts: each one costs several register
+     * accesses (VM exits when virtualized), and the ones sharing its line */
+    E1000WriteUlong(Adapter, E1000_REG_ITR, DEFAULT_ITR);
 
     /* Some defaults */
     Value = E1000_RCTL_SECRC | E1000_RCTL_EN;

@@ -189,7 +189,7 @@ C_ASSERT(sizeof(E1000_TRANSMIT_DESCRIPTOR) == 16);
 
 
 /* E1000_REG_ITR */
-#define MAX_INTS_PER_SEC        2000
+#define MAX_INTS_PER_SEC        8000
 #define DEFAULT_ITR             1000000000/(MAX_INTS_PER_SEC * 256)
 
 

@@ -78,15 +78,17 @@ MiniportHandleInterrupt(
         PETH_HEADER EthHeader;
         ULONG BufferOffset;
         BOOLEAN bGotAny = FALSE;
-        ULONG RxDescHead, RxDescTail, CurrRxDesc;
+        ULONG RxDescTail, CurrRxDesc;
 
         /* Clear out these interrupts */
         InterruptPending &= ~(E1000_IMS_RXDMT0 | E1000_IMS_RXT0);
 
-        E1000ReadUlong(Adapter, E1000_REG_RDH, &RxDescHead);
-        E1000ReadUlong(Adapter, E1000_REG_RDT, &RxDescTail);
+        /* The descriptors' Done bits say what is ready: reading RDH and RDT
+         * cost two register reads (each a VM exit when virtualized) per
+         * interrupt, and RDT is ours anyway */
+        RxDescTail = Adapter->ReceiveTail;
 
-        while (((RxDescTail + 1) % NUM_RECEIVE_DESCRIPTORS) != RxDescHead)
+        while (TRUE)
         {
             CurrRxDesc = (RxDescTail + 1) % NUM_RECEIVE_DESCRIPTORS;
             BufferOffset = CurrRxDesc * Adapter->ReceiveBufferEntrySize;
@@ -139,12 +141,16 @@ NextReceiveDescriptor:
             RxDescTail = CurrRxDesc;
         }
 
-        if (bGotAny)
+        if (RxDescTail != Adapter->ReceiveTail)
         {
             /* Write back new tail value */
+            Adapter->ReceiveTail = RxDescTail;
             E1000WriteUlong(Adapter, E1000_REG_RDT, RxDescTail);
+        }
 
-            NDIS_DbgPrint(MAX_TRACE, ("Rx done (RDH: %u, RDT: %u)\n", RxDescHead, RxDescTail));
+        if (bGotAny)
+        {
+            NDIS_DbgPrint(MAX_TRACE, ("Rx done (RDT: %u)\n", RxDescTail));
 
             NdisMEthIndicateReceiveComplete(Adapter->AdapterHandle);
         }

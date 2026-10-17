@@ -89,6 +89,7 @@ typedef struct _E1000_ADAPTER
     volatile PUCHAR ReceiveBuffer;
     NDIS_PHYSICAL_ADDRESS ReceiveBufferPa;
     ULONG ReceiveBufferEntrySize;
+    ULONG ReceiveTail;  /* The last descriptor given to the hardware (our copy of RDT) */
 
 } E1000_ADAPTER, *PE1000_ADAPTER;
 
