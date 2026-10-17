@@ -2,6 +2,7 @@
 spec2def(windows.ui.dll windows.ui.spec)
 
 list(APPEND SOURCE
+    composition.c
     uisettings.c
     ${CMAKE_CURRENT_BINARY_DIR}/windows.ui_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/windows.ui.def)

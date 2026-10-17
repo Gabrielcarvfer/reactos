@@ -461,14 +461,18 @@ static const IActivationFactoryVtbl factory_vtbl =
 
 static IActivationFactory Factory = { (IActivationFactoryVtbl *)&factory_vtbl };
 
+HRESULT compositor_controller_get_factory(const WCHAR *name, IActivationFactory **factory);
+
 HRESULT WINAPI DllGetActivationFactory(HSTRING classid, IActivationFactory **factory)
 {
     const WCHAR *name = WindowsGetStringRawBuffer(classid, NULL);
 
     TRACE("%s\n", debugstr_w(name));
     *factory = NULL;
-    if (!name || wcscmp(name, ClassName))
+    if (!name)
         return CLASS_E_CLASSNOTAVAILABLE;
+    if (wcscmp(name, ClassName))
+        return compositor_controller_get_factory(name, factory);
     *factory = &Factory;
     return S_OK;
 }
@@ -479,6 +483,7 @@ HRESULT WINAPI DllCanUnloadNow(void)
 }
 
 #define CLASS_KEY L"Software\\Microsoft\\WindowsRuntime\\ActivatableClassId\\Windows.UI.ViewManagement.UISettings"
+#define COMPOSITION_KEY L"Software\\Microsoft\\WindowsRuntime\\ActivatableClassId\\Windows.UI.Composition.Core.CompositorController"
 
 /* The registration that RoActivateInstance looks up (C++/WinRT programs
  * also find this DLL by its name) */
@@ -495,11 +500,20 @@ HRESULT WINAPI DllRegisterServer(void)
     RegSetValueExW(key, L"Threading", 0, REG_DWORD, (const BYTE *)&zero, sizeof(zero));      /* both */
     RegSetValueExW(key, L"TrustLevel", 0, REG_DWORD, (const BYTE *)&zero, sizeof(zero));     /* base */
     RegCloseKey(key);
+
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, COMPOSITION_KEY, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL))
+        return SELFREG_E_CLASS;
+    RegSetValueExW(key, L"DllPath", 0, REG_EXPAND_SZ, (const BYTE *)Path, sizeof(Path));
+    RegSetValueExW(key, L"ActivationType", 0, REG_DWORD, (const BYTE *)&zero, sizeof(zero));
+    RegSetValueExW(key, L"Threading", 0, REG_DWORD, (const BYTE *)&zero, sizeof(zero));
+    RegSetValueExW(key, L"TrustLevel", 0, REG_DWORD, (const BYTE *)&zero, sizeof(zero));
+    RegCloseKey(key);
     return S_OK;
 }
 
 HRESULT WINAPI DllUnregisterServer(void)
 {
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, COMPOSITION_KEY);
     RegDeleteKeyW(HKEY_LOCAL_MACHINE, CLASS_KEY);
     return S_OK;
 }

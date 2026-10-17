@@ -2115,6 +2115,10 @@ HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.Dispat
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueueController","ActivationType",0x00010001,0
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueueController","Threading",0x00010001,0
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueueController","TrustLevel",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.UI.Composition.Core.CompositorController","DllPath",0x00020000,"%SystemRoot%\system32\Windows.UI.dll"
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.UI.Composition.Core.CompositorController","ActivationType",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.UI.Composition.Core.CompositorController","Threading",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.UI.Composition.Core.CompositorController","TrustLevel",0x00010001,0
 
 ;-------------------------------- STRINGS -------------------------------
 
