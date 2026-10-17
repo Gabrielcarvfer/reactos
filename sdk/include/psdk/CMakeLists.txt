@@ -157,6 +157,7 @@ list(APPEND SOURCE
     restrictederrorinfo.idl
     richole.idl
     robuffer.idl
+    rometadataapi.idl
     roparameterizediid.idl
 #   row.idl
 #   rowchg.idl
