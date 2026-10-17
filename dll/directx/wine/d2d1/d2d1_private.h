@@ -212,6 +212,7 @@ struct d2d_device_context
             [D2D_SAMPLER_EXTEND_MODE_COUNT];
 
     struct d2d_error_state error;
+    BOOL is_drawing; /* between BeginDraw and EndDraw */
     D2D1_DRAWING_STATE_DESCRIPTION1 drawing_state;
     IDWriteRenderingParams *text_rendering_params;
     IDWriteRenderingParams *default_text_rendering_params;

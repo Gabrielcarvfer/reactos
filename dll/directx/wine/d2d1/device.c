@@ -1743,12 +1743,26 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_Flush(ID2D1DeviceContext6 *i
 {
     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
 
-    FIXME("iface %p, tag1 %p, tag2 %p stub!\n", iface, tag1, tag2);
+    HRESULT hr;
+
+    TRACE("iface %p, tag1 %p, tag2 %p.\n", iface, tag1, tag2);
+
+    /* Programs call Flush to find out whether a BeginDraw is pending */
+    if (!context->is_drawing)
+        return D2DERR_WRONG_STATE;
 
     if (context->ops && context->ops->device_context_present)
-        context->ops->device_context_present(context->outer_unknown);
+    {
+        if (FAILED(hr = context->ops->device_context_present(context->outer_unknown)))
+            context->error.code = hr;
+    }
 
-    return E_NOTIMPL;
+    if (tag1)
+        *tag1 = context->error.tag1;
+    if (tag2)
+        *tag2 = context->error.tag2;
+
+    return context->error.code;
 }
 
 static void STDMETHODCALLTYPE d2d_device_context_SaveDrawingState(ID2D1DeviceContext6 *iface,
@@ -1933,6 +1947,7 @@ static void STDMETHODCALLTYPE d2d_device_context_BeginDraw(ID2D1DeviceContext6 *
         d2d_command_list_begin_draw(context->target.command_list, context);
 
     memset(&context->error, 0, sizeof(context->error));
+    context->is_drawing = TRUE;
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_device_context_EndDraw(ID2D1DeviceContext6 *iface,
@@ -1942,6 +1957,8 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_EndDraw(ID2D1DeviceContext6 
     HRESULT hr;
 
     TRACE("iface %p, tag1 %p, tag2 %p.\n", iface, tag1, tag2);
+
+    context->is_drawing = FALSE;
 
     if (context->target.type == D2D_TARGET_COMMAND_LIST)
     {
