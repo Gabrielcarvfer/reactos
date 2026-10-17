@@ -18,6 +18,7 @@ extern void func_open_osfhandle(void);
 extern void func_recv(void);
 extern void func_send(void);
 extern void func_SkipCompletionPort(void);
+extern void func_SocketNames(void);
 extern void func_TcpConnect(void);
 extern void func_WSAAsync(void);
 extern void func_WSAIoctl(void);
@@ -42,6 +43,7 @@ const struct test winetest_testlist[] =
     { "recv", func_recv },
     { "send", func_send },
     { "SkipCompletionPort", func_SkipCompletionPort },
+    { "SocketNames", func_SocketNames },
     { "TcpConnect", func_TcpConnect },
     { "WSAAsync", func_WSAAsync },
     { "WSAIoctl", func_WSAIoctl },

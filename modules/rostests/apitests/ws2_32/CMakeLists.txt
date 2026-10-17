@@ -17,6 +17,7 @@ list(APPEND SOURCE
     recv.c
     send.c
     SkipCompletionPort.c
+    SocketNames.c
     TcpConnect.c
     WSAAsync.c
     WSAIoctl.c
