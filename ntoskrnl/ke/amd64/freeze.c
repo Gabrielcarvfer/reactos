@@ -37,6 +37,10 @@
 
 PKPRCB KiFreezeOwner;
 
+/* Freezes the owner took again while frozen (a debug event inside the
+   debugger, e.g. a debug print): their thaws must not thaw everything */
+static ULONG KiFreezeDepth;
+
 /* The processors the current freeze owner froze (an application processor
    that is still initializing is not active and takes no NMI) */
 static KAFFINITY KiFreezeTargets;
@@ -115,6 +119,7 @@ KxFreezeExecution(
     /* Avoid blocking on recursive debug action */
     if (KiFreezeOwner == CurrentPrcb)
     {
+        KiFreezeDepth++;
         return;
     }
 
@@ -178,6 +183,14 @@ KxThawExecution(
     VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
+
+    /* The thaw of a recursive freeze: the outer one still holds the others */
+    if (KiFreezeDepth > 0)
+    {
+        KiFreezeDepth--;
+        return;
+    }
+
     ASSERT(CurrentPrcb->IpiFrozen & IPI_FROZEN_FLAG_ACTIVE);
 
     /* Loop all processors */
