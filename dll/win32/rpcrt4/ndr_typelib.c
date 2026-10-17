@@ -184,6 +184,8 @@ static unsigned int type_memsize(ITypeInfo *typeinfo, TYPEDESC *desc, unsigned i
     case VT_PTR:
     case VT_UNKNOWN:
     case VT_DISPATCH:
+    case VT_LPSTR:
+    case VT_LPWSTR:
         size = align = sizeof(void *);
         break;
     case VT_VARIANT:
@@ -777,7 +779,8 @@ static size_t write_pointer_tfs(ITypeInfo *typeinfo, unsigned char *str,
         ref = write_type_tfs(typeinfo, str, len, desc, FALSE, FALSE);
 
         if (onstack) flags |= FC_ALLOCED_ON_STACK;
-        if (desc->vt == VT_PTR || desc->vt == VT_UNKNOWN || desc->vt == VT_DISPATCH)
+        if (desc->vt == VT_PTR || desc->vt == VT_UNKNOWN || desc->vt == VT_DISPATCH ||
+            desc->vt == VT_LPSTR || desc->vt == VT_LPWSTR)
             flags |= FC_POINTER_DEREF;
 
         off = *len;
@@ -809,6 +812,16 @@ static size_t write_type_tfs(ITypeInfo *typeinfo, unsigned char *str,
         return write_pointer_tfs(typeinfo, str, len, desc->lptdesc, toplevel, onstack);
     case VT_CARRAY:
         return write_array_tfs(typeinfo, str, len, desc->lpadesc);
+    case VT_LPSTR:
+    case VT_LPWSTR:
+        /* A string: a unique pointer to a conformant string, as MIDL
+         * generates for a [string] pointer (Google's updater interfaces) */
+        off = *len;
+        WRITE_CHAR(str, *len, FC_UP);
+        WRITE_CHAR(str, *len, FC_SIMPLE_POINTER);
+        WRITE_CHAR(str, *len, desc->vt == VT_LPWSTR ? FC_C_WSTRING : FC_C_CSTRING);
+        WRITE_CHAR(str, *len, FC_PAD);
+        return off;
     case VT_USERDEFINED:
         ITypeInfo_GetRefTypeInfo(typeinfo, desc->hreftype, &refinfo);
         ITypeInfo_GetTypeAttr(refinfo, &attr);
@@ -1019,6 +1032,8 @@ static HRESULT get_param_info(ITypeInfo *typeinfo, TYPEDESC *tdesc, int is_in,
     case VT_UNKNOWN:
     case VT_DISPATCH:
     case VT_CARRAY:
+    case VT_LPSTR:
+    case VT_LPWSTR:
         *flags |= MustFree;
         break;
     case VT_PTR:
