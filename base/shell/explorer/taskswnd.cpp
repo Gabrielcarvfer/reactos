@@ -1483,6 +1483,12 @@ public:
             tbm.cxPad = 7;
             tbm.cyPad = 6;
             m_TaskBar.SendMessageW(TB_SETMETRICS, 0, (LPARAM)&tbm);
+            /* and its default button size: the square Eleven tiles' size stayed,
+             * and the band (and the classic taskbar) stayed two rows tall. Again
+             * once every window has seen the theme change: the toolbar computes
+             * that size with its theme margins, which it updates after us */
+            m_TaskBar.SendMessageW(TB_SETBUTTONSIZE, 0, MAKELONG(0, 0));
+            PostMessageW(TSWM_RESETBUTTONSIZE, 0, 0);
             m_cyLastButton = 0;
         }
         else
@@ -2043,6 +2049,11 @@ public:
             }
             m_TaskBar.SetImageList(m_ImageList);
 
+            /* Text buttons: their default size again, now that the icons have
+             * their new size (the Eleven icons kept them, and the taskbar, tall) */
+            if (!IsIconOnly())
+                m_TaskBar.SendMessageW(TB_SETBUTTONSIZE, 0, MAKELONG(0, 0));
+
             /* The pinned buttons too */
             RebuildPinBar();
         }
@@ -2195,6 +2206,18 @@ public:
         TRACE("Refreshing window list...\n");
         /* Add all windows to the toolbar */
         return EnumWindows(s_EnumWindowsProc, (LPARAM)this);
+    }
+
+    LRESULT OnResetButtonSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (!IsIconOnly() && m_TaskBar.m_hWnd)
+        {
+            m_TaskBar.SendMessageW(TB_SETBUTTONSIZE, 0, MAKELONG(0, 0));
+            UpdateButtonsSize(FALSE);
+            /* the band height follows the buttons */
+            ::PostMessageW(GetAncestor(m_hWnd, GA_ROOT), TWM_REALIGNCONTROLS, 2, 0);
+        }
+        return 0;
     }
 
     LRESULT OnThemeChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
@@ -3116,6 +3139,7 @@ public:
         MESSAGE_HANDLER(TSWM_UPDATETASKBARPOS, OnUpdateTaskbarPos)
         MESSAGE_HANDLER(TSWM_ACTIVATETASKINDEX, OnActivateTaskIndex)
         MESSAGE_HANDLER(TSWM_GETCONTENTWIDTH, OnGetContentWidth)
+        MESSAGE_HANDLER(TSWM_RESETBUTTONSIZE, OnResetButtonSize)
         MESSAGE_HANDLER(TWM_SETTINGSCHANGED, OnTaskbarSettingsChanged)
         MESSAGE_HANDLER(WM_CONTEXTMENU, OnContextMenu)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)

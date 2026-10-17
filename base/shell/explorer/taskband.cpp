@@ -106,6 +106,18 @@ public:
         {
             HWND hwndToolbar = ::GetWindow(m_hWnd, GW_CHILD);
 
+            /* The task buttons, not the pinned apps bar: that one is hidden outside
+             * the Eleven look but keeps its 48-pixel tiles, and when it came first
+             * the classic taskbar stayed two rows tall */
+            for (HWND hwnd = hwndToolbar; hwnd; hwnd = ::GetWindow(hwnd, GW_HWNDNEXT))
+            {
+                if (::IsWindowVisible(hwnd))
+                {
+                    hwndToolbar = hwnd;
+                    break;
+                }
+            }
+
             /* The task band never has a title */
             pdbi->dwMask &= ~DBIM_TITLE;
 

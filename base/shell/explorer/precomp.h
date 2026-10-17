@@ -419,6 +419,7 @@ HRESULT CSysPagerWnd_CreateInstance(HWND hwndParent, REFIID riid, void **ppv);
 #define TSWM_UPDATETASKBARPOS   (WM_USER + 2)
 #define TSWM_ACTIVATETASKINDEX  (WM_USER + 88)
 #define TSWM_GETCONTENTWIDTH    (WM_USER + 89) /* pinned + task buttons width, for centering */
+#define TSWM_RESETBUTTONSIZE    (WM_USER + 90) /* text buttons: back to their default size */
 
 HRESULT CTaskSwitchWnd_CreateInstance(IN HWND hWndParent, IN OUT ITrayWindow *Tray, REFIID riid, void **ppv);
 

@@ -1909,6 +1909,10 @@ ChangePos:
             StartSize.cx = rcClient.right;
 
         HWND hwndTaskToolbar = ::GetWindow(m_TaskSwitch, GW_CHILD);
+        /* The task buttons: skip the pinned apps bar, hidden outside the Eleven
+         * look but with 48-pixel tiles (the classic Start button got that tall) */
+        while (hwndTaskToolbar && !::IsWindowVisible(hwndTaskToolbar))
+            hwndTaskToolbar = ::GetWindow(hwndTaskToolbar, GW_HWNDNEXT);
         if (hwndTaskToolbar)
         {
             DWORD size = SendMessageW(hwndTaskToolbar, TB_GETBUTTONSIZE, 0, 0);
@@ -1925,7 +1929,7 @@ ChangePos:
         }
 
         /* Never taller than the taskbar, so nothing gets cut off */
-        if (bEleven && Horizontal && StartSize.cy > rcClient.bottom)
+        if (Horizontal && StartSize.cy > rcClient.bottom)
             StartSize.cy = rcClient.bottom;
 
         /* Determine the size that the tray notification window needs */
@@ -2743,6 +2747,13 @@ ChangePos:
             UpdateFonts();
             AlignControls(NULL);
             CheckTrayWndPosition();
+
+            /* New sizes (caption height...) change the Start button and the
+             * taskbar height too. Display settings switch to classic in two
+             * steps, the theme first and then the classic sizes: without this
+             * the bar kept the taller Eleven caption height (two rows) */
+            if (m_Rebar)
+                PostMessage(TWM_REALIGNCONTROLS, 2, 0);
         }
 
         // Note: We rely on CDesktopBrowser to get this message and call SHSettingsChanged
@@ -3666,6 +3677,18 @@ HandleTrayContextMenu:
         {
             m_StartButton.UpdateSize();
             RegLoadSettings();
+
+            /* Shrink to the new look's one-row size before fitting to the rebar: the
+             * task buttons count their rows from their current height, and the taller
+             * Eleven bar holds two rows of classic buttons (Eleven -> classic stayed
+             * two rows high) */
+            if (IsPosHorizontal())
+            {
+                RECT rc = m_TrayRects[m_Position];
+                SetWindowPos(NULL, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+                AlignControls(NULL);
+            }
         }
 
         /* wParam = 1: the task buttons changed size, the band height must follow */
