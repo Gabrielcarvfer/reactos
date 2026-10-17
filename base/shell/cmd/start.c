@@ -248,7 +248,13 @@ INT cmd_start (LPTSTR Rest)
         else
         {
             TRACE ("[EXEC: %s %s]\n", debugstr_aw(szFullName), debugstr_aw(Rest));
-            _tcscpy(szFullCmdLine, szFullName);
+            /* Quote the program path if it has spaces (as cmd.c does): the
+               program parses its own command line (CommandLineToArgvW), and
+               "C:\Program Files\X\x.exe" must stay its argv[0] */
+            if (_tcschr(szFullName, _T(' ')))
+                _stprintf(szFullCmdLine, _T("\"%s\""), szFullName);
+            else
+                _tcscpy(szFullCmdLine, szFullName);
         }
 
         /* build command line for CreateProcess() */
