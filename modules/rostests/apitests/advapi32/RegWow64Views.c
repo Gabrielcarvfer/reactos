@@ -125,6 +125,32 @@ static void TestViews(void)
             ok(!wcscmp(Buffer, L"64"), "Relative to HKLM\\Software (64-bit view): '%ls'\n", Buffer);
             RegCloseKey(Key);
         }
+
+        /* Below Software, a key keeps the view it was opened in: its subkeys
+         * are opened and created there without a flag (TeamViewer's
+         * installer: SOFTWARE\TVInstallTemp, then RestoreInfo) */
+        if (!RegOpenKeyExW(HKEY_LOCAL_MACHINE, TEST_KEY, 0, KEY_ALL_ACCESS | KEY_WOW64_64KEY, &Key))
+        {
+            HKEY Sub;
+
+            ReadString(Key, L"Sub", 0, L"Bits", Buffer, sizeof(Buffer));
+            ok(!wcscmp(Buffer, L"64"), "Relative to a 64-bit view key: '%ls'\n", Buffer);
+            Ret = RegCreateKeyExW(Key, L"Rel64", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &Sub, NULL);
+            ok(Ret == ERROR_SUCCESS, "Creating a subkey of a 64-bit view key: %ld\n", Ret);
+            if (!Ret) RegCloseKey(Sub);
+            ok(KeyExists(HKEY_LOCAL_MACHINE, TEST_KEY L"\\Rel64", KEY_WOW64_64KEY),
+               "The subkey is not in the 64-bit view\n");
+            ok(!KeyExists(HKEY_LOCAL_MACHINE, TEST_KEY L"\\Rel64", KEY_WOW64_32KEY),
+               "The subkey went to the 32-bit view\n");
+            RegDeleteKeyExW(HKEY_LOCAL_MACHINE, TEST_KEY L"\\Rel64", KEY_WOW64_64KEY, 0);
+            RegCloseKey(Key);
+        }
+        if (!RegOpenKeyExW(HKEY_LOCAL_MACHINE, TEST_KEY, 0, KEY_READ | KEY_WOW64_32KEY, &Key))
+        {
+            ReadString(Key, L"Sub", 0, L"Bits", Buffer, sizeof(Buffer));
+            ok(!wcscmp(Buffer, L"32"), "Relative to a 32-bit view key: '%ls'\n", Buffer);
+            RegCloseKey(Key);
+        }
     }
 
     DeleteTree(HKEY_LOCAL_MACHINE, TEST_KEY, KEY_WOW64_32KEY);
