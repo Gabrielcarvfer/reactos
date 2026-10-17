@@ -114,6 +114,12 @@ KiUserCallbackExit:
     /* Load user mode stack (It was copied to the trap frame) */
     mov rsp, [rsp + KTRAP_FRAME_Rsp]
 
+    /* Load a valid SS: AMD's SYSRET keeps a NULL SS's unusable cached
+       descriptor, which breaks 32-bit (WOW64) code (see KiSystemCallEntry64) */
+    mov edx, KGDT64_R0_DATA
+    mov ss, dx
+    xor edx, edx
+
     /* Swap gs back to user */
     swapgs
 

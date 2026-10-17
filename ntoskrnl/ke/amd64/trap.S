@@ -966,6 +966,14 @@ NoUserApcPending:
     /* r9 matches rbp */
     mov r9, rbp
 
+    /* Load a valid SS. AMD CPUs' SYSRET sets the SS selector but leaves its
+       cached descriptor alone: if SS is NULL here (an interrupt in kernel mode
+       loads a NULL SS, and a context switch carries it over), 32-bit (WOW64)
+       code gets an unusable SS and its next push/ret raises #SS. 64-bit code
+       ignores SS. (Linux: X86_BUG_SYSRET_SS_ATTRS.) rdx is zeroed below. */
+    mov edx, KGDT64_R0_DATA
+    mov ss, dx
+
     /* Swap gs back to user */
     swapgs
 
