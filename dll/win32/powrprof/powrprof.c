@@ -791,6 +791,53 @@ DWORD WINAPI PowerUnregisterSuspendResumeNotification(HPOWERNOTIFY handle)
     return ERROR_SUCCESS;
 }
 
+/* The effective power mode (Windows 10 1809): the Windows App SDK
+ * (Microsoft.WindowsAppRuntime.dll, PowerToys) registers for it. ReactOS has
+ * no power modes: the callback gets "balanced" once, at registration, as
+ * Windows calls it with the current mode. */
+typedef enum EFFECTIVE_POWER_MODE
+{
+    EffectivePowerModeBatterySaver,
+    EffectivePowerModeBetterBattery,
+    EffectivePowerModeBalanced,
+    EffectivePowerModeHighPerformance,
+    EffectivePowerModeMaxPerformance,
+    EffectivePowerModeGameMode,
+    EffectivePowerModeMixedReality,
+} EFFECTIVE_POWER_MODE;
+
+typedef VOID WINAPI EFFECTIVE_POWER_MODE_CALLBACK(EFFECTIVE_POWER_MODE Mode, VOID *Context);
+
+#define EFFECTIVE_POWER_MODE_V1 0x00000001
+#define EFFECTIVE_POWER_MODE_V2 0x00000002
+
+HRESULT WINAPI PowerRegisterForEffectivePowerModeNotifications(ULONG Version, EFFECTIVE_POWER_MODE_CALLBACK *Callback,
+                                                              VOID *Context, VOID **RegistrationHandle)
+{
+    TRACE("(%lu,%p,%p,%p)\n", Version, Callback, Context, RegistrationHandle);
+
+    if ((Version != EFFECTIVE_POWER_MODE_V1 && Version != EFFECTIVE_POWER_MODE_V2) || !Callback || !RegistrationHandle)
+        return E_INVALIDARG;
+
+    /* (a handle to nothing: there is nothing to stop) */
+    *RegistrationHandle = HeapAlloc(GetProcessHeap(), 0, 1);
+    if (!*RegistrationHandle)
+        return E_OUTOFMEMORY;
+
+    Callback(EffectivePowerModeBalanced, Context);
+    return S_OK;
+}
+
+HRESULT WINAPI PowerUnregisterFromEffectivePowerModeNotifications(VOID *RegistrationHandle)
+{
+    TRACE("(%p)\n", RegistrationHandle);
+
+    if (!RegistrationHandle)
+        return E_INVALIDARG;
+    HeapFree(GetProcessHeap(), 0, RegistrationHandle);
+    return S_OK;
+}
+
 DWORD WINAPI PowerSettingRegisterNotification(const GUID *setting, DWORD flags, HANDLE recipient, PHPOWERNOTIFY handle)
 {
     FIXME("(%s,0x%08lx,%p,%p) stub!\n", debugstr_guid(setting), flags, recipient, handle);
