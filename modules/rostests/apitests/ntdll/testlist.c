@@ -148,6 +148,7 @@ extern void func_RtlUnwindEx(void);
 extern void func_SetContextInSyscall(void);
 extern void func_SyscallReturn(void);
 extern void func_x87Exception(void);
+extern void func_FpuContext(void);
 extern void func_TimerResolution(void);
 extern void func_UserModeException(void);
 
@@ -296,6 +297,7 @@ const struct test winetest_testlist[] =
     { "SetContextInSyscall",            func_SetContextInSyscall },
     { "SyscallReturn",                  func_SyscallReturn },
     { "x87Exception",                   func_x87Exception },
+    { "FpuContext",                     func_FpuContext },
     { "TimerResolution",                func_TimerResolution },
     { "UserModeException",              func_UserModeException },
 #ifdef _M_IX86

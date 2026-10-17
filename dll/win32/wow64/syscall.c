@@ -301,6 +301,13 @@ static void call_user_exception_dispatcher( EXCEPTION_RECORD32 *rec, void *ctx32
             ctx.Esp = PtrToUlong( stack );
             ctx.Eip = pLdrSystemDllInitBlock->pKiUserExceptionDispatcher;
             ctx.EFlags &= ~(0x100|0x400|0x40000);
+#ifdef __REACTOS__
+            /* The dispatcher runs with the FPU of the faulting code (the
+               handler continues with the context's), but without a pending
+               x87 exception: its next x87 instruction would raise it again */
+            ctx.FloatSave.StatusWord &= ~0x80ff;
+            *(USHORT *)&ctx.ExtendedRegisters[2] &= ~0x80ff;
+#endif
             pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
 
             TRACE( "exception %08lx dispatcher %08lx stack %08lx eip %08lx\n",

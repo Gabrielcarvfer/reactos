@@ -268,6 +268,23 @@ __ASM_GLOBAL_FUNC( syscall_32to64,
                    "1:\n\t"
 
                    "syscall_32to64_return:\n\t"
+#ifdef __REACTOS__
+                   /* A context set with its floating point state (exception
+                      dispatch, NtContinue, SetThreadContext): load it. The
+                      64-bit side's xmm8-15 stay as they are. */
+                   "btrl $1,-4(%r13)\n\t"       /* cpu->Flags & WOW64_CPURESERVED_FLAG_RESTORE_FPU */
+                   "jnc 2f\n\t"
+                   "movups %xmm8,0x1ec(%r13)\n\t" /* context->ExtendedRegisters + 0x120 */
+                   "movups %xmm9,0x1fc(%r13)\n\t"
+                   "movups %xmm10,0x20c(%r13)\n\t"
+                   "movups %xmm11,0x21c(%r13)\n\t"
+                   "movups %xmm12,0x22c(%r13)\n\t"
+                   "movups %xmm13,0x23c(%r13)\n\t"
+                   "movups %xmm14,0x24c(%r13)\n\t"
+                   "movups %xmm15,0x25c(%r13)\n\t"
+                   "fxrstor 0xcc(%r13)\n"         /* context->ExtendedRegisters */
+                   "2:\n\t"
+#endif
                    "movl 0x9c(%r13),%edi\n\t"   /* context->Edi */
                    "movl 0xa0(%r13),%esi\n\t"   /* context->Esi */
                    "movl 0xa4(%r13),%ebx\n\t"   /* context->Ebx */

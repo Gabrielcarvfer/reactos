@@ -159,6 +159,7 @@ list(APPEND SOURCE
     SetContextInSyscall.c
     SyscallReturn.c
     x87Exception.c
+    FpuContext.c
     SystemInfo.c
     UserModeException.c
     Timer.c
