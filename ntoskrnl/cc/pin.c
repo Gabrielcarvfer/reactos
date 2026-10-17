@@ -56,7 +56,10 @@ CcpFindBcb(
             (Bcb->PFCB.MappedFileOffset.QuadPart + Bcb->PFCB.MappedLength) >=
             (FileOffset->QuadPart + Length))
         {
-            if ((Pinned && Bcb->PinCount > 0) || (!Pinned && Bcb->PinCount == 0))
+            /* A BCB is either pinned or mapped for all its life: deciding by
+               its pin count raced with pins in progress on other processors,
+               and CcUnpinData then released a pin its caller never took */
+            if (Bcb->Pinned == Pinned)
             {
                 Found = TRUE;
                 break;
@@ -131,6 +134,7 @@ CcpGetAppropriateBcb(
     iBcb->PFCB.MappedFileOffset = *FileOffset;
     iBcb->Vacb = Vacb;
     iBcb->PinCount = 0;
+    iBcb->Pinned = ToPin;
     iBcb->RefCount = 1;
     ExInitializeResourceLite(&iBcb->Lock);
 
@@ -148,18 +152,22 @@ CcpGetAppropriateBcb(
 
         if (ToPin)
         {
+            /* Pin the BCB we return, not our own (about to be deleted): the
+               caller's CcUnpinData releases the winner's lock, which it then
+               didn't hold - another pinner's ownership went away with it and
+               two threads changed the same FAT page at once */
             if (BooleanFlagOn(PinFlags, PIN_EXCLUSIVE))
             {
-                Result = ExAcquireResourceExclusiveLite(&iBcb->Lock, BooleanFlagOn(PinFlags, PIN_WAIT));
+                Result = ExAcquireResourceExclusiveLite(&DupBcb->Lock, BooleanFlagOn(PinFlags, PIN_WAIT));
             }
             else
             {
-                Result = ExAcquireSharedStarveExclusive(&iBcb->Lock, BooleanFlagOn(PinFlags, PIN_WAIT));
+                Result = ExAcquireSharedStarveExclusive(&DupBcb->Lock, BooleanFlagOn(PinFlags, PIN_WAIT));
             }
 
             if (Result)
             {
-                DupBcb->PinCount++;
+                InterlockedIncrement(&DupBcb->PinCount);
             }
             else
             {
@@ -186,7 +194,7 @@ CcpGetAppropriateBcb(
     {
         if (ToPin)
         {
-            iBcb->PinCount++;
+            InterlockedIncrement(&iBcb->PinCount);
 
             if (BooleanFlagOn(PinFlags, PIN_EXCLUSIVE))
             {
@@ -253,7 +261,7 @@ CcpPinData(
             return FALSE;
         }
 
-        NewBcb->PinCount++;
+        InterlockedIncrement(&NewBcb->PinCount);
     }
     else
     {
@@ -592,10 +600,11 @@ CcUnpinDataForThread (
 
     CCTRACE(CC_API_DEBUG, "Bcb=%p ResourceThreadId=%lu\n", Bcb, ResourceThreadId);
 
-    if (iBcb->PinCount != 0)
+    if (iBcb->Pinned)
     {
+        ASSERT(iBcb->PinCount > 0);
+        InterlockedDecrement(&iBcb->PinCount);
         ExReleaseResourceForThreadLite(&iBcb->Lock, ResourceThreadId);
-        iBcb->PinCount--;
     }
 
     CcpDereferenceBcb(iBcb->Vacb->SharedCacheMap, iBcb);
@@ -610,10 +619,14 @@ CcRepinBcb (
     IN	PVOID Bcb)
 {
     PINTERNAL_BCB iBcb = CONTAINING_RECORD(Bcb, INTERNAL_BCB, PFCB);
+    KIRQL OldIrql;
 
     CCTRACE(CC_API_DEBUG, "Bcb=%p\n", Bcb);
 
+    /* Under the lock CcpDereferenceBcb takes on another processor */
+    KeAcquireSpinLock(&iBcb->Vacb->SharedCacheMap->BcbSpinLock, &OldIrql);
     iBcb->RefCount++;
+    KeReleaseSpinLock(&iBcb->Vacb->SharedCacheMap->BcbSpinLock, OldIrql);
 }
 
 /*
@@ -656,8 +669,8 @@ CcUnpinRepinnedBcb (
 
         if (iBcb->PinCount != 0)
         {
+            InterlockedDecrement(&iBcb->PinCount);
             ExReleaseResourceLite(&iBcb->Lock);
-            iBcb->PinCount--;
             ASSERT(iBcb->PinCount == 0);
         }
 

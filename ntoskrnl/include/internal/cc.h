@@ -234,8 +234,9 @@ typedef struct _INTERNAL_BCB
     ERESOURCE Lock;
     PUBLIC_BCB PFCB;
     PROS_VACB Vacb;
-    ULONG PinCount;
+    volatile LONG PinCount;
     CSHORT RefCount; /* (At offset 0x34 on WinNT4) */
+    BOOLEAN Pinned; /* Made by a pin (each reference holds Lock), not by CcMapData */
     LIST_ENTRY BcbEntry;
 } INTERNAL_BCB, *PINTERNAL_BCB;
 
