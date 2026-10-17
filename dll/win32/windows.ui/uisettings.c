@@ -36,6 +36,7 @@ static const GUID IID_IUISettings  = {0x85361600, 0x1c63, 0x4627, {0xbc, 0xb1, 0
 static const GUID IID_IUISettings2 = {0xbad82401, 0x2721, 0x44f9, {0xbb, 0x91, 0x2b, 0xb2, 0x28, 0xbe, 0x44, 0x2f}};
 static const GUID IID_IUISettings3 = {0x03021be4, 0x5254, 0x4781, {0x81, 0x94, 0x51, 0x68, 0xf7, 0xd0, 0x6d, 0x7b}};
 static const GUID IID_IUISettings4 = {0x52bb3002, 0x919b, 0x4d6b, {0x9b, 0x78, 0x8d, 0xd6, 0x6f, 0xf4, 0xb9, 0x3b}};
+static const GUID IID_IUISettings5 = {0x5349d588, 0x0cb5, 0x5f05, {0xbd, 0x34, 0x70, 0x6b, 0x32, 0x31, 0xf0, 0xbd}};
 
 typedef struct { INT64 value; } EventRegistrationToken;
 typedef struct { FLOAT Width, Height; } WinRTSize;
@@ -57,14 +58,20 @@ typedef struct
     IInspectable IUISettings2_iface;
     IInspectable IUISettings3_iface;
     IInspectable IUISettings4_iface;
+    IInspectable IUISettings5_iface;
     LONG refs;
 } UISettings;
 
-/* The four interfaces derive from IInspectable; one implementation of
- * IInspectable serves them all, with the object found from each */
+/* The five interfaces derive from IInspectable; one implementation of
+ * IInspectable serves them all, with the object found from each.
+ * (The parentheses matter: the CONTAINING_RECORD of the SDK casts its
+ * address argument without them, so "iface - index" became "(ULONG_PTR)iface
+ * - index", index bytes instead of index interfaces. AddRef and Release
+ * through IUISettings2/3/4 then changed memory past the object: Firefox
+ * crashed on it with page heap, and corrupted the heap without.) */
 static UISettings *impl_from(IInspectable *iface, int index)
 {
-    return CONTAINING_RECORD(iface - index, UISettings, IUISettings_iface);
+    return CONTAINING_RECORD((iface - index), UISettings, IUISettings_iface);
 }
 
 static HRESULT query_interface(UISettings *This, REFIID riid, void **out)
@@ -78,6 +85,8 @@ static HRESULT query_interface(UISettings *This, REFIID riid, void **out)
         *out = &This->IUISettings3_iface;
     else if (IsEqualGUID(riid, &IID_IUISettings4))
         *out = &This->IUISettings4_iface;
+    else if (IsEqualGUID(riid, &IID_IUISettings5))
+        *out = &This->IUISettings5_iface;
     else
     {
         TRACE("no interface %s\n", debugstr_guid(riid));
@@ -97,13 +106,14 @@ static ULONG release(UISettings *This)
 
 static HRESULT get_iids(ULONG *count, IID **iids)
 {
-    IID *list = CoTaskMemAlloc(4 * sizeof(IID));
+    IID *list = CoTaskMemAlloc(5 * sizeof(IID));
     if (!list) return E_OUTOFMEMORY;
     list[0] = IID_IUISettings;
     list[1] = IID_IUISettings2;
     list[2] = IID_IUISettings3;
     list[3] = IID_IUISettings4;
-    *count = 4;
+    list[4] = IID_IUISettings5;
+    *count = 5;
     *iids = list;
     return S_OK;
 }
@@ -126,6 +136,7 @@ INSPECTABLE_METHODS(settings, 0)
 INSPECTABLE_METHODS(settings2, 1)
 INSPECTABLE_METHODS(settings3, 2)
 INSPECTABLE_METHODS(settings4, 3)
+INSPECTABLE_METHODS(settings5, 4)
 
 /* Events: nothing changes these settings while a program runs here, so the
  * handlers are accepted and never called */
@@ -314,6 +325,16 @@ static HRESULT WINAPI settings4_get_AdvancedEffectsEnabled(IInspectable *iface, 
     return S_OK;
 }
 
+/* IUISettings5 (Windows 10 2004): the scroll bars of Windows 11 that hide
+ * themselves; those here always show */
+
+static HRESULT WINAPI settings5_get_AutoHideScrollBars(IInspectable *iface, boolean *value)
+{
+    if (!value) return E_POINTER;
+    *value = FALSE;
+    return S_OK;
+}
+
 #define INSPECTABLE_VTBL(prefix) \
     prefix##_QueryInterface, prefix##_AddRef, prefix##_Release, \
     prefix##_GetIids, prefix##_GetRuntimeClassName, prefix##_GetTrustLevel
@@ -357,6 +378,14 @@ static const void *settings4_vtbl[] =
     INSPECTABLE_VTBL(settings4),
     settings4_get_AdvancedEffectsEnabled,
     add_event,      /* add_AdvancedEffectsEnabledChanged */
+    remove_event,
+};
+
+static const void *settings5_vtbl[] =
+{
+    INSPECTABLE_VTBL(settings5),
+    settings5_get_AutoHideScrollBars,
+    add_event,      /* add_AutoHideScrollBarsChanged */
     remove_event,
 };
 
@@ -413,6 +442,7 @@ static HRESULT WINAPI factory_ActivateInstance(IActivationFactory *iface, IInspe
     settings->IUISettings2_iface.lpVtbl = (void *)settings2_vtbl;
     settings->IUISettings3_iface.lpVtbl = (void *)settings3_vtbl;
     settings->IUISettings4_iface.lpVtbl = (void *)settings4_vtbl;
+    settings->IUISettings5_iface.lpVtbl = (void *)settings5_vtbl;
     settings->refs = 1;
     *instance = &settings->IUISettings_iface;
     return S_OK;
