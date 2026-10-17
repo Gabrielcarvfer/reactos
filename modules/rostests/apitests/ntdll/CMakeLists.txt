@@ -154,6 +154,7 @@ list(APPEND SOURCE
     RtlxUnicodeStringToOemSize.c
     StackOverflow.c
     SyscallReturn.c
+    x87Exception.c
     SystemInfo.c
     UserModeException.c
     Timer.c
