@@ -118,6 +118,11 @@ __seh2$$begin_try__:                                                            
      * keeps it from moving memory accesses out of the tried range, where           \
      * our handler would not see the exception. */                                  \
     __asm__ __volatile__("" ::: "memory");                                          \
+    /* Keep the end of the tried code reachable for GCC, even when the tried        \
+     * code never falls through (it raises, calls a noreturn function or loops      \
+     * forever): else GCC drops the code after it, with the asm that defines        \
+     * the scope labels the unwind data refers to (undefined references). */       \
+    __asm__ __volatile__ goto("" : : : "memory" : __seh2$$end_try__);               \
     {                                                                               \
         __label__ __seh2$$leave_scope__;
 
