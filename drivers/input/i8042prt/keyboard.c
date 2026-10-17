@@ -69,7 +69,8 @@ i8042KbdQueuePacket(
 
 	DeviceExtension->KeyComplete = TRUE;
 	DeviceExtension->KeysInBuffer++;
-	if (DeviceExtension->KeysInBuffer > DeviceExtension->Common.PortDeviceExtension->Settings.KeyboardDataQueueSize)
+	/* (the ISR writes the next key at KeysInBuffer: keep it inside the buffer) */
+	if (DeviceExtension->KeysInBuffer >= DeviceExtension->Common.PortDeviceExtension->Settings.KeyboardDataQueueSize)
 	{
 		WARN_(I8042PRT, "Keyboard buffer overflow\n");
 		DeviceExtension->KeysInBuffer--;
@@ -374,6 +375,16 @@ i8042KbdDpcRoutine(
 
 	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
 	DeviceExtension->KeysInBuffer -= KeysTransferred;
+	/* Keep what was not taken, and what the ISR added during the callback,
+	 * at the start of the buffer: the ISR appends at KeysInBuffer and the next
+	 * DPC sends from the start. (Without this, keys pressed while the class
+	 * driver was being called were overwritten, and already sent ones were
+	 * sent again: lost key-ups left Shift stuck under load.) */
+	if (DeviceExtension->KeysInBuffer)
+		RtlMoveMemory(
+			DeviceExtension->KeyboardBuffer,
+			DeviceExtension->KeyboardBuffer + KeysTransferred,
+			DeviceExtension->KeysInBuffer * sizeof(KEYBOARD_INPUT_DATA));
 	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
 }
 
