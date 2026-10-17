@@ -23,6 +23,7 @@ list(APPEND SOURCE
     memallocator.c
     parser.c
     passthrough.c
+    splitter.c
     systemclock.c
     videorenderer.c
     vmr7.c

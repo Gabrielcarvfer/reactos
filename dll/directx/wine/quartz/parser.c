@@ -18,6 +18,28 @@
 
 #include "quartz_private.h"
 
+#ifdef __REACTOS__
+/* ReactOS has no winegstreamer: use the native parsers in splitter.c. */
+HRESULT native_avi_splitter_create(IUnknown *outer, IUnknown **out);
+HRESULT native_mpeg1_splitter_create(IUnknown *outer, IUnknown **out);
+HRESULT native_wave_parser_create(IUnknown *outer, IUnknown **out);
+
+HRESULT avi_splitter_create(IUnknown *outer, IUnknown **out)
+{
+    return native_avi_splitter_create(outer, out);
+}
+
+HRESULT mpeg1_splitter_create(IUnknown *outer, IUnknown **out)
+{
+    return native_mpeg1_splitter_create(outer, out);
+}
+
+HRESULT wave_parser_create(IUnknown *outer, IUnknown **out)
+{
+    return native_wave_parser_create(outer, out);
+}
+#else
+
 HRESULT avi_splitter_create(IUnknown *outer, IUnknown **out)
 {
     static const GUID CLSID_wg_avi_splitter = {0x272bfbfb,0x50d0,0x4078,{0xb6,0x00,0x1e,0x95,0x9c,0x30,0x13,0x37}};
@@ -35,3 +57,4 @@ HRESULT wave_parser_create(IUnknown *outer, IUnknown **out)
     static const GUID CLSID_wg_wave_parser = {0x3f839ec7,0x5ea6,0x49e1,{0x80,0xc2,0x1e,0xa3,0x00,0xf8,0xb0,0xe0}};
     return CoCreateInstance(&CLSID_wg_wave_parser, outer, CLSCTX_INPROC_SERVER, &IID_IUnknown, (void **)out);
 }
+#endif /* __REACTOS__ */
