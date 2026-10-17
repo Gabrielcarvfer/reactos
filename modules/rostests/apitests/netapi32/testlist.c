@@ -9,10 +9,12 @@
 #include <apitest.h>
 
 extern void func_DsRoleGetPrimaryDomainInformation(void);
+extern void func_SplitDlls(void);
 
 const struct test winetest_testlist[] =
 {
     { "DsRoleGetPrimaryDomainInformation", func_DsRoleGetPrimaryDomainInformation },
+    { "SplitDlls", func_SplitDlls },
 
     { 0, 0 }
 };
