@@ -1415,9 +1415,28 @@ RegDeleteKeyExW(
                                ParentKey,
                                NULL);
     /* (Under WoW64, the registry view asked for picks the key) */
+#if defined(_WIN64) && defined(BUILD_WOW64_ENABLED)
+    {
+        UNICODE_STRING Wow64Name;
+
+        /* A 64-bit program deleting a key of the 32-bit view (Wow6432Node) */
+        if ((samDesired & KEY_WOW64_32KEY) && RegpGetWow64Key32(ParentKey, &SubKeyName, &Wow64Name))
+        {
+            ObjectAttributes.RootDirectory = NULL;
+            ObjectAttributes.ObjectName = &Wow64Name;
+            Status = NtOpenKey(&TargetKey, DELETE | (samDesired & KEY_WOW64_RES), &ObjectAttributes);
+            RtlFreeUnicodeString(&Wow64Name);
+        }
+        else
+        {
+            Status = NtOpenKey(&TargetKey, DELETE | (samDesired & KEY_WOW64_RES), &ObjectAttributes);
+        }
+    }
+#else
     Status = NtOpenKey(&TargetKey,
                        DELETE | (samDesired & KEY_WOW64_RES),
                        &ObjectAttributes);
+#endif
     if (!NT_SUCCESS(Status))
     {
         goto Cleanup;

@@ -17,6 +17,7 @@
 #include <sddl.h>
 
 static WCHAR TestDir[MAX_PATH];
+static BOOL PersistentAcls;
 
 static void MakePath(PWSTR Path, PCWSTR Name)
 {
@@ -77,7 +78,12 @@ static void GrantAccess(PCWSTR Path)
                                       DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION,
                                       NULL, NULL, NewAcl, NULL);
         ok(Error == ERROR_SUCCESS, "%ls: SetNamedSecurityInfo (unprotected): %lu\n", Path, Error);
-        ok(HasAceFor(Path, Sid), "%ls: no ACE for the capability SID\n", Path);
+        /* FAT keeps no ACLs: Windows reports success for the set and returns
+         * a default "Everyone: full access" descriptor when queried. */
+        if (PersistentAcls)
+            ok(HasAceFor(Path, Sid), "%ls: no ACE for the capability SID\n", Path);
+        else
+            skip("%ls: the file system keeps no ACLs\n", Path);
         LocalFree(NewAcl);
     }
     if (Sd)
@@ -210,7 +216,8 @@ static void TestSddlDirectory(void)
 
 START_TEST(FileSecurity)
 {
-    DWORD Length;
+    WCHAR Root[MAX_PATH];
+    DWORD Length, Flags = 0;
 
     Length = GetTempPathW(_countof(TestDir), TestDir);
     ok(Length != 0, "GetTempPath failed: %lu\n", GetLastError());
@@ -222,6 +229,16 @@ START_TEST(FileSecurity)
     {
         skip("Cannot create %ls: %lu\n", TestDir, GetLastError());
         return;
+    }
+
+    if (GetVolumePathNameW(TestDir, Root, _countof(Root)) &&
+        GetVolumeInformationW(Root, NULL, 0, NULL, NULL, &Flags, NULL, 0))
+    {
+        PersistentAcls = (Flags & FILE_PERSISTENT_ACLS) != 0;
+    }
+    else
+    {
+        PersistentAcls = TRUE;
     }
 
     TestGrantAccessToPath();
