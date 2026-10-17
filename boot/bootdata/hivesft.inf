@@ -2107,6 +2107,14 @@ HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Storage.Strea
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Storage.Streams.DataWriter","ActivationType",0x00010001,0
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Storage.Streams.DataWriter","Threading",0x00010001,0
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Storage.Streams.DataWriter","TrustLevel",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueue","DllPath",0x00020000,"%SystemRoot%\system32\CoreMessaging.dll"
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueue","ActivationType",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueue","Threading",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueue","TrustLevel",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueueController","DllPath",0x00020000,"%SystemRoot%\system32\CoreMessaging.dll"
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueueController","ActivationType",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueueController","Threading",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.DispatcherQueueController","TrustLevel",0x00010001,0
 
 ;-------------------------------- STRINGS -------------------------------
 

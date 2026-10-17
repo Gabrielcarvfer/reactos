@@ -1,0 +1,6 @@
+
+add_executable(coremessaging_apitest DispatcherQueue.c testlist.c)
+target_link_libraries(coremessaging_apitest wine uuid)
+set_module_type(coremessaging_apitest win32cui)
+add_importlibs(coremessaging_apitest ole32 user32 msvcrt kernel32 ntdll)
+add_rostests_file(TARGET coremessaging_apitest)
