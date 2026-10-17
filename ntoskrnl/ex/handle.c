@@ -649,32 +649,64 @@ ExpMoveFreeHandles(IN PHANDLE_TABLE HandleTable)
 {
     ULONG LastFree, i;
 
+    ULONG Next, OldValue;
+    EXHANDLE Handle;
+    PHANDLE_TABLE_ENTRY Entry;
+
     /* Clear the last free index */
     LastFree = InterlockedExchange((PLONG) &HandleTable->LastFree, 0);
 
     /* Check if we had no index */
     if (!LastFree) return LastFree;
 
-    /* Acquire the locks we need */
+    /* Acquire the locks we need (the caller holds lock 0): no allocation
+       can pop entries from the first-free list while we push ours. A free
+       meanwhile sees the lock taken and pushes to the first-free list too. */
     for (i = 1; i < 4; i++)
     {
         /* Acquire this lock exclusively */
-        ExWaitOnPushLock(&HandleTable->HandleTableLock[i]);
+        ExAcquirePushLockExclusive(&HandleTable->HandleTableLock[i]);
     }
 
     /* Check if we're not strict FIFO */
-    if (!HandleTable->StrictFIFO)
+    if (!HandleTable->StrictFIFO &&
+        !InterlockedCompareExchange((PLONG) &HandleTable->FirstFree, LastFree, 0))
     {
-        /* Update the first free index */
-        if (!InterlockedCompareExchange((PLONG) &HandleTable->FirstFree, LastFree, 0))
+        /* The first-free list was empty: it is the whole list now */
+    }
+    else
+    {
+        /* Strict FIFO (the list must be reversed), or the first-free list
+           was not empty anymore (another processor freed a handle after the
+           caller saw it empty): move the entries one by one */
+        Next = LastFree;
+        while (Next)
         {
-            /* We're done, exit */
-            return LastFree;
+            Handle.GenericHandleOverlay = NULL;
+            Handle.AsULONG = Next & FREE_HANDLE_MASK;
+            Entry = ExpLookupHandleTableEntry(HandleTable, Handle);
+            Next = Entry->NextFreeTableEntry;
+
+            for (;;)
+            {
+                OldValue = *(volatile ULONG *)&HandleTable->FirstFree;
+                Entry->NextFreeTableEntry = OldValue;
+                if (InterlockedCompareExchange((PLONG)&HandleTable->FirstFree,
+                                               Handle.AsULONG,
+                                               OldValue) == OldValue)
+                {
+                    break;
+                }
+            }
         }
     }
 
-    /* We are strict FIFO, we need to reverse the entries */
-    ASSERT(FALSE);
+    /* Release the locks */
+    for (i = 1; i < 4; i++)
+    {
+        ExReleasePushLockExclusive(&HandleTable->HandleTableLock[i]);
+    }
+
     return LastFree;
 }
 
