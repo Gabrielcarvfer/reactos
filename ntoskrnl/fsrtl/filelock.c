@@ -451,6 +451,17 @@ FsRtlPrivateLockUnlocked(IN PFILE_LOCK FileLock,
              LockCompleteCanceledIrp);
     }
 
+    /*
+     * From now on the file has (or is about to have) byte range locks: tell
+     * the file system that fast I/O must be checked (FsRtlAreThereCurrentFileLocks,
+     * FatIsFastIoPossible), so FsRtlCopyRead/Write go through its
+     * FastIoCheckIfPossible and FsRtlFastCheckLockForRead/Write. Set before
+     * the lock is inserted and never cleared while the lock lives, as on
+     * Windows, so a racing recomputation of IsFastIoPossible cannot store
+     * FastIoIsPossible after a lock was granted.
+     */
+    FileLock->FastIoIsQuestionable = TRUE;
+
     LockInfo = FileLock->LockInformation;
     ToInsert.Exclusive.FileLock.FileObject = FileObject;
     ToInsert.Exclusive.FileLock.StartingByte = *FileOffset;
