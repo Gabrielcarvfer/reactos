@@ -178,10 +178,19 @@ MiniTimerDpcFunction(PKDPC Dpc,
   }
 #endif
 
-  Timer->MiniportTimerFunction(Dpc,
-                               Timer->MiniportTimerContext,
-                               SystemArgument1,
-                               SystemArgument2);
+  {
+    /* A serialized miniport's timer runs alone too (LOGICAL_ADAPTER starts
+       with the NDIS_MINIPORT_BLOCK) */
+    PLOGICAL_ADAPTER Adapter = CONTAINING_RECORD(Timer->Miniport, LOGICAL_ADAPTER, NdisMiniportBlock);
+    KIRQL OldIrql;
+
+    MiniSerialEnter(Adapter, &OldIrql);
+    Timer->MiniportTimerFunction(Dpc,
+                                 Timer->MiniportTimerContext,
+                                 SystemArgument1,
+                                 SystemArgument2);
+    MiniSerialLeave(Adapter, OldIrql);
+  }
 }
 
 /*

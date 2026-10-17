@@ -28,12 +28,15 @@ VOID NTAPI HandleDeferredProcessing(
  */
 {
   PLOGICAL_ADAPTER Adapter = GET_LOGICAL_ADAPTER(DeferredContext);
+  KIRQL OldIrql;
 
   NDIS_DbgPrint(MAX_TRACE, ("Called.\n"));
 
   ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
-  /* Call the deferred interrupt service handler for this adapter */
+  /* Call the deferred interrupt service handler for this adapter
+     (not at the same time as another handler of a serialized miniport) */
+  MiniSerialEnter(Adapter, &OldIrql);
   (*Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.HandleInterruptHandler)(
       Adapter->NdisMiniportBlock.MiniportAdapterContext);
 
@@ -42,6 +45,7 @@ VOID NTAPI HandleDeferredProcessing(
   if(Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.EnableInterruptHandler)
     (*Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.EnableInterruptHandler)(
         Adapter->NdisMiniportBlock.MiniportAdapterContext);
+  MiniSerialLeave(Adapter, OldIrql);
 
   NDIS_DbgPrint(MAX_TRACE, ("Leaving.\n"));
 }

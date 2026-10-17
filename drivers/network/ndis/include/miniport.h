@@ -98,7 +98,56 @@ typedef struct _LOGICAL_ADAPTER
     PMINIPORT_BUGCHECK_CONTEXT  BugcheckContext;        /* Adapter's shutdown handler */
     BUS_INTERFACE_STANDARD     BusInterface;
     BOOLEAN                    BusInterfaceQueried;
+    PVOID volatile             SerialOwner;             /* Processor in a serialized miniport */
+    LONG                       SerialCount;             /* Its nesting depth */
 } LOGICAL_ADAPTER, *PLOGICAL_ADAPTER;
+
+/*
+ * A serialized miniport (no NDIS_ATTRIBUTE_DESERIALIZE) must never run two of
+ * its handlers at the same time. On one processor, being at DISPATCH_LEVEL
+ * was enough; with several, a send on one processor and the interrupt DPC on
+ * another raced on the descriptor rings (e1000: "All TX descriptors are
+ * full" forever). The lock belongs to a processor and nests on it (a handler
+ * indicating a receive can lead to a send on the same processor, as before).
+ */
+FORCEINLINE
+VOID
+MiniSerialEnter(
+    _In_ struct _LOGICAL_ADAPTER *Adapter,
+    _Out_ PKIRQL OldIrql)
+{
+    PVOID Me;
+
+    KeRaiseIrql(DISPATCH_LEVEL, OldIrql);
+    if (Adapter->NdisMiniportBlock.Flags & NDIS_ATTRIBUTE_DESERIALIZE)
+        return;
+
+    Me = (PVOID)(ULONG_PTR)(KeGetCurrentProcessorNumber() + 1);
+    if (Adapter->SerialOwner == Me)
+    {
+        Adapter->SerialCount++;
+        return;
+    }
+
+    while (InterlockedCompareExchangePointer(&Adapter->SerialOwner, Me, NULL) != NULL)
+        YieldProcessor();
+    Adapter->SerialCount = 1;
+}
+
+FORCEINLINE
+VOID
+MiniSerialLeave(
+    _In_ struct _LOGICAL_ADAPTER *Adapter,
+    _In_ KIRQL OldIrql)
+{
+    if (!(Adapter->NdisMiniportBlock.Flags & NDIS_ATTRIBUTE_DESERIALIZE))
+    {
+        ASSERT(Adapter->SerialOwner == (PVOID)(ULONG_PTR)(KeGetCurrentProcessorNumber() + 1));
+        if (--Adapter->SerialCount == 0)
+            InterlockedExchangePointer(&Adapter->SerialOwner, NULL);
+    }
+    KeLowerIrql(OldIrql);
+}
 
 #define GET_LOGICAL_ADAPTER(Handle)((PLOGICAL_ADAPTER)Handle)
 
