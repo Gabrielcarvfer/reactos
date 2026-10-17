@@ -1867,18 +1867,28 @@ IntCalcWallpaperCoordinates(
     SIZE szDesk, szSrc, szDst;
     int scaledWidth, scaledHeight;
 
+    WALLPAPER_MODE Mode = gspv.WallpaperMode;
+
     szDesk.cx = pwndDesktop->rcWindow.right - pwndDesktop->rcWindow.left;
     szDesk.cy = pwndDesktop->rcWindow.bottom - pwndDesktop->rcWindow.top;
 
-    if (gspv.WallpaperMode == wmFit ||
-        gspv.WallpaperMode == wmFill)
+    /* An empty desktop window or wallpaper cannot be fitted or filled (the
+       scale would divide by zero): center it instead */
+    if ((Mode == wmFit || Mode == wmFill) &&
+        (szDesk.cx <= 0 || szDesk.cy <= 0 || gspv.cxWallpaper <= 0 || gspv.cyWallpaper <= 0))
+    {
+        Mode = wmCenter;
+    }
+
+    if (Mode == wmFit ||
+        Mode == wmFill)
     {
         int scaleNum, scaleDen;
 
         /* Precision improvement over ((sz.cx / gspv.cxWallpaper) > (sz.cy / gspv.cyWallpaper)) */
         if ((szDesk.cx * gspv.cyWallpaper) > (szDesk.cy * gspv.cxWallpaper))
         {
-            if (gspv.WallpaperMode == wmFit)
+            if (Mode == wmFit)
             {
                 scaleNum = szDesk.cy;
                 scaleDen = gspv.cyWallpaper;
@@ -1891,7 +1901,7 @@ IntCalcWallpaperCoordinates(
         }
         else
         {
-            if (gspv.WallpaperMode == wmFit)
+            if (Mode == wmFit)
             {
                 scaleNum = szDesk.cx;
                 scaleDen = gspv.cxWallpaper;
@@ -1907,14 +1917,14 @@ IntCalcWallpaperCoordinates(
         scaledHeight = EngMulDiv(gspv.cyWallpaper, scaleNum, scaleDen);
     }
 
-    if (gspv.WallpaperMode == wmStretch ||
-        gspv.WallpaperMode == wmTile ||
-        gspv.WallpaperMode == wmFill)
+    if (Mode == wmStretch ||
+        Mode == wmTile ||
+        Mode == wmFill)
     {
         x = 0;
         y = 0;
     }
-    else if (gspv.WallpaperMode == wmFit)
+    else if (Mode == wmFit)
     {
         x = (szDesk.cx - scaledWidth) / 2;
         y = (szDesk.cy - scaledHeight) / 2;
@@ -1926,7 +1936,7 @@ IntCalcWallpaperCoordinates(
         y = (szDesk.cy / 2) - (gspv.cyWallpaper / 2);
     }
 
-    if (gspv.WallpaperMode == wmTile)
+    if (Mode == wmTile)
     {
         szSrc.cx = 0; // not used
         szSrc.cy = 0; // not used
@@ -1935,7 +1945,7 @@ IntCalcWallpaperCoordinates(
         ptSrc.x = 0;
         ptSrc.y = 0;
     }
-    else if (gspv.WallpaperMode == wmStretch)
+    else if (Mode == wmStretch)
     {
         szSrc.cx = gspv.cxWallpaper;
         szSrc.cy = gspv.cyWallpaper;
@@ -1944,7 +1954,7 @@ IntCalcWallpaperCoordinates(
         ptSrc.x = 0;
         ptSrc.y = 0;
     }
-    else if (gspv.WallpaperMode == wmFit)
+    else if (Mode == wmFit)
     {
         szSrc.cx = gspv.cxWallpaper;
         szSrc.cy = gspv.cyWallpaper;
@@ -1953,7 +1963,7 @@ IntCalcWallpaperCoordinates(
         ptSrc.x = 0;
         ptSrc.y = 0;
     }
-    else if (gspv.WallpaperMode == wmFill)
+    else if (Mode == wmFill)
     {
         int wallpaperX = (((scaledWidth - szDesk.cx) * gspv.cxWallpaper) / (2 * scaledWidth));
         int wallpaperY = (((scaledHeight - szDesk.cy) * gspv.cyWallpaper) / (2 * scaledHeight));
@@ -1965,7 +1975,7 @@ IntCalcWallpaperCoordinates(
         ptSrc.x = wallpaperX;
         ptSrc.y = wallpaperY;
     }
-    else if (gspv.WallpaperMode == wmCenter)
+    else if (Mode == wmCenter)
     {
         szSrc.cx = 0; // not used
         szSrc.cy = 0; // not used
