@@ -69,6 +69,7 @@ extern void func_TerminateProcess(void);
 extern void func_Toolhelp32(void);
 extern void func_TunnelCache(void);
 extern void func_UEFIFirmware(void);
+extern void func_UnknownCsrThread(void);
 extern void func_UnregisterWaitEx(void);
 extern void func_VirtualAlloc2(void);
 extern void func_WideCharToMultiByte(void);
@@ -145,6 +146,7 @@ const struct test winetest_testlist[] =
     { "Toolhelp32",                  func_Toolhelp32 },
     { "TunnelCache",                 func_TunnelCache },
     { "UEFIFirmware",                func_UEFIFirmware },
+    { "UnknownCsrThread",            func_UnknownCsrThread },
     { "UnregisterWaitEx",            func_UnregisterWaitEx },
     { "VirtualAlloc2",               func_VirtualAlloc2 },
     { "WideCharToMultiByte",         func_WideCharToMultiByte },

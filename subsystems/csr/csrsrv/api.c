@@ -315,6 +315,45 @@ CsrpCheckRequestThreads(VOID)
     return STATUS_SUCCESS;
 }
 
+/*++
+ * @name CsrpAddUnknownClientThread
+ *
+ * The CsrpAddUnknownClientThread routine creates a CSR Thread for a thread
+ * of a known CSR Process that CSR was never told about, such as a thread
+ * made with RtlCreateUserThread (ntdll's thread pool, remote threads).
+ *
+ * @param ClientId
+ *        Pointer to the Client ID of the thread that sent an API request.
+ *
+ * @return STATUS_SUCCESS in case of success, or the status code that
+ *         stopped it, e.g. when the process is not a CSR Process.
+ *
+ * @remarks Windows serves API requests from such threads. Without this,
+ *          kernel32's CreateThread called on them failed with
+ *          STATUS_ILLEGAL_FUNCTION and the new thread was killed.
+ *
+ *--*/
+static
+NTSTATUS
+CsrpAddUnknownClientThread(
+    _In_ PCLIENT_ID ClientId)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    CLIENT_ID Cid = *ClientId;
+    HANDLE ThreadHandle;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+    Status = NtOpenThread(&ThreadHandle, THREAD_ALL_ACCESS, &ObjectAttributes, &Cid);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    /* This checks that the process is a CSR Process and keeps its own handle */
+    Status = CsrCreateRemoteThread(ThreadHandle, &Cid);
+    NtClose(ThreadHandle);
+    return Status;
+}
+
 /**
  * @brief
  * The CsrApiRequestThread routine handles incoming messages
@@ -462,6 +501,20 @@ CsrApiRequestThread(
         /* Now do the lookup to get the CSR_THREAD */
         CsrThread = CsrLocateThreadByClientId(&CsrProcess,
                                               &ReceiveMsg.Header.ClientId);
+
+        /* An API request from a thread of a CSR Process that CSR does not know yet */
+        if (!CsrThread && MessageType == LPC_REQUEST)
+        {
+            /* Add it, like Windows does, then look it up again */
+            CsrReleaseProcessLock();
+            Status = CsrpAddUnknownClientThread(&ReceiveMsg.Header.ClientId);
+            CsrAcquireProcessLock();
+            if (NT_SUCCESS(Status))
+            {
+                CsrThread = CsrLocateThreadByClientId(&CsrProcess,
+                                                      &ReceiveMsg.Header.ClientId);
+            }
+        }
 
         /* Did we find a thread? */
         if (!CsrThread)

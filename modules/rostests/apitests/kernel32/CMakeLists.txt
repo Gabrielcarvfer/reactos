@@ -72,6 +72,7 @@ list(APPEND SOURCE
     Toolhelp32.c
     TunnelCache.c
     UEFIFirmware.c
+    UnknownCsrThread.c
     UnregisterWaitEx.c
     VirtualAlloc2.c
     WideCharToMultiByte.c
