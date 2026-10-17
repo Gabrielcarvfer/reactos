@@ -228,4 +228,59 @@ RtlGetVersion(IN OUT PRTL_OSVERSIONINFOW lpVersionInformation)
     return STATUS_SUCCESS;
 }
 
+/* winnt.h (Windows 10) */
+#define DEVICEFAMILYINFOENUM_DESKTOP 0x00000003
+#define DEVICEFAMILYDEVICEFORM_UNKNOWN 0x00000000
+
+/*
+ * @implemented
+ * ReactOS is a desktop system. Chromium-based installers (the setup.exe of
+ * Microsoft Edge / WebView2, used by PowerToys and TeamViewer) look this
+ * function up with GetProcAddress and crash without it.
+ */
+VOID NTAPI
+RtlGetDeviceFamilyInfoEnum(OUT PULONGLONG pullUAPInfo OPTIONAL,
+                           OUT PULONG pulDeviceFamily OPTIONAL,
+                           OUT PULONG pulDeviceForm OPTIONAL)
+{
+    PPEB Peb = NtCurrentPeb();
+
+    if (pullUAPInfo)
+    {
+        /* major.minor.build.revision, 16 bits each */
+        *pullUAPInfo = ((ULONGLONG)Peb->OSMajorVersion << 48) |
+                       ((ULONGLONG)Peb->OSMinorVersion << 32) |
+                       ((ULONGLONG)(Peb->OSBuildNumber & 0xFFFF) << 16);
+    }
+    if (pulDeviceFamily)
+        *pulDeviceFamily = DEVICEFAMILYINFOENUM_DESKTOP;
+    if (pulDeviceForm)
+        *pulDeviceForm = DEVICEFAMILYDEVICEFORM_UNKNOWN;
+}
+
+/*
+ * @implemented
+ * The sizes are in bytes, with the terminating null.
+ */
+ULONG NTAPI
+RtlConvertDeviceFamilyInfoToString(IN OUT PULONG pulDeviceFamilyBufferSize,
+                                   IN OUT PULONG pulDeviceFormBufferSize,
+                                   OUT PWSTR DeviceFamily,
+                                   OUT PWSTR DeviceForm)
+{
+    static const WCHAR Family[] = L"Windows.Desktop";
+    static const WCHAR Form[] = L"Unknown";
+    BOOLEAN TooSmall;
+
+    TooSmall = (*pulDeviceFamilyBufferSize < sizeof(Family) || *pulDeviceFormBufferSize < sizeof(Form));
+    *pulDeviceFamilyBufferSize = sizeof(Family);
+    *pulDeviceFormBufferSize = sizeof(Form);
+    if (TooSmall)
+        return STATUS_BUFFER_TOO_SMALL;
+
+    RtlCopyMemory(DeviceFamily, Family, sizeof(Family));
+    RtlCopyMemory(DeviceForm, Form, sizeof(Form));
+    return STATUS_SUCCESS;
+}
+
 /* EOF */

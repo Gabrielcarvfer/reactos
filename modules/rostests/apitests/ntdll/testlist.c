@@ -106,6 +106,7 @@ extern void func_RtlGenerate8dot3Name(void);
 extern void func_RtlGetFullPathName_U(void);
 extern void func_RtlGetFullPathName_Ustr(void);
 extern void func_RtlGetFullPathName_UstrEx(void);
+extern void func_RtlGetDeviceFamilyInfoEnum(void);
 extern void func_RtlGetLengthWithoutLastFullDosOrNtPathElement(void);
 extern void func_RtlGetLengthWithoutTrailingPathSeperators(void);
 extern void func_RtlGetLongestNtPathLength(void);
@@ -255,6 +256,7 @@ const struct test winetest_testlist[] =
     { "RtlGetFullPathName_U",           func_RtlGetFullPathName_U },
     { "RtlGetFullPathName_Ustr",        func_RtlGetFullPathName_Ustr },
     { "RtlGetFullPathName_UstrEx",      func_RtlGetFullPathName_UstrEx },
+    { "RtlGetDeviceFamilyInfoEnum",     func_RtlGetDeviceFamilyInfoEnum },
     { "RtlGetLengthWithoutLastFullDosOrNtPathElement", func_RtlGetLengthWithoutLastFullDosOrNtPathElement },
     { "RtlGetLengthWithoutTrailingPathSeperators", func_RtlGetLengthWithoutTrailingPathSeperators },
     { "RtlGetLongestNtPathLength",      func_RtlGetLongestNtPathLength },
