@@ -54,6 +54,32 @@ typedef struct _LOCK_SHARED_RANGE
 }
     LOCK_SHARED_RANGE, *PLOCK_SHARED_RANGE;
 
+/* The lock tables (generic tables) have no lock of their own, and file
+ * systems call into them with the file only shared-locked: on several CPUs
+ * two threads changed the same table at once and corrupted it (a NULL
+ * access in RtlSplay from NtLockFile, Audacity's SQLite). One resource for
+ * all of them; the same thread may take it again (completion routines). */
+static ERESOURCE FsRtlpFileLockResource;
+
+VOID
+NTAPI
+FsRtlpInitializeFileLocks(VOID)
+{
+    ExInitializeResourceLite(&FsRtlpFileLockResource);
+}
+
+static VOID FsRtlpAcquireFileLocks(VOID)
+{
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(&FsRtlpFileLockResource, TRUE);
+}
+
+static VOID FsRtlpReleaseFileLocks(VOID)
+{
+    ExReleaseResourceLite(&FsRtlpFileLockResource);
+    KeLeaveCriticalRegion();
+}
+
 /* PRIVATE FUNCTIONS *********************************************************/
 
 VOID
@@ -255,7 +281,7 @@ FsRtlCompleteLockIrpReal(IN PCOMPLETE_LOCK_IRP_ROUTINE CompleteRoutine,
  */
 PFILE_LOCK_INFO
 NTAPI
-FsRtlGetNextFileLock(IN PFILE_LOCK FileLock,
+FsRtlGetNextFileLockUnlocked(IN PFILE_LOCK FileLock,
                      IN BOOLEAN Restart)
 {
     PCOMBINED_LOCK_ELEMENT Entry;
@@ -324,7 +350,7 @@ FsRtlpRebuildSharedLockRange
  */
 BOOLEAN
 NTAPI
-FsRtlPrivateLock(IN PFILE_LOCK FileLock,
+FsRtlPrivateLockUnlocked(IN PFILE_LOCK FileLock,
                  IN PFILE_OBJECT FileObject,
                  IN PLARGE_INTEGER FileOffset,
                  IN PLARGE_INTEGER Length,
@@ -469,7 +495,9 @@ FsRtlPrivateLock(IN PFILE_LOCK FileLock,
                          NULL);
                 }
             }
-            return FALSE;
+            /* A queued IRP counts as success (STATUS_PENDING); without an IRP
+             * (fast I/O) FALSE makes the I/O manager send one */
+            return (IoStatus->Status == STATUS_PENDING && Irp != NULL);
         }
         else
         {
@@ -515,7 +543,7 @@ FsRtlPrivateLock(IN PFILE_LOCK FileLock,
                                      NULL);
                             }
                         }
-                        return FALSE;
+                        return (IoStatus->Status == STATUS_PENDING && Irp != NULL);
                     }
                 }
             }
@@ -674,7 +702,7 @@ FsRtlPrivateLock(IN PFILE_LOCK FileLock,
  */
 BOOLEAN
 NTAPI
-FsRtlCheckLockForReadAccess(IN PFILE_LOCK FileLock,
+FsRtlCheckLockForReadAccessUnlocked(IN PFILE_LOCK FileLock,
                             IN PIRP Irp)
 {
     BOOLEAN Result;
@@ -702,8 +730,12 @@ FsRtlCheckLockForReadAccess(IN PFILE_LOCK FileLock,
         DPRINT("CheckLockForReadAccess(%wZ) => TRUE\n", &IoStack->FileObject->FileName);
         return TRUE;
     }
+    /* An exclusive lock belongs to a handle (file object), a process and a
+     * key: only that owner may read in it, not another handle of the same
+     * process (LockFileEx docs; lockstress) */
     Result = !Found->Exclusive.FileLock.ExclusiveLock ||
         (IoStack->Parameters.Read.Key == Found->Exclusive.FileLock.Key &&
+         IoStack->FileObject == Found->Exclusive.FileLock.FileObject &&
          Process == Found->Exclusive.FileLock.ProcessId);
     DPRINT("CheckLockForReadAccess(%wZ) => %s\n", &IoStack->FileObject->FileName, Result ? "TRUE" : "FALSE");
     return Result;
@@ -714,7 +746,7 @@ FsRtlCheckLockForReadAccess(IN PFILE_LOCK FileLock,
  */
 BOOLEAN
 NTAPI
-FsRtlCheckLockForWriteAccess(IN PFILE_LOCK FileLock,
+FsRtlCheckLockForWriteAccessUnlocked(IN PFILE_LOCK FileLock,
                              IN PIRP Irp)
 {
     BOOLEAN Result;
@@ -742,7 +774,12 @@ FsRtlCheckLockForWriteAccess(IN PFILE_LOCK FileLock,
         DPRINT("CheckLockForWriteAccess(%wZ) => TRUE\n", &IoStack->FileObject->FileName);
         return TRUE;
     }
-    Result = Process == Found->Exclusive.FileLock.ProcessId;
+    /* Nobody writes into a shared lock (not even its owner); into an
+     * exclusive one only its owner: same handle, process and key */
+    Result = Found->Exclusive.FileLock.ExclusiveLock &&
+        IoStack->Parameters.Write.Key == Found->Exclusive.FileLock.Key &&
+        IoStack->FileObject == Found->Exclusive.FileLock.FileObject &&
+        Process == Found->Exclusive.FileLock.ProcessId;
     DPRINT("CheckLockForWriteAccess(%wZ) => %s\n", &IoStack->FileObject->FileName, Result ? "TRUE" : "FALSE");
     return Result;
 }
@@ -752,7 +789,7 @@ FsRtlCheckLockForWriteAccess(IN PFILE_LOCK FileLock,
  */
 BOOLEAN
 NTAPI
-FsRtlFastCheckLockForRead(IN PFILE_LOCK FileLock,
+FsRtlFastCheckLockForReadUnlocked(IN PFILE_LOCK FileLock,
                           IN PLARGE_INTEGER FileOffset,
                           IN PLARGE_INTEGER Length,
                           IN ULONG Key,
@@ -778,6 +815,7 @@ FsRtlFastCheckLockForRead(IN PFILE_LOCK FileLock,
          &ToFind);
     if (!Found || !Found->Exclusive.FileLock.ExclusiveLock) return TRUE;
     return Found->Exclusive.FileLock.Key == Key &&
+        Found->Exclusive.FileLock.FileObject == FileObject &&
         Found->Exclusive.FileLock.ProcessId == EProcess;
 }
 
@@ -786,7 +824,7 @@ FsRtlFastCheckLockForRead(IN PFILE_LOCK FileLock,
  */
 BOOLEAN
 NTAPI
-FsRtlFastCheckLockForWrite(IN PFILE_LOCK FileLock,
+FsRtlFastCheckLockForWriteUnlocked(IN PFILE_LOCK FileLock,
                            IN PLARGE_INTEGER FileOffset,
                            IN PLARGE_INTEGER Length,
                            IN ULONG Key,
@@ -818,7 +856,9 @@ FsRtlFastCheckLockForWrite(IN PFILE_LOCK FileLock,
         DPRINT("CheckForWrite(%wZ) => TRUE\n", &FileObject->FileName);
         return TRUE;
     }
-    Result = Found->Exclusive.FileLock.Key == Key &&
+    Result = Found->Exclusive.FileLock.ExclusiveLock &&
+        Found->Exclusive.FileLock.Key == Key &&
+        Found->Exclusive.FileLock.FileObject == FileObject &&
         Found->Exclusive.FileLock.ProcessId == EProcess;
     DPRINT("CheckForWrite(%wZ) => %s\n", &FileObject->FileName, Result ? "TRUE" : "FALSE");
     return Result;
@@ -829,7 +869,7 @@ FsRtlFastCheckLockForWrite(IN PFILE_LOCK FileLock,
  */
 NTSTATUS
 NTAPI
-FsRtlFastUnlockSingle(IN PFILE_LOCK FileLock,
+FsRtlFastUnlockSingleUnlocked(IN PFILE_LOCK FileLock,
                       IN PFILE_OBJECT FileObject,
                       IN PLARGE_INTEGER FileOffset,
                       IN PLARGE_INTEGER Length,
@@ -1031,12 +1071,13 @@ FsRtlFastUnlockSingle(IN PFILE_LOCK FileLock,
  */
 NTSTATUS
 NTAPI
-FsRtlFastUnlockAll(IN PFILE_LOCK FileLock,
+FsRtlFastUnlockAllUnlocked(IN PFILE_LOCK FileLock,
                    IN PFILE_OBJECT FileObject,
                    IN PEPROCESS Process,
                    IN PVOID Context OPTIONAL)
 {
     PLIST_ENTRY ListEntry;
+    BOOLEAN Restart = FALSE;
     PCOMBINED_LOCK_ELEMENT Entry;
     PLOCK_INFORMATION InternalInfo = FileLock->LockInformation;
     DPRINT("FsRtlFastUnlockAll(%wZ)\n", &FileObject->FileName);
@@ -1064,14 +1105,18 @@ FsRtlFastUnlockAll(IN PFILE_LOCK FileLock,
              Context,
              TRUE);
     }
+    /* (Unlocking deletes the entry: start the walk again after each one,
+     * enumerating on from a deleted entry is not safe) */
     for (Entry = RtlEnumerateGenericTable(&InternalInfo->RangeTable, TRUE);
          Entry;
-         Entry = RtlEnumerateGenericTable(&InternalInfo->RangeTable, FALSE))
+         Entry = RtlEnumerateGenericTable(&InternalInfo->RangeTable, Restart))
     {
         LARGE_INTEGER Length;
+        Restart = FALSE;
         if (Entry->Exclusive.FileLock.ProcessId != Process ||
             Entry->Exclusive.FileLock.FileObject != FileObject)
             continue;
+        Restart = TRUE;
         // We'll take the first one to be the list head, and free the others first...
         Length.QuadPart =
             Entry->Exclusive.FileLock.EndingByte.QuadPart -
@@ -1086,6 +1131,41 @@ FsRtlFastUnlockAll(IN PFILE_LOCK FileLock,
              Context,
              TRUE);
     }
+
+    /* Lock requests of this handle still waiting can never be granted now
+     * (the handle is being closed): complete them instead of leaving them
+     * pending forever (lockstress) */
+    {
+        KIRQL Irql;
+        LIST_ENTRY Done;
+        PLIST_ENTRY Next;
+        PIRP Irp;
+        NTSTATUS Ignored;
+
+        InitializeListHead(&Done);
+        KeAcquireSpinLock(&InternalInfo->CsqLock, &Irql);
+        for (ListEntry = InternalInfo->CsqList.Flink; ListEntry != &InternalInfo->CsqList; ListEntry = Next)
+        {
+            Next = ListEntry->Flink;
+            Irp = CONTAINING_RECORD(ListEntry, IRP, Tail.Overlay.ListEntry);
+            if (IoGetCurrentIrpStackLocation(Irp)->FileObject != FileObject)
+                continue;
+            /* (Being cancelled: the cancel routine takes it out) */
+            if (IoSetCancelRoutine(Irp, NULL) == NULL)
+                continue;
+            RemoveEntryList(ListEntry);
+            InsertTailList(&Done, ListEntry);
+        }
+        KeReleaseSpinLock(&InternalInfo->CsqLock, Irql);
+
+        while (!IsListEmpty(&Done))
+        {
+            Irp = CONTAINING_RECORD(RemoveHeadList(&Done), IRP, Tail.Overlay.ListEntry);
+            FsRtlCompleteLockIrpReal(FileLock->CompleteLockIrpRoutine, Context, Irp,
+                                     STATUS_RANGE_NOT_LOCKED, &Ignored, NULL);
+        }
+    }
+
     DPRINT("Done %wZ\n", &FileObject->FileName);
     return STATUS_SUCCESS;
 }
@@ -1095,7 +1175,7 @@ FsRtlFastUnlockAll(IN PFILE_LOCK FileLock,
  */
 NTSTATUS
 NTAPI
-FsRtlFastUnlockAllByKey(IN PFILE_LOCK FileLock,
+FsRtlFastUnlockAllByKeyUnlocked(IN PFILE_LOCK FileLock,
                         IN PFILE_OBJECT FileObject,
                         IN PEPROCESS Process,
                         IN ULONG Key,
@@ -1163,7 +1243,7 @@ FsRtlFastUnlockAllByKey(IN PFILE_LOCK FileLock,
  */
 NTSTATUS
 NTAPI
-FsRtlProcessFileLock(IN PFILE_LOCK FileLock,
+FsRtlProcessFileLockUnlocked(IN PFILE_LOCK FileLock,
                      IN PIRP Irp,
                      IN PVOID Context OPTIONAL)
 {
@@ -1290,7 +1370,7 @@ FsRtlInitializeFileLock (IN PFILE_LOCK FileLock,
  */
 VOID
 NTAPI
-FsRtlUninitializeFileLock(IN PFILE_LOCK FileLock)
+FsRtlUninitializeFileLockUnlocked(IN PFILE_LOCK FileLock)
 {
     if (FileLock->LockInformation)
     {
@@ -1359,3 +1439,253 @@ FsRtlFreeFileLock(IN PFILE_LOCK FileLock)
     FsRtlUninitializeFileLock(FileLock);
     ExFreeToPagedLookasideList(&FsRtlFileLockLookasideList, FileLock);
 }
+
+/* The exported functions: the work above, under the file locks resource */
+
+PFILE_LOCK_INFO
+NTAPI
+FsRtlGetNextFileLock(IN PFILE_LOCK FileLock,
+                     IN BOOLEAN Restart)
+{
+    PFILE_LOCK_INFO Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlGetNextFileLockUnlocked(FileLock, Restart);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+BOOLEAN
+NTAPI
+FsRtlPrivateLock(IN PFILE_LOCK FileLock,
+                 IN PFILE_OBJECT FileObject,
+                 IN PLARGE_INTEGER FileOffset,
+                 IN PLARGE_INTEGER Length,
+                 IN PEPROCESS Process,
+                 IN ULONG Key,
+                 IN BOOLEAN FailImmediately,
+                 IN BOOLEAN ExclusiveLock,
+                 OUT PIO_STATUS_BLOCK IoStatus,
+                 IN PIRP Irp OPTIONAL,
+                 IN PVOID Context OPTIONAL,
+                 IN BOOLEAN AlreadySynchronized)
+{
+    BOOLEAN Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlPrivateLockUnlocked(FileLock, FileObject, FileOffset, Length, Process, Key, FailImmediately, ExclusiveLock, IoStatus, Irp, Context, AlreadySynchronized);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+BOOLEAN
+NTAPI
+FsRtlCheckLockForReadAccess(IN PFILE_LOCK FileLock,
+                            IN PIRP Irp)
+{
+    BOOLEAN Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlCheckLockForReadAccessUnlocked(FileLock, Irp);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+BOOLEAN
+NTAPI
+FsRtlCheckLockForWriteAccess(IN PFILE_LOCK FileLock,
+                             IN PIRP Irp)
+{
+    BOOLEAN Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlCheckLockForWriteAccessUnlocked(FileLock, Irp);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+BOOLEAN
+NTAPI
+FsRtlFastCheckLockForRead(IN PFILE_LOCK FileLock,
+                          IN PLARGE_INTEGER FileOffset,
+                          IN PLARGE_INTEGER Length,
+                          IN ULONG Key,
+                          IN PFILE_OBJECT FileObject,
+                          IN PVOID Process)
+{
+    BOOLEAN Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlFastCheckLockForReadUnlocked(FileLock, FileOffset, Length, Key, FileObject, Process);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+BOOLEAN
+NTAPI
+FsRtlFastCheckLockForWrite(IN PFILE_LOCK FileLock,
+                           IN PLARGE_INTEGER FileOffset,
+                           IN PLARGE_INTEGER Length,
+                           IN ULONG Key,
+                           IN PFILE_OBJECT FileObject,
+                           IN PVOID Process)
+{
+    BOOLEAN Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlFastCheckLockForWriteUnlocked(FileLock, FileOffset, Length, Key, FileObject, Process);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+NTSTATUS
+NTAPI
+FsRtlFastUnlockSingle(IN PFILE_LOCK FileLock,
+                      IN PFILE_OBJECT FileObject,
+                      IN PLARGE_INTEGER FileOffset,
+                      IN PLARGE_INTEGER Length,
+                      IN PEPROCESS Process,
+                      IN ULONG Key,
+                      IN PVOID Context OPTIONAL,
+                      IN BOOLEAN AlreadySynchronized)
+{
+    NTSTATUS Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlFastUnlockSingleUnlocked(FileLock, FileObject, FileOffset, Length, Process, Key, Context, AlreadySynchronized);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+NTSTATUS
+NTAPI
+FsRtlFastUnlockAll(IN PFILE_LOCK FileLock,
+                   IN PFILE_OBJECT FileObject,
+                   IN PEPROCESS Process,
+                   IN PVOID Context OPTIONAL)
+{
+    NTSTATUS Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlFastUnlockAllUnlocked(FileLock, FileObject, Process, Context);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+NTSTATUS
+NTAPI
+FsRtlFastUnlockAllByKey(IN PFILE_LOCK FileLock,
+                        IN PFILE_OBJECT FileObject,
+                        IN PEPROCESS Process,
+                        IN ULONG Key,
+                        IN PVOID Context OPTIONAL)
+{
+    NTSTATUS Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlFastUnlockAllByKeyUnlocked(FileLock, FileObject, Process, Key, Context);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+NTSTATUS
+NTAPI
+FsRtlProcessFileLock(IN PFILE_LOCK FileLock,
+                     IN PIRP Irp,
+                     IN PVOID Context OPTIONAL)
+{
+    NTSTATUS Result;
+
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        Result = FsRtlProcessFileLockUnlocked(FileLock, Irp, Context);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+    return Result;
+}
+
+VOID
+NTAPI
+FsRtlUninitializeFileLock(IN PFILE_LOCK FileLock)
+{
+    FsRtlpAcquireFileLocks();
+    _SEH2_TRY
+    {
+        FsRtlUninitializeFileLockUnlocked(FileLock);
+    }
+    _SEH2_FINALLY
+    {
+        FsRtlpReleaseFileLocks();
+    }
+    _SEH2_END;
+}
+
+/* EOF */

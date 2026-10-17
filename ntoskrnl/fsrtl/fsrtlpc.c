@@ -155,6 +155,8 @@ const UCHAR * const FsRtlLegalAnsiCharacterArray = LegalAnsiCharacterArray;
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
+VOID NTAPI FsRtlpInitializeFileLocks(VOID);
+
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
@@ -173,6 +175,7 @@ FsRtlInitSystem(VOID)
 
     FsRtlInitializeTunnels();
     FsRtlInitializeLargeMcbs();
+    FsRtlpInitializeFileLocks();
     KeInitializeSemaphore(&FsRtlpUncSemaphore, 1, MAXLONG);
 
     /* Allocate the Resource Buffer */

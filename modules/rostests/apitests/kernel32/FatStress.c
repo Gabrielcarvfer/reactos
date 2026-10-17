@@ -204,6 +204,9 @@ static int run_fatstress(int seconds, int threads)
     if (threads > 64) threads = 64;
     root[0] = Dir[0];
     InitializeCriticalSection(&LogLock);
+    /* (Output first: when it is redirected to a file on the same volume,
+     * that file takes its first cluster with its first write) */
+    Log("fatstress: starting\n");
     /* (Measure before the directory exists: it takes a cluster) */
     LogSize0 = LogAllocation();
     GetDiskFreeSpaceExA(root, &avail, &tot, &free0);
