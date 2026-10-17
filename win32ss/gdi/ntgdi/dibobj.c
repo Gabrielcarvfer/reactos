@@ -1244,6 +1244,8 @@ NtGdiStretchDIBitsInternal(
     HPALETTE hPal = NULL;
     ULONG BmpFormat = 0;
     INT LinesCopied = 0;
+    BOOL bDirect = FALSE;
+    ULONG iDstFormat;
 
     /* Check for bad iUsage */
     if (dwUsage > 2) return 0;
@@ -1317,6 +1319,7 @@ NtGdiStretchDIBitsInternal(
     sizel.cx = cxDst;
     sizel.cy = cyDst;
     IntLPtoDP(pdc, (POINTL*)&sizel, 1);
+    iDstFormat = pdc->dclevel.pSurface->SurfObj.iBitmapFormat;
     DC_UnlockDc(pdc);
 
     if (pjInit && (cjMaxBits > 0))
@@ -1355,9 +1358,63 @@ NtGdiStretchDIBitsInternal(
             return 0;
         }
 
-        hBitmap = NtGdiCreateCompatibleBitmap(hdc,
-                                              abs(pbmiSafe->bmiHeader.biWidth),
-                                              abs(pbmiSafe->bmiHeader.biHeight));
+        /* Uncompressed 16/24/32 bpp DIB with RGB colors, 16/24/32 bpp target
+         * (no mono or palette conversion rules), no mirroring: blit straight
+         * from a bitmap around the captured bits. Converting them into a
+         * compatible bitmap first (allocate, zero, IntSetDIBits; a DIB section
+         * when hdc is a memory DC with one) costs more than the blit itself. */
+        hBitmap = NULL;
+        if (pvBits &&
+            cxSrc > 0 && cySrc > 0 && cxDst > 0 && cyDst > 0 &&
+            dwUsage == DIB_RGB_COLORS &&
+            (iDstFormat == BMF_16BPP || iDstFormat == BMF_24BPP || iDstFormat == BMF_32BPP) &&
+            pbmiSafe->bmiHeader.biSize >= sizeof(BITMAPINFOHEADER) &&
+            pbmiSafe->bmiHeader.biWidth > 0 &&
+            pbmiSafe->bmiHeader.biHeight != 0 &&
+            (pbmiSafe->bmiHeader.biBitCount == 16 ||
+             pbmiSafe->bmiHeader.biBitCount == 24 ||
+             pbmiSafe->bmiHeader.biBitCount == 32) &&
+            (pbmiSafe->bmiHeader.biCompression == BI_RGB ||
+             (pbmiSafe->bmiHeader.biCompression == BI_BITFIELDS &&
+              pbmiSafe->bmiHeader.biBitCount != 24)) &&
+            (ULONGLONG)WIDTH_BYTES_ALIGN32(pbmiSafe->bmiHeader.biWidth,
+                                           pbmiSafe->bmiHeader.biBitCount) *
+                abs(pbmiSafe->bmiHeader.biHeight) <= cjMaxBits)
+        {
+            hBitmap = GreCreateBitmapEx(pbmiSafe->bmiHeader.biWidth,
+                                        abs(pbmiSafe->bmiHeader.biHeight),
+                                        0,
+                                        BitmapFormat(pbmiSafe->bmiHeader.biBitCount,
+                                                     pbmiSafe->bmiHeader.biCompression),
+                                        pbmiSafe->bmiHeader.biHeight < 0 ? BMF_TOPDOWN : 0,
+                                        cjMaxBits,
+                                        pvBits,
+                                        0);
+            if (hBitmap)
+            {
+                PSURFACE psurfDIB = SURFACE_ShareLockSurface(hBitmap);
+                PPALETTE ppalBits = CreateDIBPalette(pbmiSafe, NULL, dwUsage);
+                if (psurfDIB && ppalBits)
+                {
+                    SURFACE_vSetPalette(psurfDIB, ppalBits);
+                    bDirect = TRUE;
+                }
+                if (ppalBits) PALETTE_ShareUnlockPalette(ppalBits);
+                if (psurfDIB) SURFACE_ShareUnlockSurface(psurfDIB);
+                if (!bDirect)
+                {
+                    GreDeleteObject(hBitmap);
+                    hBitmap = NULL;
+                }
+            }
+        }
+
+        if (hBitmap == NULL)
+        {
+            hBitmap = NtGdiCreateCompatibleBitmap(hdc,
+                                                  abs(pbmiSafe->bmiHeader.biWidth),
+                                                  abs(pbmiSafe->bmiHeader.biHeight));
+        }
         if (hBitmap == NULL)
         {
             DPRINT1("NtGdiCreateCompatibleBitmap failed to create bitmap.\n");
@@ -1377,7 +1434,7 @@ NtGdiStretchDIBitsInternal(
             hPal = GdiSelectPalette(hdcMem, hPal, FALSE);
         }
 
-        pdc = DC_LockDc(hdcMem);
+        pdc = bDirect ? NULL : DC_LockDc(hdcMem);
         if (pdc != NULL)
         {
             IntSetDIBits(pdc, hBitmap, 0, abs(pbmiSafe->bmiHeader.biHeight), pvBits,
