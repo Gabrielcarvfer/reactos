@@ -933,6 +933,36 @@ Quit:
 /*
  * @implemented
  */
+/*
+ * A service (whose own desktop name is empty: it runs on its non-interactive
+ * Service-0x0-3e7$ window station) starting a program with a SYSTEM token
+ * and no desktop name. That is how remote desktop programs (RustDesk,
+ * AnyDesk, TeamViewer, VNC servers) start their screen capture helper "in the
+ * user's session": on Windows the token names the console session, and the
+ * helper connects to that session's interactive WinSta0. ReactOS has a single
+ * session, where an empty name would put the helper on the service's window
+ * station: it could neither see nor capture the user's desktop. Name WinSta0.
+ */
+static
+BOOL
+UseInteractiveDesktopForToken(
+    _In_opt_ HANDLE hToken,
+    _In_ BOOL bHasDesktop)
+{
+    TOKEN_STATISTICS Statistics;
+    LUID SystemLuid = SYSTEM_LUID;
+    ULONG Length;
+
+    if (!hToken || bHasDesktop)
+        return FALSE;
+    if (NtCurrentPeb()->ProcessParameters->DesktopInfo.Length != 0)
+        return FALSE;
+    if (!NT_SUCCESS(NtQueryInformationToken(hToken, TokenStatistics, &Statistics,
+                                            sizeof(Statistics), &Length)))
+        return FALSE;
+    return RtlEqualLuid(&Statistics.AuthenticationId, &SystemLuid);
+}
+
 BOOL
 WINAPI
 DECLSPEC_HOTPATCH
@@ -949,9 +979,18 @@ CreateProcessAsUserA(
     _In_ LPSTARTUPINFOA lpStartupInfo,
     _Out_ LPPROCESS_INFORMATION lpProcessInformation)
 {
+    STARTUPINFOA StartupInfoA;
+
     TRACE("%p %s %s %p %p %d 0x%08x %p %s %p %p\n", hToken, debugstr_a(lpApplicationName),
         debugstr_a(lpCommandLine), lpProcessAttributes, lpThreadAttributes, bInheritHandles,
         dwCreationFlags, lpEnvironment, debugstr_a(lpCurrentDirectory), lpStartupInfo, lpProcessInformation);
+
+    if (UseInteractiveDesktopForToken(hToken, lpStartupInfo->lpDesktop != NULL))
+    {
+        StartupInfoA = *lpStartupInfo;
+        StartupInfoA.lpDesktop = (LPSTR)"WinSta0\\Default";
+        lpStartupInfo = &StartupInfoA;
+    }
 
     /* Create the process with a suspended main thread */
     if (!CreateProcessA(lpApplicationName,
@@ -997,9 +1036,18 @@ CreateProcessAsUserW(
     _In_ LPSTARTUPINFOW lpStartupInfo,
     _Out_ LPPROCESS_INFORMATION lpProcessInformation)
 {
+    STARTUPINFOW StartupInfoW;
+
     TRACE("%p %s %s %p %p %d 0x%08x %p %s %p %p\n", hToken, debugstr_w(lpApplicationName),
         debugstr_w(lpCommandLine), lpProcessAttributes, lpThreadAttributes, bInheritHandles,
         dwCreationFlags, lpEnvironment, debugstr_w(lpCurrentDirectory), lpStartupInfo, lpProcessInformation);
+
+    if (UseInteractiveDesktopForToken(hToken, lpStartupInfo->lpDesktop != NULL))
+    {
+        StartupInfoW = *lpStartupInfo;
+        StartupInfoW.lpDesktop = (LPWSTR)L"WinSta0\\Default";
+        lpStartupInfo = &StartupInfoW;
+    }
 
     /* Create the process with a suspended main thread */
     if (!CreateProcessW(lpApplicationName,
