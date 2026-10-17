@@ -231,8 +231,19 @@ KiSwapContextResume(
     NewProcess = NewThread->ApcState.Process;
     if (OldProcess != NewProcess)
     {
+#ifdef CONFIG_SMP
+        /* We may cache the new process' entries from now on: TLB flushes
+           for it must reach us (see KiCurrentProcessProcessors) */
+        InterlockedOr64((PLONG64)&NewProcess->ActiveProcessors, (LONG64)Pcr->Prcb.SetMember);
+#endif
+
         /* Switch address space and flush TLB */
         __writecr3(NewProcess->DirectoryTableBase[0]);
+
+#ifdef CONFIG_SMP
+        /* And no more of the old one's */
+        InterlockedAnd64((PLONG64)&OldProcess->ActiveProcessors, ~(LONG64)Pcr->Prcb.SetMember);
+#endif
 
         /* Set new TSS fields */
         //Pcr->TssBase->IoMapBase = NewProcess->IopmOffset;

@@ -223,9 +223,10 @@ KiIpiGetTargets(
  * The worker runs at IPI_LEVEL with interrupts disabled; it must be short and
  * must not send IPIs itself. Returns FALSE if there was nobody to send to.
  */
+static
 BOOLEAN
-NTAPI
-KiIpiSendPacketAndWait(
+KiIpiSendPacketAndWaitEx(
+    _In_ KAFFINITY Mask,
     _In_ PKIPI_PACKET_WORKER Worker,
     _In_ ULONG_PTR P1,
     _In_ ULONG_PTR P2,
@@ -241,7 +242,7 @@ KiIpiSendPacketAndWait(
     OldIrql = KiRaiseToIpiLevel();
 
     Prcb = KeGetCurrentPrcb();
-    Targets = KiIpiGetTargets(Prcb);
+    Targets = KiIpiGetTargets(Prcb) & Mask;
 
     /* A sender interrupted by an NMI/debugger path that flushes again:
        its packet is still in flight, don't overwrite it */
@@ -257,6 +258,33 @@ KiIpiSendPacketAndWait(
     KiLowerFromIpiLevel(OldIrql);
 
     return (Targets != 0);
+}
+
+BOOLEAN
+NTAPI
+KiIpiSendPacketAndWait(
+    _In_ PKIPI_PACKET_WORKER Worker,
+    _In_ ULONG_PTR P1,
+    _In_ ULONG_PTR P2,
+    _In_ ULONG_PTR P3)
+{
+    return KiIpiSendPacketAndWaitEx(~(KAFFINITY)0, Worker, P1, P2, P3);
+}
+
+/*
+ * The processors that may have TLB entries of the current address space's
+ * user part: those running a thread of this process (or attached to it).
+ * A processor sets its bit in ActiveProcessors before it loads the process'
+ * CR3 and clears it after it loaded another one (KiSwapContextResume,
+ * KiSwapProcess); one that loads it later starts with a flushed TLB.
+ */
+static
+KAFFINITY
+KiCurrentProcessProcessors(VOID)
+{
+    /* The page tables were changed before: order the read after them */
+    KeMemoryBarrier();
+    return KeGetCurrentThread()->ApcState.Process->ActiveProcessors;
 }
 
 /* TLB SHOOTDOWN **************************************************************/
@@ -358,7 +386,24 @@ KiFlushSingleTbAll(
     /* Flush here and on the others without being moved in between */
     OldIrql = KiRaiseToIpiLevel();
     __invlpg(Address);
-    KiIpiSendPacketAndWait(KiFlushTargetSingleTb, (ULONG_PTR)Address, 0, 0);
+    KiIpiSendPacketAndWaitEx((Address <= MmHighestUserAddress) ?
+                                 KiCurrentProcessProcessors() : ~(KAFFINITY)0,
+                             KiFlushTargetSingleTb, (ULONG_PTR)Address, 0, 0);
+    KiLowerFromIpiLevel(OldIrql);
+}
+
+/* Flush the non-global entries here and where the current process runs:
+   for changes of user addresses and of this process' page tables */
+VOID
+NTAPI
+KiFlushCurrentProcessTb(VOID)
+{
+    KIRQL OldIrql;
+
+    OldIrql = KiRaiseToIpiLevel();
+    __writecr3(__readcr3());
+    if (KeNumberProcessors > 1)
+        KiIpiSendPacketAndWaitEx(KiCurrentProcessProcessors(), KiFlushTargetProcessTb, 0, 0, 0);
     KiLowerFromIpiLevel(OldIrql);
 }
 

@@ -189,13 +189,18 @@ KiSwapProcess(IN PKPROCESS NewProcess,
     PKIPCR Pcr = (PKIPCR)KeGetPcr();
 
 #ifdef CONFIG_SMP
-    /* Update active processor mask */
-    InterlockedXor64((PLONG64)&NewProcess->ActiveProcessors, Pcr->Prcb.SetMember);
-    InterlockedXor64((PLONG64)&OldProcess->ActiveProcessors, Pcr->Prcb.SetMember);
+    /* Update active processor mask: in the new process before we use its
+       page tables, out of the old one after (see KiCurrentProcessProcessors) */
+    InterlockedOr64((PLONG64)&NewProcess->ActiveProcessors, Pcr->Prcb.SetMember);
 #endif
 
     /* Update CR3 */
     __writecr3(NewProcess->DirectoryTableBase[0]);
+
+#ifdef CONFIG_SMP
+    if (NewProcess != OldProcess)
+        InterlockedAnd64((PLONG64)&OldProcess->ActiveProcessors, ~(LONG64)Pcr->Prcb.SetMember);
+#endif
 
     /* Update IOPM offset */
     Pcr->TssBase->IoMapBase = NewProcess->IopmOffset;

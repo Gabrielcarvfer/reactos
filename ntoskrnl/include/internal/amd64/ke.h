@@ -271,6 +271,7 @@ KeRestoreInterrupts(BOOLEAN WereEnabled)
 VOID NTAPI KiFlushSingleTbAll(_In_ PVOID Address);
 VOID NTAPI KiFlushRangeTbAll(_In_ PVOID Start, _In_ ULONG_PTR PageCount);
 VOID NTAPI KiFlushProcessTbAll(VOID);
+VOID NTAPI KiFlushCurrentProcessTb(VOID);
 VOID NTAPI KiFlushEntireTbAll(_In_ BOOLEAN AllProcessors);
 #endif
 

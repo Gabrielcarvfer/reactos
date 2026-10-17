@@ -35,6 +35,14 @@ MiFlushTbAndCapture(IN PMMVAD FoundVad,
                     IN BOOLEAN CaptureDirtyBit);
 
 
+/* Flush the TLBs after changing user mappings of the current process
+   (only the processors running it can have its entries) */
+#if defined(_M_AMD64) && defined(CONFIG_SMP)
+#define MiFlushCurrentProcessTb() KiFlushCurrentProcessTb()
+#else
+#define MiFlushCurrentProcessTb() KeFlushProcessTb()
+#endif
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 ULONG
@@ -535,8 +543,9 @@ MiDeletePte(IN PMMPTE PointerPte,
 {
     if (MiDeletePteNoFlush(PointerPte, VirtualAddress, CurrentProcess, PrototypePte))
     {
-        /* Flush the TLB (of every processor: they may run this process too) */
-        KeFlushProcessTb();
+        /* Flush the TLB (of every processor running this process) */
+        ASSERT(CurrentProcess == (PEPROCESS)KeGetCurrentThread()->ApcState.Process);
+        MiFlushCurrentProcessTb();
     }
 }
 
@@ -756,7 +765,7 @@ MiDeleteVirtualAddresses(
         /* Flush the TLBs of every processor before the freed pages can be reused */
         if (NeedFlush)
         {
-            KeFlushProcessTb();
+            MiFlushCurrentProcessTb();
             NeedFlush = FALSE;
         }
 
