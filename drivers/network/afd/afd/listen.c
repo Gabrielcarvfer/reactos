@@ -187,7 +187,7 @@ static NTSTATUS SatisfySuperAccept(PAFD_FCB FCB, PIRP Irp, PAFD_TDI_OBJECT_QELT 
             FCB2->Connection.Object,
             TDI_RECEIVE_NORMAL,
             FCB2->Recv.Window,
-            FCB2->Recv.Size,
+            min(FCB2->Recv.Size, 64 * 1024), /* (AFD_MAX_TDI_RECEIVE, read.c) */
             ReceiveComplete,
             FCB2);
 

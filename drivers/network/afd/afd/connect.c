@@ -306,7 +306,7 @@ MakeSocketIntoConnection(PAFD_FCB FCB, BOOL Receive) {
                             FCB->Connection.Object,
                             TDI_RECEIVE_NORMAL,
                             FCB->Recv.Window,
-                            FCB->Recv.Size,
+                            min(FCB->Recv.Size, 64 * 1024), /* (AFD_MAX_TDI_RECEIVE, read.c) */
                             ReceiveComplete,
                             FCB );
 

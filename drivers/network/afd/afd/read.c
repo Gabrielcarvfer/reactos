@@ -10,6 +10,61 @@
 
 #include "afd.h"
 
+/* The most a single TDI receive asks for. Each request locks (and the
+ * transport maps) the whole range it is given, so asking for all of a big
+ * receive buffer cost time proportional to SO_RCVBUF for every segment that
+ * arrived: a bigger buffer made downloads slower */
+#define AFD_MAX_TDI_RECEIVE (64 * 1024)
+
+/* tcpip completes a receive inside TdiReceive when it has data queued, and the
+ * completion asks for more right away: one more TdiReceive -> ReceiveComplete
+ * level each time, which ran out of kernel stack while data kept coming. When
+ * the stack runs low, the next receive is issued from a worker */
+#define AFD_RECEIVE_STACK_RESERVE (8 * 1024)
+#define TAG_AFD_RECEIVE_WORK 'wrfA'
+
+typedef struct _AFD_RECEIVE_WORK
+{
+    WORK_QUEUE_ITEM WorkItem;
+    PFILE_OBJECT FileObject;
+} AFD_RECEIVE_WORK, *PAFD_RECEIVE_WORK;
+
+static VOID RefillSocketBuffer( PAFD_FCB FCB );
+
+static VOID NTAPI DeferredRefillWorker(PVOID Context)
+{
+    PAFD_RECEIVE_WORK Work = Context;
+    PAFD_FCB FCB = Work->FileObject->FsContext;
+
+    if (SocketAcquireStateLock(FCB))
+    {
+        if (FCB->SharedData.State == SOCKET_STATE_CONNECTED)
+            RefillSocketBuffer(FCB);
+        SocketStateUnlock(FCB);
+    }
+
+    ObDereferenceObject(Work->FileObject);
+    ExFreePoolWithTag(Work, TAG_AFD_RECEIVE_WORK);
+}
+
+static BOOLEAN DeferRefill(PAFD_FCB FCB)
+{
+    PAFD_RECEIVE_WORK Work;
+
+    if (IoGetRemainingStackSize() >= AFD_RECEIVE_STACK_RESERVE)
+        return FALSE;
+
+    Work = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Work), TAG_AFD_RECEIVE_WORK);
+    if (!Work)
+        return FALSE;
+
+    ObReferenceObject(FCB->FileObject);
+    Work->FileObject = FCB->FileObject;
+    ExInitializeWorkItem(&Work->WorkItem, DeferredRefillWorker, Work);
+    ExQueueWorkItem(&Work->WorkItem, CriticalWorkQueue);
+    return TRUE;
+}
+
 static VOID RefillSocketBuffer( PAFD_FCB FCB )
 {
     /* Make sure nothing's in flight first */
@@ -39,13 +94,16 @@ static VOID RefillSocketBuffer( PAFD_FCB FCB )
         }
     }
 
+    /* Deep in nested completions: continue from a worker */
+    if (DeferRefill(FCB)) return;
+
     AFD_DbgPrint(MID_TRACE,("Replenishing buffer\n"));
 
     TdiReceive( &FCB->ReceiveIrp.InFlightRequest,
                 FCB->Connection.Object,
                 TDI_RECEIVE_NORMAL,
                 FCB->Recv.Window + FCB->Recv.Content,
-                FCB->Recv.Size - FCB->Recv.Content,
+                min(FCB->Recv.Size - FCB->Recv.Content, AFD_MAX_TDI_RECEIVE),
                 ReceiveComplete,
                 FCB );
 }
