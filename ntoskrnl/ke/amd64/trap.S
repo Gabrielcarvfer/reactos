@@ -884,6 +884,10 @@ PUBLIC KiSystemCallEntry64
     mov rax, gs:[PcUserRsp]
     mov [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rsp], rax
 
+    /* Mark a system call frame: KiSetTrapContextInternal turns this into
+       "full restore" when it sets the volatile registers */
+    mov byte ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_ExceptionActive], KI_TRAP_FRAME_SYSCALL
+
     /* The caller was 64-bit user code (syscall). The selectors must be set:
        what is in these slots otherwise is left from an earlier trap, e.g. the
        32-bit CS of an interrupt in WoW64 code, and a context taken from this
@@ -939,6 +943,10 @@ GLOBAL_LABEL KiSystemServiceExit
     cmp byte ptr [rcx + ThApcState + AsUserApcPending], 0
     jz NoUserApcPending
 
+    /* The context was set (NtSetContextThread): its registers are in the trap frame */
+    cmp byte ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_ExceptionActive], KI_TRAP_FRAME_FULL_RESTORE
+    je DeliverUserApc
+
     /* Save missing regs in the trap frame */
     mov [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rax], rax
     mov [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rbp], rbp
@@ -960,12 +968,18 @@ GLOBAL_LABEL KiSystemServiceExit
     movdqa [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Xmm4], xmm0
     movdqa [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Xmm5], xmm0
 
+DeliverUserApc:
     lea rcx, [rsp + MAX_SYSCALL_PARAM_SIZE]
     call KiInitiateUserApc
 
 NoUserApcPending:
     /* Disable interrupts for return */
     cli
+
+    /* The context was set while in the system call: sysretq would lose its
+       volatile registers, return through iretq with the whole trap frame */
+    cmp byte ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_ExceptionActive], KI_TRAP_FRAME_FULL_RESTORE
+    je KiSystemServiceExitFull
 
     /* Restore MCXSR */
     ldmxcsr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_MxCsr]
@@ -1011,6 +1025,27 @@ NoUserApcPending:
 
     /* return to user mode */
     sysretq
+
+KiSystemServiceExitFull:
+    mov byte ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_ExceptionActive], 0
+
+    /* Restore MCXSR and the old trap frame */
+    ldmxcsr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_MxCsr]
+    mov rcx, gs:[PcCurrentThread]
+    mov rdx, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_TrapFrame]
+    mov [rcx + KTHREAD_TrapFrame], rdx
+
+    /* We came in with syscall from 64-bit code and go back there, as sysretq
+       would (it ignores the selectors in the trap frame) */
+    mov word ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_SegCs], (KGDT64_R3_CODE or RPL_MASK)
+    mov word ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_SegSs], (KGDT64_R3_DATA or RPL_MASK)
+
+    /* Point rsp and rbp at the trap frame and leave as from an interrupt
+       (user mode, so swapgs; volatiles, rbp and the machine frame from the
+       trap frame) */
+    lea rbp, [rsp + MAX_SYSCALL_PARAM_SIZE]
+    mov rsp, rbp
+    ExitTrap 0
 
 .ENDP
 

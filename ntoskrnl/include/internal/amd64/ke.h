@@ -504,6 +504,11 @@ KiGetTrapContext(
     _In_ PKTRAP_FRAME TrapFrame,
     _Out_ PCONTEXT Context);
 
+/* KTRAP_FRAME.ExceptionActive (also in trapamd64.inc): a system call frame,
+   and one whose context was set, to leave with iretq instead of sysretq */
+#define KI_TRAP_FRAME_SYSCALL 2
+#define KI_TRAP_FRAME_FULL_RESTORE 3
+
 VOID
 KiSetTrapContext(
     _Out_ PKTRAP_FRAME TrapFrame,

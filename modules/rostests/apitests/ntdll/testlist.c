@@ -145,6 +145,7 @@ extern void func_RtlxUnicodeStringToOemSize(void);
 extern void func_ProcessHandleTable(void);
 extern void func_StackOverflow(void);
 extern void func_RtlUnwindEx(void);
+extern void func_SetContextInSyscall(void);
 extern void func_SyscallReturn(void);
 extern void func_x87Exception(void);
 extern void func_TimerResolution(void);
@@ -292,6 +293,7 @@ const struct test winetest_testlist[] =
     { "RtlValidateUnicodeString",       func_RtlValidateUnicodeString },
     { "ProcessHandleTable",             func_ProcessHandleTable },
     { "StackOverflow",                  func_StackOverflow },
+    { "SetContextInSyscall",            func_SetContextInSyscall },
     { "SyscallReturn",                  func_SyscallReturn },
     { "x87Exception",                   func_x87Exception },
     { "TimerResolution",                func_TimerResolution },

@@ -260,7 +260,12 @@ __ASM_GLOBAL_FUNC( syscall_32to64,
                    "movq %rax,%rcx\n\t"         /* syscall number */
                    "leaq 8(%r14),%rdx\n\t"      /* parameters */
                    "call " __ASM_NAME("Wow64SystemServiceEx") "\n\t"
-                   "movl %eax,0xb0(%r13)\n\t"   /* context->Eax */
+                   /* A context set during the call (RESET_STATE: SetThreadContext from
+                      another thread) has its own Eax, not the call's result */
+                   "btl $0,-4(%r13)\n\t"        /* cpu->Flags & WOW64_CPURESERVED_FLAG_RESET_STATE */
+                   "jc 1f\n\t"
+                   "movl %eax,0xb0(%r13)\n"     /* context->Eax */
+                   "1:\n\t"
 
                    "syscall_32to64_return:\n\t"
                    "movl 0x9c(%r13),%edi\n\t"   /* context->Edi */

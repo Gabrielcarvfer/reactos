@@ -156,6 +156,7 @@ list(APPEND SOURCE
     RtlxUnicodeStringToAnsiSize.c
     RtlxUnicodeStringToOemSize.c
     StackOverflow.c
+    SetContextInSyscall.c
     SyscallReturn.c
     x87Exception.c
     SystemInfo.c

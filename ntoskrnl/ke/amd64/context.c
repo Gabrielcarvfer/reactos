@@ -334,6 +334,21 @@ KiSetTrapContextInternal(
                          Context->ContextFlags,
                          RequestorMode);
 
+    /* A thread stopped in a system call goes back to user mode with sysretq,
+       which takes only RIP, RSP and EFLAGS from the trap frame. When volatile
+       registers were set, KiSystemServiceExit must return with iretq and the
+       whole trap frame instead (Cygwin delivers signals this way) */
+    if ((TrapFrame->ExceptionActive == KI_TRAP_FRAME_SYSCALL) &&
+        ((Context->ContextFlags & CONTEXT_INTEGER) == CONTEXT_INTEGER))
+    {
+        /* (The system call entry does not save xmm0-5: don't leak stack data) */
+        if ((Context->ContextFlags & CONTEXT_FLOATING_POINT) != CONTEXT_FLOATING_POINT)
+        {
+            RtlZeroMemory(&TrapFrame->Xmm0, 6 * sizeof(M128A));
+        }
+        TrapFrame->ExceptionActive = KI_TRAP_FRAME_FULL_RESTORE;
+    }
+
     /* The target frame is MAX_SYSCALL_PARAM_SIZE bytes before the trap frame */
     TargetFrame = (ULONG64)TrapFrame - MAX_SYSCALL_PARAM_SIZE ;
 

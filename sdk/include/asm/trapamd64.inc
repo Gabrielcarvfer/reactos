@@ -77,6 +77,11 @@ TF_CHECKUSERAPC         = HEX(100)
 /*
  * EnterTrap - Allocate KTRAP_FRAME_LENGTH and save registers to it
  */
+/* KTRAP_FRAME.ExceptionActive: a frame of a system call (sysretq returns),
+   and one whose context was set (iretq with the whole frame) */
+KI_TRAP_FRAME_SYSCALL = 2
+KI_TRAP_FRAME_FULL_RESTORE = 3
+
 MACRO(EnterTrap, Flags)
     LOCAL kernel_mode_entry
 
@@ -133,6 +138,9 @@ MACRO(EnterTrap, Flags)
 
     /* Save MCXSR */
     stmxcsr [rbp + KTRAP_FRAME_MxCsr]
+
+    /* Not a system call frame (see KiSystemCallEntry64) */
+    mov byte ptr [rbp + KTRAP_FRAME_ExceptionActive], 0
 
 #if DBG
     mov ecx, MSR_GS_BASE
