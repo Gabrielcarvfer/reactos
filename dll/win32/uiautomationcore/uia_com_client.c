@@ -42,10 +42,17 @@ static inline struct uia_or_condition *impl_from_IUIAutomationOrCondition(IUIAut
     return CONTAINING_RECORD(iface, struct uia_or_condition, IUIAutomationOrCondition_iface);
 }
 
+/* (The same object also implements IUIAutomationAndCondition, whose methods
+ * are the same as IUIAutomationOrCondition's: condition.ConditionType says
+ * which one it is) */
 static HRESULT WINAPI uia_or_condition_QueryInterface(IUIAutomationOrCondition *iface, REFIID riid, void **ppv)
 {
+    struct uia_or_condition *uia_or_condition = impl_from_IUIAutomationOrCondition(iface);
+    REFIID own_iid = (uia_or_condition->condition.ConditionType == ConditionType_And) ?
+            &IID_IUIAutomationAndCondition : &IID_IUIAutomationOrCondition;
+
     *ppv = NULL;
-    if (IsEqualIID(riid, &IID_IUIAutomationOrCondition) || IsEqualIID(riid, &IID_IUIAutomationCondition) ||
+    if (IsEqualIID(riid, own_iid) || IsEqualIID(riid, &IID_IUIAutomationCondition) ||
             IsEqualIID(riid, &IID_IUnknown))
         *ppv = iface;
     else
@@ -153,8 +160,17 @@ static const IUIAutomationOrConditionVtbl uia_or_condition_vtbl = {
     uia_or_condition_GetChildren,
 };
 
-static HRESULT create_uia_or_condition_iface(IUIAutomationCondition **out_cond, IUIAutomationCondition **in_conds,
-        int in_cond_count)
+static const IUIAutomationAndConditionVtbl uia_and_condition_vtbl = {
+    (void *)uia_or_condition_QueryInterface,
+    (void *)uia_or_condition_AddRef,
+    (void *)uia_or_condition_Release,
+    (void *)uia_or_condition_get_ChildCount,
+    (void *)uia_or_condition_GetChildrenAsNativeArray,
+    (void *)uia_or_condition_GetChildren,
+};
+
+static HRESULT create_uia_and_or_condition_iface(IUIAutomationCondition **out_cond, IUIAutomationCondition **in_conds,
+        int in_cond_count, enum ConditionType cond_type)
 {
     struct uia_or_condition *uia_or_condition;
     int i;
@@ -168,8 +184,12 @@ static HRESULT create_uia_or_condition_iface(IUIAutomationCondition **out_cond, 
     if (!uia_or_condition)
         return E_OUTOFMEMORY;
 
-    uia_or_condition->IUIAutomationOrCondition_iface.lpVtbl = &uia_or_condition_vtbl;
+    if (cond_type == ConditionType_And)
+        uia_or_condition->IUIAutomationOrCondition_iface.lpVtbl = (IUIAutomationOrConditionVtbl *)&uia_and_condition_vtbl;
+    else
+        uia_or_condition->IUIAutomationOrCondition_iface.lpVtbl = &uia_or_condition_vtbl;
     uia_or_condition->ref = 1;
+    uia_or_condition->condition.ConditionType = cond_type;
 
     uia_or_condition->child_ifaces = calloc(in_cond_count, sizeof(*in_conds));
     if (!uia_or_condition->child_ifaces)
@@ -185,7 +205,6 @@ static HRESULT create_uia_or_condition_iface(IUIAutomationCondition **out_cond, 
         return E_OUTOFMEMORY;
     }
 
-    uia_or_condition->condition.ConditionType = ConditionType_Or;
     uia_or_condition->child_count = uia_or_condition->condition.cConditions = in_cond_count;
     for (i = 0; i < in_cond_count; i++)
     {
@@ -204,6 +223,60 @@ static HRESULT create_uia_or_condition_iface(IUIAutomationCondition **out_cond, 
 
     *out_cond = (IUIAutomationCondition *)&uia_or_condition->IUIAutomationOrCondition_iface;
     return S_OK;
+}
+
+static HRESULT create_uia_or_condition_iface(IUIAutomationCondition **out_cond, IUIAutomationCondition **in_conds,
+        int in_cond_count)
+{
+    return create_uia_and_or_condition_iface(out_cond, in_conds, in_cond_count, ConditionType_Or);
+}
+
+/* The conditions of a SAFEARRAY of IUnknown (as CreateAndConditionFromArray takes) */
+static HRESULT create_uia_and_or_condition_iface_from_safearray(IUIAutomationCondition **out_cond, SAFEARRAY *conds,
+        enum ConditionType cond_type)
+{
+    IUIAutomationCondition **cond_arr = NULL;
+    LONG lbound, elems, i;
+    HRESULT hr;
+    int count = 0;
+
+    if (!out_cond)
+        return E_POINTER;
+
+    *out_cond = NULL;
+    if (!conds)
+        return E_POINTER;
+
+    hr = get_safearray_bounds(conds, &lbound, &elems);
+    if (FAILED(hr))
+        return hr;
+
+    if (!(cond_arr = calloc(elems ? elems : 1, sizeof(*cond_arr))))
+        return E_OUTOFMEMORY;
+
+    for (i = 0; i < elems; i++)
+    {
+        LONG idx = lbound + i;
+        IUnknown *unk = NULL;
+
+        hr = SafeArrayGetElement(conds, &idx, &unk);
+        if (FAILED(hr))
+            break;
+
+        hr = unk ? IUnknown_QueryInterface(unk, &IID_IUIAutomationCondition, (void **)&cond_arr[i]) : E_POINTER;
+        IUnknown_Release(unk);
+        if (FAILED(hr))
+            break;
+        count++;
+    }
+
+    if (SUCCEEDED(hr))
+        hr = create_uia_and_or_condition_iface(out_cond, cond_arr, count, cond_type);
+
+    for (i = 0; i < count; i++)
+        IUIAutomationCondition_Release(cond_arr[i]);
+    free(cond_arr);
+    return hr;
 }
 
 /*
@@ -440,6 +513,21 @@ static HRESULT create_uia_property_condition_iface(IUIAutomationCondition **out_
             return E_INVALIDARG;
         break;
 
+    case UIAutomationType_Int:
+        if (V_VT(&val) != VT_I4)
+            return E_INVALIDARG;
+        break;
+
+    case UIAutomationType_String:
+        if (V_VT(&val) != VT_BSTR)
+            return E_INVALIDARG;
+        break;
+
+    case UIAutomationType_Double:
+        if (V_VT(&val) != VT_R8)
+            return E_INVALIDARG;
+        break;
+
     default:
         FIXME("Property condition evaluation for property type %#x unimplemented\n", prop_info->type);
         return E_NOTIMPL;
@@ -579,7 +667,8 @@ static HRESULT get_uia_condition_struct_from_iface(IUIAutomationCondition *condi
         cond = impl_from_IUIAutomationNotCondition((IUIAutomationNotCondition *)condition);
         *cond_struct = (struct UiaCondition *)&cond->condition;
     }
-    else if (condition->lpVtbl == (IUIAutomationConditionVtbl *)&uia_or_condition_vtbl)
+    else if (condition->lpVtbl == (IUIAutomationConditionVtbl *)&uia_or_condition_vtbl ||
+            condition->lpVtbl == (IUIAutomationConditionVtbl *)&uia_and_condition_vtbl)
     {
         struct uia_or_condition *cond;
 
@@ -713,8 +802,12 @@ static HRESULT WINAPI uia_cache_request_AddProperty(IUIAutomationCacheRequest *i
 
 static HRESULT WINAPI uia_cache_request_AddPattern(IUIAutomationCacheRequest *iface, PATTERNID pattern_id)
 {
-    FIXME("%p, %d: stub\n", iface, pattern_id);
-    return E_NOTIMPL;
+    /* Accepted, not cached yet: GetCachedPattern then fails for it, which
+     * callers handle; E_NOTIMPL here made Opera's installer give up */
+    FIXME("%p, %d: pattern not cached\n", iface, pattern_id);
+    if (pattern_id < UIA_InvokePatternId || pattern_id > 10100) /* (10000-10046 on Windows 11, with room) */
+        return E_INVALIDARG;
+    return S_OK;
 }
 
 static HRESULT WINAPI uia_cache_request_Clone(IUIAutomationCacheRequest *iface, IUIAutomationCacheRequest **out_req)
@@ -3557,18 +3650,68 @@ static HRESULT WINAPI uia_iface_GetFocusedElement(IUIAutomation6 *iface, IUIAuto
     return uia_get_focused_element(iface, NULL, TRUE, out_elem);
 }
 
+/* An element for node with the properties of cache_req already cached (as
+ * IUIAutomationElement::BuildUpdatedCache does). Takes over node. */
+static HRESULT uia_element_from_node_build_cache(struct uia_iface *uia_iface, HUIANODE node,
+        IUIAutomationCacheRequest *cache_req, IUIAutomationElement **out_elem)
+{
+    struct UiaCacheRequest *cache_req_struct;
+    BSTR tree_struct;
+    SAFEARRAY *sa;
+    HRESULT hr;
+
+    hr = get_uia_cache_request_struct_from_iface(cache_req, &cache_req_struct);
+    if (SUCCEEDED(hr))
+        hr = UiaGetUpdatedCache(node, cache_req_struct, NormalizeState_None, NULL, &sa, &tree_struct);
+    UiaNodeRelease(node);
+    if (FAILED(hr))
+        return hr;
+
+    hr = create_uia_element_from_cache_req(out_elem, uia_iface->is_cui8, cache_req_struct, 0, sa, tree_struct);
+    SafeArrayDestroy(sa);
+    return hr;
+}
+
+/* (Opera's installer calls these and uses the element without checking the
+ * result: E_NOTIMPL made it crash on a NULL element) */
 static HRESULT WINAPI uia_iface_GetRootElementBuildCache(IUIAutomation6 *iface, IUIAutomationCacheRequest *cache_req,
         IUIAutomationElement **out_root)
 {
-    FIXME("%p, %p, %p: stub\n", iface, cache_req, out_root);
-    return E_NOTIMPL;
+    struct uia_iface *uia_iface = impl_from_IUIAutomation6(iface);
+    HUIANODE node;
+    HRESULT hr;
+
+    TRACE("%p, %p, %p\n", iface, cache_req, out_root);
+
+    if (!out_root)
+        return E_POINTER;
+
+    *out_root = NULL;
+    hr = UiaGetRootNode(&node);
+    if (FAILED(hr))
+        return hr;
+
+    return uia_element_from_node_build_cache(uia_iface, node, cache_req, out_root);
 }
 
 static HRESULT WINAPI uia_iface_ElementFromHandleBuildCache(IUIAutomation6 *iface, UIA_HWND hwnd,
         IUIAutomationCacheRequest *cache_req, IUIAutomationElement **out_elem)
 {
-    FIXME("%p, %p, %p, %p: stub\n", iface, hwnd, cache_req, out_elem);
-    return E_NOTIMPL;
+    struct uia_iface *uia_iface = impl_from_IUIAutomation6(iface);
+    HUIANODE node;
+    HRESULT hr;
+
+    TRACE("%p, %p, %p, %p\n", iface, hwnd, cache_req, out_elem);
+
+    if (!out_elem)
+        return E_POINTER;
+
+    *out_elem = NULL;
+    hr = UiaNodeFromHandle((HWND)hwnd, &node);
+    if (FAILED(hr))
+        return hr;
+
+    return uia_element_from_node_build_cache(uia_iface, node, cache_req, out_elem);
 }
 
 static HRESULT WINAPI uia_iface_ElementFromPointBuildCache(IUIAutomation6 *iface, POINT pt,
@@ -3677,29 +3820,46 @@ static HRESULT WINAPI uia_iface_CreatePropertyCondition(IUIAutomation6 *iface, P
 static HRESULT WINAPI uia_iface_CreatePropertyConditionEx(IUIAutomation6 *iface, PROPERTYID prop_id, VARIANT val,
         enum PropertyConditionFlags flags, IUIAutomationCondition **out_condition)
 {
-    FIXME("%p, %d, %s, %#x, %p: stub\n", iface, prop_id, debugstr_variant(&val), flags, out_condition);
-    return E_NOTIMPL;
+    TRACE("%p, %d, %s, %#x, %p\n", iface, prop_id, debugstr_variant(&val), flags, out_condition);
+
+    if (flags & ~(PropertyConditionFlags_IgnoreCase | PropertyConditionFlags_MatchSubstring))
+        return E_INVALIDARG;
+
+    return create_uia_property_condition_iface(out_condition, prop_id, val, flags);
 }
 
+/* (Opera's installer builds its search conditions with these and uses the
+ * result without checking it: E_NOTIMPL made it crash on a NULL condition) */
 static HRESULT WINAPI uia_iface_CreateAndCondition(IUIAutomation6 *iface, IUIAutomationCondition *cond1,
         IUIAutomationCondition *cond2, IUIAutomationCondition **out_condition)
 {
-    FIXME("%p, %p, %p, %p: stub\n", iface, cond1, cond2, out_condition);
-    return E_NOTIMPL;
+    IUIAutomationCondition *cond_arr[2] = { cond1, cond2 };
+
+    TRACE("%p, %p, %p, %p\n", iface, cond1, cond2, out_condition);
+
+    return create_uia_and_or_condition_iface(out_condition, cond_arr, ARRAY_SIZE(cond_arr), ConditionType_And);
 }
 
 static HRESULT WINAPI uia_iface_CreateAndConditionFromArray(IUIAutomation6 *iface, SAFEARRAY *conds,
         IUIAutomationCondition **out_condition)
 {
-    FIXME("%p, %p, %p: stub\n", iface, conds, out_condition);
-    return E_NOTIMPL;
+    TRACE("%p, %p, %p\n", iface, conds, out_condition);
+
+    return create_uia_and_or_condition_iface_from_safearray(out_condition, conds, ConditionType_And);
 }
 
 static HRESULT WINAPI uia_iface_CreateAndConditionFromNativeArray(IUIAutomation6 *iface, IUIAutomationCondition **conds,
         int conds_count, IUIAutomationCondition **out_condition)
 {
-    FIXME("%p, %p, %d, %p: stub\n", iface, conds, conds_count, out_condition);
-    return E_NOTIMPL;
+    TRACE("%p, %p, %d, %p\n", iface, conds, conds_count, out_condition);
+
+    if (!out_condition)
+        return E_POINTER;
+    *out_condition = NULL;
+    if (!conds || conds_count < 0)
+        return E_INVALIDARG;
+
+    return create_uia_and_or_condition_iface(out_condition, conds, conds_count, ConditionType_And);
 }
 
 static HRESULT WINAPI uia_iface_CreateOrCondition(IUIAutomation6 *iface, IUIAutomationCondition *cond1,
@@ -3715,15 +3875,23 @@ static HRESULT WINAPI uia_iface_CreateOrCondition(IUIAutomation6 *iface, IUIAuto
 static HRESULT WINAPI uia_iface_CreateOrConditionFromArray(IUIAutomation6 *iface, SAFEARRAY *conds,
         IUIAutomationCondition **out_condition)
 {
-    FIXME("%p, %p, %p: stub\n", iface, conds, out_condition);
-    return E_NOTIMPL;
+    TRACE("%p, %p, %p\n", iface, conds, out_condition);
+
+    return create_uia_and_or_condition_iface_from_safearray(out_condition, conds, ConditionType_Or);
 }
 
 static HRESULT WINAPI uia_iface_CreateOrConditionFromNativeArray(IUIAutomation6 *iface, IUIAutomationCondition **conds,
         int conds_count, IUIAutomationCondition **out_condition)
 {
-    FIXME("%p, %p, %d, %p: stub\n", iface, conds, conds_count, out_condition);
-    return E_NOTIMPL;
+    TRACE("%p, %p, %d, %p\n", iface, conds, conds_count, out_condition);
+
+    if (!out_condition)
+        return E_POINTER;
+    *out_condition = NULL;
+    if (!conds || conds_count < 0)
+        return E_INVALIDARG;
+
+    return create_uia_or_condition_iface(out_condition, conds, conds_count);
 }
 
 static HRESULT WINAPI uia_iface_CreateNotCondition(IUIAutomation6 *iface, IUIAutomationCondition *cond,

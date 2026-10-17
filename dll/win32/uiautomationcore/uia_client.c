@@ -3368,6 +3368,9 @@ static HRESULT uia_property_condition_check(HUIANODE node, struct UiaPropertyCon
     {
     case UIAutomationType_Bool:
     case UIAutomationType_IntArray:
+    case UIAutomationType_Int:
+    case UIAutomationType_String:
+    case UIAutomationType_Double:
         break;
 
     default:
@@ -3396,6 +3399,42 @@ static HRESULT uia_property_condition_check(HUIANODE node, struct UiaPropertyCon
             else
                 hr = S_FALSE;
             break;
+
+        case UIAutomationType_Int:
+            hr = (V_I4(&v) == V_I4(&prop_cond->Value)) ? S_OK : S_FALSE;
+            break;
+
+        case UIAutomationType_Double:
+            hr = (V_R8(&v) == V_R8(&prop_cond->Value)) ? S_OK : S_FALSE;
+            break;
+
+        case UIAutomationType_String:
+        {
+            const WCHAR *str = V_BSTR(&v) ? V_BSTR(&v) : L"";
+            const WCHAR *match = V_BSTR(&prop_cond->Value) ? V_BSTR(&prop_cond->Value) : L"";
+            BOOL matched;
+
+            if (prop_cond->Flags & PropertyConditionFlags_MatchSubstring)
+            {
+                size_t len = wcslen(match), str_len = wcslen(str), i;
+
+                matched = FALSE;
+                for (i = 0; !matched && i + len <= str_len; i++)
+                {
+                    if (prop_cond->Flags & PropertyConditionFlags_IgnoreCase)
+                        matched = !_wcsnicmp(str + i, match, len);
+                    else
+                        matched = !wcsncmp(str + i, match, len);
+                }
+            }
+            else if (prop_cond->Flags & PropertyConditionFlags_IgnoreCase)
+                matched = !_wcsicmp(str, match);
+            else
+                matched = !wcscmp(str, match);
+
+            hr = matched ? S_OK : S_FALSE;
+            break;
+        }
 
         default:
             break;
