@@ -505,7 +505,15 @@ static void CALLBACK MCIAVI_waveCallback(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwIn
 
     if (!wma) return;
 
+#ifndef __REACTOS__
     EnterCriticalSection(&wma->cs);
+#else
+    /* No lock here: this runs on the sound thread of winmm/wdmaud, and the
+     * player thread holds wma->cs while it calls waveOutWrite(), which waits
+     * for that same sound thread. Taking the lock deadlocked playback after
+     * the first buffer (Cinepak AVI frozen at frame 9). What is done below
+     * is atomic anyway. */
+#endif
 
     switch (uMsg) {
     case WOM_OPEN:
@@ -520,7 +528,9 @@ static void CALLBACK MCIAVI_waveCallback(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwIn
 	ERR("Unknown uMsg=%d\n", uMsg);
     }
 
+#ifndef __REACTOS__
     LeaveCriticalSection(&wma->cs);
+#endif
 }
 
 DWORD MCIAVI_OpenAudio(WINE_MCIAVI* wma, unsigned* nHdr, LPWAVEHDR* pWaveHdr)
@@ -541,7 +551,14 @@ DWORD MCIAVI_OpenAudio(WINE_MCIAVI* wma, unsigned* nHdr, LPWAVEHDR* pWaveHdr)
     /* FIXME: should set up a heuristic to compute the number of wave headers
      * to be used...
      */
+#ifdef __REACTOS__
+    /* The queue is only refilled between video frames: 7 blocks (about half a
+     * second of interleaved audio) ran dry whenever painting a 640x480 frame
+     * took a little longer, and the sound stuttered. Queue about 3 seconds. */
+    *nHdr = 32;
+#else
     *nHdr = 7;
+#endif
     waveHdr = calloc(*nHdr, sizeof(WAVEHDR) + wma->ash_audio.dwSuggestedBufferSize);
     if (!waveHdr) {
 	TRACE("Can't alloc wave headers\n");
