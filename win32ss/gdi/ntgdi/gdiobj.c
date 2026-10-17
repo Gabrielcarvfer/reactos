@@ -369,8 +369,11 @@ DecrementGdiHandleCount(ULONG ulProcessId)
     NTSTATUS Status;
 
     Status = PsLookupProcessByProcessId(ULongToHandle(ulProcessId), &pep);
-    NT_ASSERT(NT_SUCCESS(Status));
-    __analysis_assume(NT_SUCCESS(Status));
+    if (!NT_SUCCESS(Status))
+    {
+        /* The owner is gone already: nothing to count */
+        return;
+    }
 
     ppi = PsGetProcessWin32Process(pep);
     if (ppi) InterlockedDecrement((LONG*)&ppi->GDIHandleCount);
@@ -657,10 +660,15 @@ GDIOBJ_vDereferenceObject(POBJ pobj)
             if (gpentHmgr[ulIndex].ObjectOwner.ulObj != GDI_OBJ_HMGR_PUBLIC &&
                 gpentHmgr[ulIndex].ObjectOwner.ulObj != GDI_OBJ_HMGR_NONE)
             {
-                /* Decrement the process handle count */
-                ASSERT(gpentHmgr[ulIndex].ObjectOwner.ulObj ==
-                       HandleToUlong(PsGetCurrentProcessId()));
-                DecrementCurrentProcessGdiHandleCount();
+                /* Decrement the owner's handle count. The last reference
+                   is not always dropped by the owner: another process (or,
+                   with several processors, another thread at the same time)
+                   may still have held one when the owner deleted it. */
+                if (gpentHmgr[ulIndex].ObjectOwner.ulObj ==
+                    HandleToUlong(PsGetCurrentProcessId()))
+                    DecrementCurrentProcessGdiHandleCount();
+                else
+                    DecrementGdiHandleCount(gpentHmgr[ulIndex].ObjectOwner.ulObj);
             }
 
             /* Push entry to the free list */
