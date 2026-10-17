@@ -10,6 +10,7 @@
 #include <k32_vista.h>
 #include <ndk/exfuncs.h>
 #include <ndk/mmfuncs.h>
+#include <appmodel.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -394,6 +395,20 @@ GetPackageInfo(
     return ERROR_INVALID_PARAMETER;
 }
 
+/* The application IDs of an opened package: Microsoft Edge's msedge.dll
+ * (WebView2, used by TeamViewer's window) imports it */
+LONG
+WINAPI
+GetPackageApplicationIds(
+    _In_ PVOID packageInfoReference,
+    _Inout_ UINT32 *bufferLength,
+    _Out_writes_bytes_opt_(*bufferLength) BYTE *buffer,
+    _Out_opt_ UINT32 *count)
+{
+    /* (No reference can have been opened) */
+    return ERROR_INVALID_PARAMETER;
+}
+
 LONG
 WINAPI
 ClosePackageInfo(
@@ -542,6 +557,168 @@ PackageFamilyNameFromFullName(
     packageFamilyName[Needed - 1] = UNICODE_NULL;
     *packageFamilyNameLength = Needed;
     return ERROR_SUCCESS;
+}
+
+#ifndef PACKAGE_NAME_MAX_LENGTH
+#define PACKAGE_NAME_MAX_LENGTH 50
+#endif
+#ifndef PACKAGE_FULL_NAME_MAX_LENGTH
+#define PACKAGE_FULL_NAME_MAX_LENGTH 127
+#endif
+
+/* The publisher id of a package: the first 64 bits of the SHA-256 of the
+ * publisher (UTF-16), in base 32 (13 characters; "8wekyb3d8bbwe" for
+ * Microsoft's "CN=Microsoft Corporation, O=Microsoft Corporation,
+ * L=Redmond, S=Washington, C=US") */
+static const ULONG Sha256K[64] =
+{
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+#define ROR32(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+
+static void Sha256Block(ULONG State[8], const UCHAR Block[64])
+{
+    ULONG W[64], a, b, c, d, e, f, g, h, t1, t2;
+    int i;
+
+    for (i = 0; i < 16; i++)
+        W[i] = (Block[i * 4] << 24) | (Block[i * 4 + 1] << 16) | (Block[i * 4 + 2] << 8) | Block[i * 4 + 3];
+    for (i = 16; i < 64; i++)
+        W[i] = (ROR32(W[i - 2], 17) ^ ROR32(W[i - 2], 19) ^ (W[i - 2] >> 10)) + W[i - 7] +
+               (ROR32(W[i - 15], 7) ^ ROR32(W[i - 15], 18) ^ (W[i - 15] >> 3)) + W[i - 16];
+    a = State[0]; b = State[1]; c = State[2]; d = State[3];
+    e = State[4]; f = State[5]; g = State[6]; h = State[7];
+    for (i = 0; i < 64; i++)
+    {
+        t1 = h + (ROR32(e, 6) ^ ROR32(e, 11) ^ ROR32(e, 25)) + ((e & f) ^ (~e & g)) + Sha256K[i] + W[i];
+        t2 = (ROR32(a, 2) ^ ROR32(a, 13) ^ ROR32(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+        h = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+    }
+    State[0] += a; State[1] += b; State[2] += c; State[3] += d;
+    State[4] += e; State[5] += f; State[6] += g; State[7] += h;
+}
+
+static void PublisherIdFromPublisher(PCWSTR Publisher, WCHAR Id[14])
+{
+    static const char Digits[] = "0123456789abcdefghjkmnpqrstvwxyz";
+    ULONG State[8] = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                       0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 };
+    UCHAR Block[64];
+    ULONGLONG Bits = 0, Hash;
+    SIZE_T Length = wcslen(Publisher) * sizeof(WCHAR), Done = 0, Used = 0;
+    const UCHAR *Data = (const UCHAR *)Publisher;
+    int i;
+
+    /* SHA-256 of the UTF-16LE bytes */
+    while (Done < Length)
+    {
+        Block[Used++] = Data[Done++];
+        if (Used == 64)
+        {
+            Sha256Block(State, Block);
+            Used = 0;
+        }
+    }
+    Bits = (ULONGLONG)Length * 8;
+    Block[Used++] = 0x80;
+    if (Used > 56)
+    {
+        while (Used < 64) Block[Used++] = 0;
+        Sha256Block(State, Block);
+        Used = 0;
+    }
+    while (Used < 56) Block[Used++] = 0;
+    for (i = 7; i >= 0; i--) Block[Used++] = (UCHAR)(Bits >> (i * 8));
+    Sha256Block(State, Block);
+
+    /* The first 8 bytes, 5 bits at a time (the last digit gets 4 bits and a 0) */
+    Hash = ((ULONGLONG)State[0] << 32) | State[1];
+    for (i = 0; i < 12; i++)
+        Id[i] = Digits[(Hash >> (59 - i * 5)) & 31];
+    Id[12] = Digits[(Hash & 15) << 1];
+    Id[13] = UNICODE_NULL;
+}
+
+static PCWSTR ArchitectureName(UINT32 Architecture)
+{
+    switch (Architecture)
+    {
+        case PROCESSOR_ARCHITECTURE_INTEL: return L"x86";
+        case PROCESSOR_ARCHITECTURE_ARM: return L"arm";
+        case PROCESSOR_ARCHITECTURE_AMD64: return L"x64";
+        case 11 /* PROCESSOR_ARCHITECTURE_NEUTRAL */: return L"neutral";
+        case PROCESSOR_ARCHITECTURE_ARM64: return L"arm64";
+        case 14 /* PROCESSOR_ARCHITECTURE_IA32_ON_ARM64 */: return L"x86a64";
+        default: return NULL;
+    }
+}
+
+static LONG CopyPackageName(PCWSTR Name, UINT32 *Length, PWSTR Buffer)
+{
+    UINT32 Needed = (UINT32)wcslen(Name) + 1;
+
+    if (!Buffer || *Length < Needed)
+    {
+        *Length = Needed;
+        return ERROR_INSUFFICIENT_BUFFER;
+    }
+    RtlCopyMemory(Buffer, Name, Needed * sizeof(WCHAR));
+    *Length = Needed;
+    return ERROR_SUCCESS;
+}
+
+/* "Name_PublisherId" of a package id (Microsoft.WindowsAppRuntime.dll, used
+ * by PowerToys, imports it) */
+LONG
+WINAPI
+PackageFamilyNameFromId(
+    _In_ const PACKAGE_ID *packageId,
+    _Inout_ UINT32 *packageFamilyNameLength,
+    _Out_writes_opt_(*packageFamilyNameLength) PWSTR packageFamilyName)
+{
+    WCHAR Name[PACKAGE_NAME_MAX_LENGTH + 1 + 14], Id[14];
+
+    if (!packageId || !packageFamilyNameLength || !packageId->name || !packageId->publisher ||
+        !packageId->name[0] || wcslen(packageId->name) > PACKAGE_NAME_MAX_LENGTH)
+        return ERROR_INVALID_PARAMETER;
+
+    PublisherIdFromPublisher(packageId->publisher, Id);
+    _snwprintf(Name, ARRAYSIZE(Name), L"%s_%s", packageId->name, Id);
+    Name[ARRAYSIZE(Name) - 1] = UNICODE_NULL;
+    return CopyPackageName(Name, packageFamilyNameLength, packageFamilyName);
+}
+
+/* "Name_Version_Architecture_ResourceId_PublisherId" of a package id */
+LONG
+WINAPI
+PackageFullNameFromId(
+    _In_ const PACKAGE_ID *packageId,
+    _Inout_ UINT32 *packageFullNameLength,
+    _Out_writes_opt_(*packageFullNameLength) PWSTR packageFullName)
+{
+    WCHAR Name[PACKAGE_FULL_NAME_MAX_LENGTH + 1], Id[14];
+    PCWSTR Architecture;
+
+    if (!packageId || !packageFullNameLength || !packageId->name || !packageId->publisher ||
+        !packageId->name[0] || wcslen(packageId->name) > PACKAGE_NAME_MAX_LENGTH ||
+        !(Architecture = ArchitectureName(packageId->processorArchitecture)))
+        return ERROR_INVALID_PARAMETER;
+
+    PublisherIdFromPublisher(packageId->publisher, Id);
+    _snwprintf(Name, ARRAYSIZE(Name), L"%s_%u.%u.%u.%u_%s_%s_%s", packageId->name,
+               packageId->version.Major, packageId->version.Minor,
+               packageId->version.Build, packageId->version.Revision, Architecture,
+               packageId->resourceId ? packageId->resourceId : L"", Id);
+    Name[ARRAYSIZE(Name) - 1] = UNICODE_NULL;
+    return CopyPackageName(Name, packageFullNameLength, packageFullName);
 }
 
 /* GEOGRAPHIC LOCATION (Windows 10 1709) ************************************/

@@ -13,8 +13,8 @@ extern void func_DeviceIoControl(void);
 extern void func_dosdev(void);
 extern void func_EnumSystemCodePages(void);
 extern void func_FastFail(void);
+extern void func_FatFreeClusters(void);
 extern void func_FatStress(void);
-extern void func_FiberFpu(void);
 extern void func_FindActCtxSectionStringW(void);
 extern void func_FindFiles(void);
 extern void func_FindFirstFileEx(void);
@@ -50,6 +50,7 @@ extern void func_MailslotRead(void);
 extern void func_MultiByteToWideChar(void);
 extern void func_NestedJobs(void);
 extern void func_NewApis(void);
+extern void func_PackageNames(void);
 extern void func_PipeCompletionPort(void);
 extern void func_Pipes(void);
 extern void func_PrivMoveFileIdentityW(void);
@@ -92,8 +93,8 @@ const struct test winetest_testlist[] =
     { "dosdev",                      func_dosdev },
     { "EnumSystemCodePages",         func_EnumSystemCodePages },
     { "FastFail",                    func_FastFail },
+    { "FatFreeClusters",             func_FatFreeClusters },
     { "FatStress",                   func_FatStress },
-    { "FiberFpu",                    func_FiberFpu },
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
     { "FindFiles",                   func_FindFiles },
     { "FindFirstFileEx", func_FindFirstFileEx },
@@ -129,6 +130,7 @@ const struct test winetest_testlist[] =
     { "MultiByteToWideChar",         func_MultiByteToWideChar },
     { "NestedJobs",                  func_NestedJobs },
     { "NewApis",                     func_NewApis },
+    { "PackageNames",                func_PackageNames },
     { "PipeCompletionPort",          func_PipeCompletionPort },
     { "Pipes",                       func_Pipes },
     { "PrivMoveFileIdentityW",       func_PrivMoveFileIdentityW },

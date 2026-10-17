@@ -14,8 +14,8 @@ list(APPEND SOURCE
     dosdev.c
     EnumSystemCodePages.c
     FastFail.c
+    FatFreeClusters.c
     FatStress.c
-    FiberFpu.c
     FindActCtxSectionStringW.c
     FindFiles.c
     FindFirstFileEx.c
@@ -51,6 +51,7 @@ list(APPEND SOURCE
     MultiByteToWideChar.c
     NestedJobs.c
     NewApis.c
+    PackageNames.c
     PipeCompletionPort.c
     Pipes.c
     PrivMoveFileIdentityW.c
