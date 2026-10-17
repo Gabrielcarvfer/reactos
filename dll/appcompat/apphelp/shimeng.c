@@ -1152,7 +1152,16 @@ VOID SeiSetEntryProcessed(PPEB Peb)
             RtlEqualUnicodeString(&LdrEntry->BaseDllName, &Verifier, TRUE) ||
             RtlEqualUnicodeString(&LdrEntry->BaseDllName, &g_LoadingShimDll, TRUE) ||
             SE_IsShimDll(LdrEntry->DllBase) ||
-            (LdrEntry->Flags & LDRP_ENTRY_PROCESSED))
+            (LdrEntry->Flags & LDRP_ENTRY_PROCESSED) ||
+            /* System modules (excluded from hooks by default, see SeiIsExcluded):
+             * the shim DLLs' own imports may need them initialized first. E.g.
+             * MSYS2's bash.exe (MsysDecoy) imports user32 -> ... -> msvcrt; with
+             * msvcrt suppressed, acgenral -> uxtheme -> shlwapi's DllMain ran
+             * on an uninitialized msvcrt (_lock recursed: stack overflow).
+             * (The shim engine itself was initialized by the loader already) */
+            (g_hInstance != LdrEntry->DllBase &&
+             (RtlPrefixUnicodeString(&g_System32Directory, &LdrEntry->FullDllName, TRUE) ||
+              RtlPrefixUnicodeString(&g_SxsDirectory, &LdrEntry->FullDllName, TRUE))))
         {
             SHIMENG_WARN("Don't mess with 0x%p '%wZ'\n", LdrEntry->DllBase, &LdrEntry->BaseDllName);
         }
