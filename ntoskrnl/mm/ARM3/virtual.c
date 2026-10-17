@@ -2271,6 +2271,11 @@ MiProtectVirtualMemory(IN PEPROCESS Process,
         goto FailPath;
     }
 
+    /* A driver may have secured (part of) the range for its access */
+    Status = MiCheckSecuredRange(Process, StartingAddress, EndingAddress, ProtectionMask);
+    if (!NT_SUCCESS(Status))
+        goto FailPath;
+
     /* These kinds of VADs are not supported atm  */
     if ((Vad->u.VadFlags.VadType == VadAwe) ||
         (Vad->u.VadFlags.VadType == VadDevicePhysicalMemory) ||
@@ -2792,7 +2797,111 @@ MmGetVirtualForPhysical(IN PHYSICAL_ADDRESS PhysicalAddress)
 }
 
 /*
- * @unimplemented
+ * Secured user ranges (MmSecureVirtualMemory). While a range is secured, its
+ * pages can't be freed, decommitted, unmapped or given a protection that
+ * forbids the access it was secured for, so a driver may access it without
+ * copying it first (the pages may still be paged out and in).
+ */
+typedef struct _MI_SECURE_ENTRY
+{
+    LIST_ENTRY ListEntry;
+    PEPROCESS Process;
+    ULONG_PTR StartAddress;
+    ULONG_PTR EndAddress;   /* Last byte of the last page */
+    BOOLEAN ReadOnly;
+} MI_SECURE_ENTRY, *PMI_SECURE_ENTRY;
+
+static LIST_ENTRY MiSecureList = { &MiSecureList, &MiSecureList };
+static KSPIN_LOCK MiSecureLock;
+volatile LONG MiSecureCount;
+
+/*
+ * Can [StartAddress, EndAddress] of Process get ProtectionMask
+ * (MM_DELETE_CHECK: be freed, decommitted or unmapped)?
+ * Call with the address space lock held.
+ */
+NTSTATUS
+NTAPI
+MiCheckSecuredRange(
+    _In_ PEPROCESS Process,
+    _In_ ULONG_PTR StartAddress,
+    _In_ ULONG_PTR EndAddress,
+    _In_ ULONG ProtectionMask)
+{
+    PLIST_ENTRY Entry;
+    PMI_SECURE_ENTRY Secure;
+    NTSTATUS Status = STATUS_SUCCESS;
+    KIRQL OldIrql;
+
+    if (MiSecureCount == 0)
+        return STATUS_SUCCESS;
+
+    KeAcquireSpinLock(&MiSecureLock, &OldIrql);
+    for (Entry = MiSecureList.Flink; Entry != &MiSecureList; Entry = Entry->Flink)
+    {
+        Secure = CONTAINING_RECORD(Entry, MI_SECURE_ENTRY, ListEntry);
+        if ((Secure->Process != Process) ||
+            (StartAddress > Secure->EndAddress) ||
+            (EndAddress < Secure->StartAddress))
+        {
+            continue;
+        }
+
+        if ((ProtectionMask == MM_DELETE_CHECK) ||
+            ((ProtectionMask & MM_PROTECT_SPECIAL) == MM_GUARDPAGE) ||
+            (MmReadWrite[ProtectionMask & 0x1F] <
+             (Secure->ReadOnly ? MM_READ_ONLY_ALLOWED : MM_READ_WRITE_ALLOWED)))
+        {
+            DPRINT1("Range %p-%p is secured\n", (PVOID)StartAddress, (PVOID)EndAddress);
+            Status = STATUS_INVALID_PAGE_PROTECTION;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&MiSecureLock, OldIrql);
+
+    return Status;
+}
+
+/* Drop the secured ranges a dying process' drivers did not release */
+VOID
+NTAPI
+MiReleaseSecuredRanges(
+    _In_ PEPROCESS Process)
+{
+    PLIST_ENTRY Entry;
+    PMI_SECURE_ENTRY Secure;
+    LIST_ENTRY FreeList;
+    KIRQL OldIrql;
+
+    if (MiSecureCount == 0)
+        return;
+
+    InitializeListHead(&FreeList);
+    KeAcquireSpinLock(&MiSecureLock, &OldIrql);
+    Entry = MiSecureList.Flink;
+    while (Entry != &MiSecureList)
+    {
+        Secure = CONTAINING_RECORD(Entry, MI_SECURE_ENTRY, ListEntry);
+        Entry = Entry->Flink;
+        if (Secure->Process == Process)
+        {
+            RemoveEntryList(&Secure->ListEntry);
+            InterlockedDecrement(&MiSecureCount);
+            InsertTailList(&FreeList, &Secure->ListEntry);
+        }
+    }
+    KeReleaseSpinLock(&MiSecureLock, OldIrql);
+
+    while (!IsListEmpty(&FreeList))
+    {
+        Entry = RemoveHeadList(&FreeList);
+        DPRINT1("Process %p exits with a secured range\n", Process);
+        ExFreePoolWithTag(CONTAINING_RECORD(Entry, MI_SECURE_ENTRY, ListEntry), 'cSmM');
+    }
+}
+
+/*
+ * @implemented
  */
 PVOID
 NTAPI
@@ -2800,18 +2909,119 @@ MmSecureVirtualMemory(IN PVOID Address,
                       IN SIZE_T Length,
                       IN ULONG Mode)
 {
-    static ULONG Warn; if (!Warn++) UNIMPLEMENTED;
-    return Address;
+    PEPROCESS Process = PsGetCurrentProcess();
+    PETHREAD Thread = PsGetCurrentThread();
+    PMMSUPPORT AddressSpace;
+    PMI_SECURE_ENTRY Secure;
+    ULONG_PTR StartAddress, EndAddress, Va;
+    PVOID NextVa;
+    ULONG State, Protect, Allowed;
+    PMMVAD Vad;
+    BOOLEAN Ok = FALSE;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    if ((Length == 0) || (Mode & ~(PAGE_READONLY | PAGE_READWRITE)) || !Mode)
+        return NULL;
+
+    StartAddress = (ULONG_PTR)PAGE_ALIGN(Address);
+    EndAddress = ((ULONG_PTR)Address + Length - 1) | (PAGE_SIZE - 1);
+    if ((EndAddress < (ULONG_PTR)Address) ||
+        (EndAddress > (ULONG_PTR)MM_HIGHEST_USER_ADDRESS))
+    {
+        return NULL;
+    }
+
+    /* Pages that stay readable (and writable) as long as the range is secured */
+    Allowed = PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    if (!(Mode & PAGE_READWRITE))
+        Allowed |= PAGE_READONLY | PAGE_EXECUTE_READ;
+
+    Secure = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Secure), 'cSmM');
+    if (!Secure)
+        return NULL;
+    Secure->Process = Process;
+    Secure->StartAddress = StartAddress;
+    Secure->EndAddress = EndAddress;
+    Secure->ReadOnly = !(Mode & PAGE_READWRITE);
+
+    AddressSpace = &Process->Vm;
+    MmLockAddressSpace(AddressSpace);
+    if (Process->VmDeleted)
+        goto Done;
+
+    /* One ARM3 VAD (private memory or a pagefile-backed view) must hold it all */
+    Vad = MiLocateAddress((PVOID)StartAddress);
+    if (!Vad || MI_IS_MEMORY_AREA_VAD(Vad) ||
+        (Vad->u.VadFlags.VadType != VadNone) ||
+        ((EndAddress >> PAGE_SHIFT) > Vad->EndingVpn))
+    {
+        goto Done;
+    }
+
+    /* Every page must be committed and accessible as asked */
+    MiLockProcessWorkingSetShared(Process, Thread);
+    for (Va = StartAddress; Va < EndAddress; Va += PAGE_SIZE)
+    {
+        State = MiQueryAddressState((PVOID)Va, Vad, Process, &Protect, &NextVa);
+        if ((State != MEM_COMMIT) ||
+            (Protect & (PAGE_GUARD | PAGE_NOACCESS)) ||
+            !(Protect & Allowed))
+        {
+            break;
+        }
+    }
+    MiUnlockProcessWorkingSetShared(Process, Thread);
+    if (Va < EndAddress)
+        goto Done;
+
+    KeAcquireSpinLock(&MiSecureLock, &OldIrql);
+    InsertTailList(&MiSecureList, &Secure->ListEntry);
+    InterlockedIncrement(&MiSecureCount);
+    KeReleaseSpinLock(&MiSecureLock, OldIrql);
+    Ok = TRUE;
+
+Done:
+    MmUnlockAddressSpace(AddressSpace);
+    if (!Ok)
+    {
+        ExFreePoolWithTag(Secure, 'cSmM');
+        return NULL;
+    }
+    return Secure;
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 VOID
 NTAPI
 MmUnsecureVirtualMemory(IN PVOID SecureMem)
 {
-    static ULONG Warn; if (!Warn++) UNIMPLEMENTED;
+    PLIST_ENTRY Entry;
+    BOOLEAN Found = FALSE;
+    KIRQL OldIrql;
+
+    if (!SecureMem)
+        return;
+
+    /* (Already gone if its process exited) */
+    KeAcquireSpinLock(&MiSecureLock, &OldIrql);
+    for (Entry = MiSecureList.Flink; Entry != &MiSecureList; Entry = Entry->Flink)
+    {
+        if (Entry == &((PMI_SECURE_ENTRY)SecureMem)->ListEntry)
+        {
+            RemoveEntryList(Entry);
+            InterlockedDecrement(&MiSecureCount);
+            Found = TRUE;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&MiSecureLock, OldIrql);
+
+    if (Found)
+        ExFreePoolWithTag(SecureMem, 'cSmM');
 }
 
 /* SYSTEM CALLS ***************************************************************/
@@ -4948,6 +5158,13 @@ NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
     }
 
     //
+    // Committing again changes the protection: not of a secured range
+    //
+    Status = MiCheckSecuredRange(Process, StartingAddress, EndingAddress, ProtectionMask);
+    if (!NT_SUCCESS(Status))
+        goto FailPath;
+
+    //
     // Make sure this is an ARM3 section
     //
     if (MI_IS_ROSMM_VAD(FoundVad))
@@ -5431,6 +5648,18 @@ NtFreeVirtualMemory(IN HANDLE ProcessHandle,
         Status = STATUS_INVALID_PAGE_PROTECTION;
         goto FailPath;
     }
+
+    //
+    // Nor of ranges a driver secured (MmSecureVirtualMemory)
+    //
+    Status = MiCheckSecuredRange(Process,
+                                 ((FreeType & MEM_RELEASE) && !PRegionSize) ?
+                                     (Vad->StartingVpn << PAGE_SHIFT) : StartingAddress,
+                                 ((FreeType & MEM_RELEASE) && !PRegionSize) ?
+                                     ((Vad->EndingVpn << PAGE_SHIFT) | (PAGE_SIZE - 1)) : EndingAddress,
+                                 MM_DELETE_CHECK);
+    if (!NT_SUCCESS(Status))
+        goto FailPath;
 
     //
     //  Now we can try the operation. First check if this is a RELEASE or a DECOMMIT

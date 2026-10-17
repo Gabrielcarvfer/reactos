@@ -464,6 +464,77 @@ done:
     return Mask;
 }
 
+/*
+ * The bits of a DIB passed by the caller. Secured in place when possible, so
+ * they can't be freed or made unreadable while we use them (no copy of a
+ * screen-sized DIB on every blit), otherwise captured into a copy.
+ */
+static
+PVOID
+IntCaptureDIBits(
+    _In_ PVOID pvUser,
+    _In_ ULONG cjBits,
+    _Out_ PHANDLE phSecure,
+    _Out_ PBOOL pbCopy)
+{
+    PVOID pvBits;
+
+    *phSecure = NULL;
+    *pbCopy = FALSE;
+
+    /* (Nothing to read: as before, pass the pointer on) */
+    if (cjBits == 0)
+        return pvUser;
+
+    _SEH2_TRY
+    {
+        ProbeForRead(pvUser, cjBits, 1);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return NULL);
+    }
+    _SEH2_END;
+
+    *phSecure = MmSecureVirtualMemory(pvUser, cjBits, PAGE_READONLY);
+    if (*phSecure)
+        return pvUser;
+
+    /* (Not all of it is committed private memory, e.g. a resource in an
+     * image: copy it. Bits that can't all be read draw nothing, as on
+     * Windows.) */
+    pvBits = ExAllocatePoolWithTag(PagedPool, cjBits, TAG_DIB);
+    if (!pvBits)
+        return NULL;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(pvBits, pvUser, cjBits);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ExFreePoolWithTag(pvBits, TAG_DIB);
+        _SEH2_YIELD(return NULL);
+    }
+    _SEH2_END;
+
+    *pbCopy = TRUE;
+    return pvBits;
+}
+
+static
+VOID
+IntReleaseDIBits(
+    _In_opt_ PVOID pvBits,
+    _In_opt_ HANDLE hSecure,
+    _In_ BOOL bCopy)
+{
+    if (hSecure)
+        MmUnsecureVirtualMemory(hSecure);
+    if (bCopy && pvBits)
+        ExFreePoolWithTag(pvBits, TAG_DIB);
+}
+
 W32KAPI
 INT
 APIENTRY
@@ -498,6 +569,8 @@ NtGdiSetDIBitsToDeviceInternal(
     PPALETTE ppalDIB = NULL;
     LPBITMAPINFO pbmiSafe;
     BOOL bResult;
+    HANDLE hSecure = NULL;
+    BOOL bCopy = FALSE;
 
     if (!Bits) return 0;
 
@@ -507,16 +580,24 @@ NtGdiSetDIBitsToDeviceInternal(
     _SEH2_TRY
     {
         ProbeForRead(bmi, cjMaxInfo, 1);
-        ProbeForRead(Bits, cjMaxBits, 1);
         RtlCopyMemory(pbmiSafe, bmi, cjMaxInfo);
         bmi = pbmiSafe;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
         ret = 0;
+        Bits = NULL;
         goto Exit;
     }
     _SEH2_END;
+
+    /* The caller's bits, which stay readable until we are done */
+    Bits = IntCaptureDIBits(Bits, cjMaxBits, &hSecure, &bCopy);
+    if (!Bits)
+    {
+        ret = 0;
+        goto Exit;
+    }
 
     DPRINT("StartScan %d ScanLines %d Bits %p bmi %p ColorUse %d\n"
            "    Height %d Width %d biSizeImage %d\n"
@@ -696,6 +777,7 @@ Exit:
     if (pMaskSurf) EngUnlockSurface(pMaskSurf);
     if (hMaskBitmap) EngDeleteSurface((HSURF)hMaskBitmap);
     if (pDC) DC_UnlockDc(pDC);
+    IntReleaseDIBits(Bits, hSecure, bCopy);
     ExFreePoolWithTag(pbmiSafe, 'pmTG');
 
     return ret;
@@ -1376,6 +1458,8 @@ NtGdiStretchDIBitsInternal(
     ULONG BmpFormat = 0;
     INT LinesCopied = 0;
     ULONG iDstFormat;
+    HANDLE hSecure = NULL;
+    BOOL bCopy = FALSE;
 
     /* Check for bad iUsage */
     if (dwUsage > 2) return 0;
@@ -1454,23 +1538,12 @@ NtGdiStretchDIBitsInternal(
 
     if (pjInit && (cjMaxBits > 0))
     {
-        pvBits = ExAllocatePoolWithTag(PagedPool, cjMaxBits, TAG_DIB);
+        /* The caller's bits, which stay readable until we are done */
+        pvBits = IntCaptureDIBits(pjInit, cjMaxBits, &hSecure, &bCopy);
         if (!pvBits)
         {
             return 0;
         }
-
-        _SEH2_TRY
-        {
-            ProbeForRead(pjInit, cjMaxBits, 1);
-            RtlCopyMemory(pvBits, pjInit, cjMaxBits);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            ExFreePoolWithTag(pvBits, TAG_DIB);
-            return 0;
-        }
-        _SEH2_END;
     }
     else
     {
@@ -1667,7 +1740,7 @@ NtGdiStretchDIBitsInternal(
         if (pdc) DC_UnlockDc(pdc);
     }
 
-    if (pvBits) ExFreePoolWithTag(pvBits, TAG_DIB);
+    IntReleaseDIBits(pvBits, hSecure, bCopy);
 
     /* This is not what MSDN says is returned from this function, but it
      * follows Wine's dlls/gdi32/dib.c function nulldrv_StretchDIBits

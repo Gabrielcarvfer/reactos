@@ -2233,6 +2233,25 @@ MiCheckSecuredVad(
     IN ULONG ProtectionMask
 );
 
+/* What each protection allows (vadnode.c) */
+extern CHAR MmReadWrite[32];
+
+/* Ranges secured with MmSecureVirtualMemory (virtual.c) */
+NTSTATUS
+NTAPI
+MiCheckSecuredRange(
+    _In_ PEPROCESS Process,
+    _In_ ULONG_PTR StartAddress,
+    _In_ ULONG_PTR EndAddress,
+    _In_ ULONG ProtectionMask
+);
+
+VOID
+NTAPI
+MiReleaseSecuredRanges(
+    _In_ PEPROCESS Process
+);
+
 VOID
 NTAPI
 MiInsertVad(

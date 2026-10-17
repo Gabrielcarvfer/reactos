@@ -1441,6 +1441,9 @@ MmCleanProcessAddressSpace(IN PEPROCESS Process)
     Process->VmDeleted = TRUE;
     MiUnlockProcessWorkingSetUnsafe(Process, Thread);
 
+    /* Forget the ranges drivers secured and did not release */
+    MiReleaseSecuredRanges(Process);
+
     /* Enumerate the VADs */
     VadTree = &Process->VadRoot;
     while (VadTree->NumberGenericTableElements)

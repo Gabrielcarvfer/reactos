@@ -725,7 +725,6 @@ SetDIBitsToDevice(
     UINT ConvertedInfoSize;
     INT LinesCopied = 0;
     UINT cjBmpScanSize = 0;
-    BOOL Hit = FALSE;
     PVOID pvSafeBits = (PVOID) Bits;
     UINT bmiHeight;
     BOOL top_down;
@@ -898,34 +897,34 @@ SetDIBitsToDevice(
 
     cjBmpScanSize = DIB_BitmapMaxBitsSize((LPBITMAPINFO) lpbmi, ScanLines);
 
-    pvSafeBits = RtlAllocateHeap(GetProcessHeap(), 0, cjBmpScanSize);
-    if (pvSafeBits)
+    /* win32k reads the bits in place (it secures them while it uses them, or
+     * copies them when it can't), no copy is needed here. But an unreadable
+     * buffer that is also misaligned fails (gdi32_apitest:SetDIBitsToDevice) */
+    if (!IS_ALIGNED(Bits, 2))
     {
+        BOOL Unreadable = FALSE;
+
         _SEH2_TRY
         {
-            RtlCopyMemory(pvSafeBits, Bits, cjBmpScanSize);
+            volatile const BYTE *pb = Bits;
+            SIZE_T i;
+
+            for (i = 0; i < cjBmpScanSize; i += PAGE_SIZE)
+                (void)pb[i];
+            if (cjBmpScanSize)
+                (void)pb[cjBmpScanSize - 1];
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
-            Hit = TRUE;
+            Unreadable = TRUE;
         }
         _SEH2_END;
 
-        if (Hit)
+        if (Unreadable)
         {
-            // We don't die, we continue on with a allocated safe pointer to kernel
-            // space.....
-
-            if (!IS_ALIGNED(Bits, 2)) // If both Read Exception and mis-aligned
-            {
-                LinesCopied = 0;
-                goto Exit;
-            }
-
-            DPRINT1("SetDIBitsToDevice fail to read BitMapInfo: %p or Bits: %p & Size: %u\n",
-                pConvertedInfo, Bits, cjBmpScanSize);
+            LinesCopied = 0;
+            goto Exit;
         }
-        DPRINT("SetDIBitsToDevice Allocate Bits %u!!!\n", cjBmpScanSize);
     }
 
     if (!GdiGetHandleUserData(hdc, GDI_OBJECT_TYPE_DC, (PVOID) & pDc_Attr))
@@ -1076,7 +1075,6 @@ StretchDIBits(
     INT LinesCopied = 0;
     UINT cjBmpScanSize = 0;
     PVOID pvSafeBits = NULL;
-    BOOL Hit = FALSE;
 
     DPRINT("StretchDIBits %p : %p : %u\n", lpBits, lpBitsInfo, iUsage);
 
@@ -1107,31 +1105,9 @@ StretchDIBits(
 
     cjBmpScanSize = GdiGetBitmapBitsSize((BITMAPINFO *) pConvertedInfo);
 
-    if (lpBits)
-    {
-        pvSafeBits = RtlAllocateHeap(GetProcessHeap(), 0, cjBmpScanSize);
-        if (pvSafeBits)
-        {
-            _SEH2_TRY
-            {
-                RtlCopyMemory(pvSafeBits, lpBits, cjBmpScanSize);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Hit = TRUE;
-            }
-            _SEH2_END
-
-            if (Hit)
-            {
-                // We don't die, we continue on with a allocated safe pointer to kernel
-                // space.....
-                DPRINT1("StretchDIBits fail to read BitMapInfo: %p or Bits: %p & Size: %u\n",
-                    pConvertedInfo, lpBits, cjBmpScanSize);
-            }
-            DPRINT("StretchDIBits Allocate Bits %u!!!\n", cjBmpScanSize);
-        }
-    }
+    /* win32k reads the bits in place (it secures them while it uses them, or
+     * copies them when it can't), no copy is needed here */
+    pvSafeBits = (PVOID)lpBits;
 
     if (!GdiGetHandleUserData(hdc, GDI_OBJECT_TYPE_DC, (PVOID) & pDc_Attr))
     {
@@ -1165,8 +1141,6 @@ StretchDIBits(
                                                   NULL );
     }
 Exit:
-    if (pvSafeBits)
-        RtlFreeHeap(RtlGetProcessHeap(), 0, pvSafeBits);
     if (lpBitsInfo != pConvertedInfo)
         RtlFreeHeap(RtlGetProcessHeap(), 0, pConvertedInfo);
 
