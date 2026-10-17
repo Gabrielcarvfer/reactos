@@ -420,6 +420,22 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
         add_importlibs(${_module} ntoskrnl)
     endforeach()
 
+    # Kernel modules built with KCSAN data race checks (KCSAN_PROTOTYPE builds):
+    # the runtime is in ntoskrnl (ntoskrnl/kcsan/kcsan.c), enabled with the
+    # boot option KCSAN
+    if(KCSAN_PROTOTYPE)
+        set(KCSAN_MODULES "fastfat" CACHE STRING "Kernel modules built with KCSAN data race checks")
+        foreach(_module ${KCSAN_MODULES})
+            if(NOT TARGET ${_module})
+                message(WARNING "KCSAN_MODULES: no module ${_module}")
+                continue()
+            endif()
+            target_compile_options(${_module} PRIVATE "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=thread>")
+            target_compile_definitions(${_module} PRIVATE KCSAN_INSTRUMENTED)
+            add_importlibs(${_module} ntoskrnl)
+        endforeach()
+    endif()
+
     # Create the registry hives
     create_registry_hives()
 

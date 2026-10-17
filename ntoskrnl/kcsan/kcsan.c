@@ -140,6 +140,21 @@ KcsanStack(PVOID *Stack)
     return RtlWalkFrameChain(Stack, KCSAN_STACK, 0);
 }
 
+/* Prints Pc as module+offset, so a driver's reports can be symbolized whatever its load address */
+static VOID
+KcsanPrintPc(PVOID Pc)
+{
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    BOOLEAN InKernel;
+    PVOID Base;
+
+    Base = KiPcToFileHeader(Pc, &LdrEntry, FALSE, &InKernel);
+    if (Base)
+        DbgPrint(" %wZ+0x%Ix", &LdrEntry->BaseDllName, (ULONG_PTR)Pc - (ULONG_PTR)Base);
+    else
+        DbgPrint(" %p", Pc);
+}
+
 static VOID
 KcsanPrintStack(PCSTR Who, PVOID *Stack, ULONG Count)
 {
@@ -149,7 +164,7 @@ KcsanPrintStack(PCSTR Who, PVOID *Stack, ULONG Count)
     if (Count == 0)
         DbgPrint(" (not taken at IRQL > APC_LEVEL)");
     for (i = 0; i < Count; i++)
-        DbgPrint(" %p", Stack[i]);
+        KcsanPrintPc(Stack[i]);
     DbgPrint("\n");
 }
 
@@ -177,6 +192,10 @@ KcsanReport(PVOID Pc, ULONG_PTR Address, ULONG Size, BOOLEAN Write,
         DbgPrint("KCSAN:   races with %s of %lu bytes at %p (pc %p, thread %p, cpu %lu)\n",
                  Other->Write ? "write" : "read", Other->Size, (PVOID)Other->Address,
                  Other->Pc, Other->Thread, Other->Cpu);
+        DbgPrint("KCSAN:   pcs:");
+        KcsanPrintPc(Pc);
+        KcsanPrintPc(Other->Pc);
+        DbgPrint("\n");
         KcsanPrintStack("watcher", Stack, Count);
         KcsanPrintStack("other", Other->Stack, Other->StackCount);
     }
@@ -185,6 +204,9 @@ KcsanReport(PVOID Pc, ULONG_PTR Address, ULONG Size, BOOLEAN Write,
         DbgPrint("KCSAN: data race: value changed during %s of %lu bytes at %p (pc %p, thread %p, cpu %lu): %I64x -> %I64x by an uninstrumented access\n",
                  Write ? "write" : "read", Size, (PVOID)Address, Pc,
                  KeGetCurrentThread(), KeGetCurrentProcessorNumber(), OldValue, NewValue);
+        DbgPrint("KCSAN:   pc:");
+        KcsanPrintPc(Pc);
+        DbgPrint("\n");
         KcsanPrintStack("watcher", Stack, Count);
     }
     DbgPrint("KCSAN: %ld races so far (%ld watchpoints)\n", KcsanRaces + KcsanValueChanges, KcsanWatchpoints);

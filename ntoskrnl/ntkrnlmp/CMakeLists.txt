@@ -2,7 +2,13 @@
 include(../ntos.cmake)
 
 include_directories(${REACTOS_SOURCE_DIR}/ntoskrnl)
-spec2def(ntkrnlmp.exe ../ntoskrnl.spec)
+if(KCSAN_PROTOTYPE)
+    # (written by ../CMakeLists.txt: ntoskrnl.spec + the KCSAN runtime)
+    file(RELATIVE_PATH _ntkrnlmp_spec ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/../ntoskrnl_kcsan.spec)
+    spec2def(ntkrnlmp.exe ${_ntkrnlmp_spec})
+else()
+    spec2def(ntkrnlmp.exe ../ntoskrnl.spec)
+endif()
 
 if(MSVC_IDE)
     set_source_files_properties(${NTKRNLMP_ASM_SOURCE} PROPERTIES COMPILE_DEFINITIONS "CONFIG_SMP")

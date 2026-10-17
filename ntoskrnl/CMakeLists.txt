@@ -28,7 +28,17 @@ set(NTOSKRNL_ASM_SOURCE ${ASM_SOURCE})
 set(NTKRNLMP_SOURCE ${SOURCE})
 set(NTKRNLMP_ASM_SOURCE ${ASM_SOURCE})
 
-spec2def(ntoskrnl.exe ntoskrnl.spec ADD_IMPORTLIB)
+# KCSAN builds: the kernel also exports the KCSAN runtime for drivers built
+# with KCSAN_MODULES (ntoskrnl.spec + kcsan/kcsan.spec)
+set(NTOSKRNL_SPEC ntoskrnl.spec)
+if(KCSAN_PROTOTYPE)
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/ntoskrnl.spec _ntoskrnl_spec)
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/kcsan/kcsan.spec _kcsan_spec)
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/ntoskrnl_kcsan.spec "${_ntoskrnl_spec}\n${_kcsan_spec}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ntoskrnl.spec kcsan/kcsan.spec)
+    file(RELATIVE_PATH NTOSKRNL_SPEC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/ntoskrnl_kcsan.spec)
+endif()
+spec2def(ntoskrnl.exe ${NTOSKRNL_SPEC} ADD_IMPORTLIB)
 
 # Link GCC stack protector lib
 if (STACK_PROTECTOR)

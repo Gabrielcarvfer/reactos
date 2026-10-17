@@ -103,11 +103,16 @@ with ntdll, so it cannot simply be instrumented; the prototype builds an extra s
 `rtl_kcsan` with instrumented copies of `generictable.c` and `splaytree.c` and links it before
 `rtl` into ntoskrnl/ntkrnlmp (the linker then takes those objects from it).
 
-For **drivers** (fastfat, etc.) it is the KASAN pattern: a `KCSAN_MODULES` list in the top
-CMakeLists.txt doing `target_compile_options(${_module} PRIVATE -fsanitize=thread)` and exporting
-the `__tsan_*` functions from ntoskrnl.spec (`@ cdecl __tsan_read4(ptr)` ...), the same way
-`__asan_*_noabort` are exported now. fastfat is a good first candidate (allocsup.c/fatdata.c and its
-FCB/VCB state, after tonight's FAT corruption).
+For **drivers** it is the KASAN pattern: the `KCSAN_MODULES` list in the top CMakeLists.txt
+(default `fastfat`) builds each module with `-fsanitize=thread` and links it against ntoskrnl.
+The kernel exports the runtime only in KCSAN builds: `kcsan/kcsan.spec` lists the `__tsan_*`
+functions, and ntoskrnl/CMakeLists.txt writes `ntoskrnl_kcsan.spec` (ntoskrnl.spec + kcsan.spec)
+into the build directory and uses it for ntoskrnl.exe and ntkrnlmp.exe. A normal build is
+unchanged. Reports print each pc as `module+offset` (for example `fastfat.sys+0x1a2b3`), so a
+driver's races can be symbolized with addr2line on the unstripped module, whatever its load
+address.
+
+    cmake ... -DKCSAN_PROTOTYPE=ON -DKCSAN_MODULES="fastfat;ntfs"
 
 ## Self-test for the prototype
 
