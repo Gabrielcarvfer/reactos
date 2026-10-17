@@ -439,7 +439,7 @@ IntVideoPortMapMemory(
       MappedAddress = MmMapIoSpace(
          TranslatedAddress,
          NumberOfUchars,
-         MmNonCached);
+         (InIoSpace & VIDEO_MEMORY_SPACE_P6CACHE) ? MmWriteCombined : MmNonCached);
    }
 
    if (MappedAddress != NULL)

@@ -242,7 +242,8 @@ BochsMapVideoMemory(
 {
     VP_STATUS Status;
     PHYSICAL_ADDRESS VideoMemory;
-    ULONG MemSpace = VIDEO_MEMORY_SPACE_MEMORY;
+    /* Write-combined: a framebuffer mapped uncached makes every GDI blit crawl */
+    ULONG MemSpace = VIDEO_MEMORY_SPACE_MEMORY | VIDEO_MEMORY_SPACE_P6CACHE;
 
     VideoDebugPrint((Info, "Bochs: BochsMapVideoMemory Entry\n"));
 
