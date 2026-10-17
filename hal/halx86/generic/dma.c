@@ -1020,8 +1020,11 @@ HalPutDmaAdapter(IN PADAPTER_OBJECT AdapterObject)
  * @return The base virtual address of the memory allocated or NULL on failure.
  *
  * @remarks
- *    On real NT x86 systems the CacheEnabled parameter is ignored, we honour
- *    it. If it proves to cause problems change it.
+ *    CacheEnabled is ignored, like on Windows: DMA is coherent with the
+ *    processor caches on x86 and x64, so the buffer is always cached.
+ *    (Uncached buffers made every access to them slow: e1000's receive
+ *    buffers, copied once per received packet, cost a third of the processor
+ *    time of a download.)
  *
  * @see HalFreeCommonBuffer
  *
@@ -1038,6 +1041,8 @@ HalAllocateCommonBuffer(IN PADAPTER_OBJECT AdapterObject,
     PHYSICAL_ADDRESS HighestAcceptableAddress;
     PHYSICAL_ADDRESS BoundryAddressMultiple;
     PVOID VirtualAddress;
+
+    UNREFERENCED_PARAMETER(CacheEnabled);
 
     LowestAcceptableAddress.QuadPart = 0;
     HighestAcceptableAddress = HalpGetAdapterMaximumPhysicalAddress(AdapterObject);
@@ -1061,8 +1066,7 @@ HalAllocateCommonBuffer(IN PADAPTER_OBJECT AdapterObject,
                                                             LowestAcceptableAddress,
                                                             HighestAcceptableAddress,
                                                             BoundryAddressMultiple,
-                                                            CacheEnabled ? MmCached :
-                                                            MmNonCached);
+                                                            MmCached);
     if (VirtualAddress == NULL) return NULL;
 
     *LogicalAddress = MmGetPhysicalAddress(VirtualAddress);
@@ -1087,9 +1091,11 @@ HalFreeCommonBuffer(IN PADAPTER_OBJECT AdapterObject,
                     IN PVOID VirtualAddress,
                     IN BOOLEAN CacheEnabled)
 {
+    UNREFERENCED_PARAMETER(CacheEnabled);
+
     MmFreeContiguousMemorySpecifyCache(VirtualAddress,
                                        Length,
-                                       CacheEnabled ? MmCached : MmNonCached);
+                                       MmCached);
 }
 
 typedef struct _SCATTER_GATHER_CONTEXT {
