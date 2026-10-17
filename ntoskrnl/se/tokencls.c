@@ -578,6 +578,38 @@ NtQueryInformationToken(
 
     PreviousMode = ExGetPreviousMode();
 
+    /*
+     * A class of a fixed size takes a larger buffer too, and a smaller one
+     * gets the size it needs with STATUS_BUFFER_TOO_SMALL, as on Windows
+     * (programs ask for the size first, e.g. TeamViewer for TokenElevation)
+     */
+    if ((ULONG)TokenInformationClass < RTL_NUMBER_OF(SeTokenInformationClass) &&
+        (SeTokenInformationClass[TokenInformationClass].Flags & ICIF_QUERY) &&
+        !(SeTokenInformationClass[TokenInformationClass].Flags & ICIF_QUERY_SIZE_VARIABLE) &&
+        SeTokenInformationClass[TokenInformationClass].RequiredSizeQUERY > 0)
+    {
+        ULONG Required = SeTokenInformationClass[TokenInformationClass].RequiredSizeQUERY;
+
+        if (TokenInformationLength < Required)
+        {
+            _SEH2_TRY
+            {
+                if (PreviousMode != KernelMode)
+                    ProbeForWriteUlong(ReturnLength);
+                *ReturnLength = Required;
+            }
+            _SEH2_EXCEPT(ExSystemExceptionFilter())
+            {
+                _SEH2_YIELD(return _SEH2_GetExceptionCode());
+            }
+            _SEH2_END;
+
+            return STATUS_BUFFER_TOO_SMALL;
+        }
+
+        TokenInformationLength = Required;
+    }
+
     /* Check buffers and class validity */
     Status = DefaultQueryInfoBufferCheck(TokenInformationClass,
                                          SeTokenInformationClass,
@@ -1146,7 +1178,7 @@ NtQueryInformationToken(
                     {
                         /* Buffer size was already verified, no need to check here again */
                         *(PULONG)TokenInformation = SessionId;
-                        *ReturnLength = RequiredLength;
+                        *ReturnLength = sizeof(ULONG);
                     }
                     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
                     {
