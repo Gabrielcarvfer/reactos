@@ -3459,6 +3459,23 @@ typedef struct _WND2CBOX
   LPHEADCOMBO pCBox;
 } WND2CBOX, *PWND2CBOX;
 
+#ifdef _WIN64
+/* The same state of a combo box of a 32-bit (WoW64) program: handles are 32 bits,
+ * and so is the pointer to it in the window's extra bytes */
+typedef struct
+{
+   ULONG          self;
+   ULONG          owner;
+   UINT           dwStyle;
+   ULONG          hWndEdit;
+   ULONG          hWndLBox;
+   UINT           wState;
+   ULONG          hFont;
+   RECT           textRect;
+   RECT           buttonRect;
+} HEADCOMBO32, *LPHEADCOMBO32;
+#endif
+
 #define CBF_BUTTONDOWN          0x0002
 ////
 ////
@@ -3517,6 +3534,27 @@ NtUserGetComboBoxInfo(
 
    _SEH2_TRY
    {
+#ifdef _WIN64
+      if (IoIs32bitProcess(NULL)) /* (attached to the window's process above) */
+      {
+         /* A 32-bit pointer to the 32-bit state: read as 64-bit, it was a
+          * non-canonical address and the kernel faulted (KeePass) */
+         LPHEADCOMBO32 lphc32 = (LPHEADCOMBO32)(ULONG_PTR)*(PULONG)((PUCHAR)Wnd + sizeof(WND));
+         ProbeForRead(lphc32, sizeof(*lphc32), 1);
+         pcbi->rcItem = lphc32->textRect;
+         pcbi->rcButton = lphc32->buttonRect;
+         pcbi->stateButton = 0;
+         if (lphc32->wState & CBF_BUTTONDOWN)
+            pcbi->stateButton |= STATE_SYSTEM_PRESSED;
+         if (RECTL_bIsEmptyRect(&lphc32->buttonRect))
+            pcbi->stateButton |= STATE_SYSTEM_INVISIBLE;
+         pcbi->hwndCombo = UlongToHandle(lphc32->self);
+         pcbi->hwndItem = UlongToHandle(lphc32->hWndEdit);
+         pcbi->hwndList = UlongToHandle(lphc32->hWndLBox);
+      }
+      else
+#endif
+      {
       LPHEADCOMBO lphc = ((PWND2CBOX)Wnd)->pCBox;
       pcbi->rcItem = lphc->textRect;
       pcbi->rcButton = lphc->buttonRect;
@@ -3528,6 +3566,7 @@ NtUserGetComboBoxInfo(
       pcbi->hwndCombo = lphc->self;
       pcbi->hwndItem = lphc->hWndEdit;
       pcbi->hwndList = lphc->hWndLBox;
+      }
    }
    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
    {
