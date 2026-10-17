@@ -86,6 +86,14 @@ static PADAPTER_OBJECT HalpEisaAdapter[8];
 static BOOLEAN HalpEisaDma;
 #ifndef _MINIHAL_
 static PADAPTER_OBJECT HalpMasterAdapter;
+
+/*
+ * Map buffers for 32-bit bus master devices that do hardware scatter/gather.
+ * They are only needed when some physical memory lies above 4 GB; then the
+ * pages above 4 GB are double-buffered through these map registers.
+ */
+static PADAPTER_OBJECT HalpMasterAdapter32;
+static LONG HalpDmaMemoryAbove4GB = -1;
 #endif
 
 static const ULONG_PTR HalpEisaPortPage[8] = {
@@ -154,6 +162,12 @@ static DMA_OPERATIONS HalpDmaOperations = {
 #endif
 
 #define MAX_MAP_REGISTERS 64
+
+/* Up to 16 MB of map buffers below 4 GB for 32-bit bus masters */
+#define MAX_MAP_REGISTERS_32BIT_MASTER 0x1000
+#define INITIAL_MAP_BUFFERS_32BIT_MASTER 0x80000
+/* At most 4 MB in one transfer */
+#define MAX_MAP_REGISTERS_PER_CHANNEL_32BIT_MASTER 0x400
 
 #define TAG_DMA ' AMD'
 
@@ -279,12 +293,12 @@ HalpGrowMapBuffers(IN PADAPTER_OBJECT AdapterObject,
 
     /* Check if enough map register slots are available. */
     MapRegisterCount = BYTES_TO_PAGES(SizeOfMapBuffers);
-    if (MapRegisterCount + AdapterObject->NumberOfMapRegisters > MAX_MAP_REGISTERS)
+    if (MapRegisterCount + AdapterObject->NumberOfMapRegisters > AdapterObject->MapRegisters->SizeOfBitMap)
     {
         DPRINT("No more map register slots available! (Current: %d | Requested: %d | Limit: %d)\n",
                AdapterObject->NumberOfMapRegisters,
                MapRegisterCount,
-               MAX_MAP_REGISTERS);
+               AdapterObject->MapRegisters->SizeOfBitMap);
         return FALSE;
     }
 
@@ -341,14 +355,15 @@ HalpGrowMapBuffers(IN PADAPTER_OBJECT AdapterObject,
              *
              * Also for non-EISA DMA leave one free entry for every 64Kb
              * break, because the DMA controller can handle only coniguous
-             * 64Kb regions.
+             * 64Kb regions. Bus masters (HalpMasterAdapter32) don't have
+             * this limitation.
              */
             if (CurrentEntry != AdapterObject->MapRegisterBase)
             {
                 PreviousEntry = CurrentEntry - 1;
                 if ((PreviousEntry->PhysicalAddress.LowPart + PAGE_SIZE) == PhysicalAddress.LowPart)
                 {
-                    if (!HalpEisaDma)
+                    if (!HalpEisaDma && !AdapterObject->MasterDevice)
                     {
                         if ((PreviousEntry->PhysicalAddress.LowPart ^ PhysicalAddress.LowPart) & 0xFFFF0000)
                         {
@@ -362,6 +377,13 @@ HalpGrowMapBuffers(IN PADAPTER_OBJECT AdapterObject,
                     CurrentEntry++;
                     AdapterObject->NumberOfMapRegisters++;
                 }
+            }
+
+            if ((ULONG)(CurrentEntry - AdapterObject->MapRegisterBase) >= AdapterObject->MapRegisters->SizeOfBitMap)
+            {
+                /* The gap entries used up the last slots; the rest of the buffer is lost */
+                DPRINT1("Map register slots exhausted while growing map buffers\n");
+                break;
             }
 
             RtlClearBit(AdapterObject->MapRegisters,
@@ -391,14 +413,16 @@ HalpGrowMapBuffers(IN PADAPTER_OBJECT AdapterObject,
  *
  * @see HalpInitDma
  */
+static
 PADAPTER_OBJECT
-NTAPI
-HalpDmaAllocateMasterAdapter(VOID)
+HalpDmaAllocateMasterAdapterEx(
+    _In_ ULONG SizeOfBitmap,
+    _In_ BOOLEAN BusMaster32,
+    _In_ ULONG InitialMapBufferSize)
 {
     PADAPTER_OBJECT MasterAdapter;
-    ULONG Size, SizeOfBitmap;
+    ULONG Size;
 
-    SizeOfBitmap = MAX_MAP_REGISTERS;
     Size = sizeof(ADAPTER_OBJECT);
     Size += sizeof(RTL_BITMAP);
     Size += (SizeOfBitmap + 7) >> 3;
@@ -419,6 +443,14 @@ HalpDmaAllocateMasterAdapter(VOID)
     MasterAdapter->NumberOfMapRegisters = 0;
     MasterAdapter->CommittedMapRegisters = 0;
 
+    /*
+     * The map buffers of a 32-bit bus master pool may live anywhere below
+     * 4 GB (see HalpGetAdapterMaximumPhysicalAddress). The default pool
+     * stays below 16 MB so that it can serve ISA (E)DMA too.
+     */
+    MasterAdapter->MasterDevice = BusMaster32;
+    MasterAdapter->Dma32BitAddresses = BusMaster32;
+
     MasterAdapter->MapRegisterBase = ExAllocatePoolWithTag(NonPagedPool,
                                                            SizeOfBitmap *
                                                            sizeof(ROS_MAP_REGISTER_ENTRY),
@@ -431,13 +463,62 @@ HalpDmaAllocateMasterAdapter(VOID)
 
     RtlZeroMemory(MasterAdapter->MapRegisterBase,
                   SizeOfBitmap * sizeof(ROS_MAP_REGISTER_ENTRY));
-    if (!HalpGrowMapBuffers(MasterAdapter, 0x10000))
+    if (!HalpGrowMapBuffers(MasterAdapter, InitialMapBufferSize))
     {
+        ExFreePool(MasterAdapter->MapRegisterBase);
         ExFreePool(MasterAdapter);
         return NULL;
     }
 
     return MasterAdapter;
+}
+
+PADAPTER_OBJECT
+NTAPI
+HalpDmaAllocateMasterAdapter(VOID)
+{
+    return HalpDmaAllocateMasterAdapterEx(MAX_MAP_REGISTERS, FALSE, 0x10000);
+}
+
+/**
+ * @name HalpDmaIsMemoryAbove4GB
+ *
+ * Returns TRUE if some physical memory lies above 4 GB, so that 32-bit
+ * bus masters may be handed buffers they can't reach. Must be called at
+ * PASSIVE_LEVEL with HalpDmaLock held.
+ */
+static
+BOOLEAN
+HalpDmaIsMemoryAbove4GB(VOID)
+{
+    PPHYSICAL_MEMORY_RANGE Ranges;
+    ULONG i;
+
+    if (HalpDmaMemoryAbove4GB != -1)
+        return (BOOLEAN)HalpDmaMemoryAbove4GB;
+
+    Ranges = MmGetPhysicalMemoryRanges();
+    if (!Ranges)
+    {
+        /* Can't tell; double-buffering is safe in any case */
+        return TRUE;
+    }
+
+    HalpDmaMemoryAbove4GB = FALSE;
+    for (i = 0; Ranges[i].BaseAddress.QuadPart || Ranges[i].NumberOfBytes.QuadPart; i++)
+    {
+        if ((ULONGLONG)Ranges[i].BaseAddress.QuadPart +
+            (ULONGLONG)Ranges[i].NumberOfBytes.QuadPart > 0x100000000ULL)
+        {
+            HalpDmaMemoryAbove4GB = TRUE;
+            break;
+        }
+    }
+
+    ExFreePool(Ranges);
+
+    DPRINT1("Physical memory above 4 GB: %s\n", HalpDmaMemoryAbove4GB ? "yes" : "no");
+    return (BOOLEAN)HalpDmaMemoryAbove4GB;
 }
 
 /**
@@ -664,6 +745,7 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
     ULONG MapRegisters;
     ULONG MaximumLength;
     KIRQL OldIrql;
+    BOOLEAN UseMasterAdapter32 = FALSE;
 
     /* Validate parameters in device description */
     if (DeviceDescription->Version > DEVICE_DESCRIPTION_VERSION2) return NULL;
@@ -736,6 +818,43 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
     KeWaitForSingleObject(&HalpDmaLock, Executive, KernelMode, FALSE, NULL);
 
     /*
+     * A 32-bit bus master with hardware scatter/gather can't reach memory
+     * above 4 GB. If the system has such memory, give the adapter map
+     * registers from a pool below 4 GB so that IoMapTransfer can double-buffer
+     * those pages (this is what Windows does too). 64-bit masters and
+     * systems without memory above 4 GB keep using the buffers directly.
+     */
+    if (!EisaAdapter && (MapRegisters == 0) &&
+        (DeviceDescription->Master) &&
+        (DeviceDescription->Dma32BitAddresses) &&
+        !(DeviceDescription->Dma64BitAddresses) &&
+        HalpDmaIsMemoryAbove4GB())
+    {
+        if (!HalpMasterAdapter32)
+        {
+            HalpMasterAdapter32 = HalpDmaAllocateMasterAdapterEx(MAX_MAP_REGISTERS_32BIT_MASTER,
+                                                                 TRUE,
+                                                                 INITIAL_MAP_BUFFERS_32BIT_MASTER);
+        }
+
+        if (HalpMasterAdapter32)
+        {
+            /*
+             * Some drivers pass MAXULONG as the maximum length (usbport):
+             * never promise more map registers than the pool can hold.
+             */
+            MapRegisters = BYTES_TO_PAGES(MaximumLength) + 1;
+            if (MapRegisters > MAX_MAP_REGISTERS_PER_CHANNEL_32BIT_MASTER)
+                MapRegisters = MAX_MAP_REGISTERS_PER_CHANNEL_32BIT_MASTER;
+            UseMasterAdapter32 = TRUE;
+        }
+        else
+        {
+            DPRINT1("Unable to allocate map buffers for 32-bit bus masters!\n");
+        }
+    }
+
+    /*
      * Now we must get ahold of the adapter object. For first eight ISA/EISA
      * channels there are static adapter objects that are reused and updated
      * on succesive HalGetAdapter calls. In other cases a new adapter object
@@ -766,6 +885,12 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
         if (EisaAdapter)
         {
             HalpEisaAdapter[DeviceDescription->DmaChannel] = AdapterObject;
+        }
+
+        /* Hardware S/G 32-bit bus master that needs double-buffering, see above */
+        if (UseMasterAdapter32)
+        {
+            AdapterObject->MasterAdapter = HalpMasterAdapter32;
         }
 
         if (MapRegisters > 0)
@@ -1004,6 +1129,10 @@ HalpScatterGatherAdapterControl(IN PDEVICE_OBJECT DeviceObject,
 	/* Store the map register base for later in HalPutScatterGatherList */
 	AdapterControlContext->MapRegisterBase = MapRegisterBase;
 
+    /* IoMapTransfer counts the pages of this transfer in the first map register */
+    if (MapRegisterBase)
+        ((PROS_MAP_REGISTER_ENTRY)((ULONG_PTR)MapRegisterBase & ~MAP_BASE_SW_SG))->Counter = 0;
+
     // FIXME: HACK Allocate TempElements from pool to minimize stack usage.
     // A more efficient algorithm should be found to avoid allocations during S/G I/O operations.
     TempElements = ExAllocatePoolUninitialized(NonPagedPool,
@@ -1146,18 +1275,18 @@ HalpScatterGatherAdapterControl(IN PDEVICE_OBJECT DeviceObject,
 						 IN BOOLEAN WriteToDevice)
 {
     PSCATTER_GATHER_CONTEXT AdapterControlContext = (PSCATTER_GATHER_CONTEXT)ScatterGather->Reserved;
-	ULONG i;
 
-	for (i = 0; i < ScatterGather->NumberOfElements; i++)
-	{
-	     IoFlushAdapterBuffers(AdapterObject,
-		                       AdapterControlContext->Mdl,
-							   AdapterControlContext->MapRegisterBase,
-							   AdapterControlContext->CurrentVa,
-							   ScatterGather->Elements[i].Length,
-							   AdapterControlContext->WriteToDevice);
-		 AdapterControlContext->CurrentVa += ScatterGather->Elements[i].Length;
-	}
+    /*
+     * Flush the whole transfer at once: the map registers were assigned
+     * per page relative to the start of the transfer (see IoMapTransfer),
+     * so IoFlushAdapterBuffers must see the original CurrentVa.
+     */
+    IoFlushAdapterBuffers(AdapterObject,
+                          AdapterControlContext->Mdl,
+                          AdapterControlContext->MapRegisterBase,
+                          AdapterControlContext->CurrentVa,
+                          AdapterControlContext->Length,
+                          AdapterControlContext->WriteToDevice);
 
 	IoFreeMapRegisters(AdapterObject,
 	                   AdapterControlContext->MapRegisterBase,
@@ -1188,7 +1317,8 @@ HalCalculateScatterGatherListSize(
 
     UNIMPLEMENTED_ONCE;
 
-    NumberOfMapRegisters = PAGE_ROUND_UP(Length) >> PAGE_SHIFT;
+    /* One map register per page spanned by the buffer (it may not start page-aligned) */
+    NumberOfMapRegisters = ADDRESS_AND_SIZE_TO_SPAN_PAGES(CurrentVa, Length);
     SgSize = sizeof(SCATTER_GATHER_CONTEXT);
 
     *ScatterGatherListSize = SgSize;
@@ -1677,7 +1807,8 @@ IoFreeAdapterChannel(IN PADAPTER_OBJECT AdapterObject)
         AdapterObject->CurrentWcb = WaitContextBlock;
         AdapterObject->NumberOfMapRegisters = WaitContextBlock->NumberOfMapRegisters;
 
-        if ((WaitContextBlock->NumberOfMapRegisters) && (AdapterObject->MasterAdapter))
+        if ((WaitContextBlock->NumberOfMapRegisters) && (AdapterObject->NeedsMapRegisters) &&
+            (AdapterObject->MasterAdapter))
         {
             KeAcquireSpinLock(&MasterAdapter->SpinLock, &OldIrql);
 
@@ -1993,20 +2124,39 @@ IoFlushAdapterBuffers(IN PADAPTER_OBJECT AdapterObject,
         }
         else
         {
+            ULONG PageIndex = 0;
+            ULONG ChunkLength;
+            PUCHAR ChunkVa = CurrentVa;
+
+            /*
+             * IoMapTransfer double-buffered only the pages the device can't
+             * reach, the map register N backing page N of the transfer.
+             * Copy back just those pages.
+             */
             MdlPagesPtr = MmGetMdlPfnArray(Mdl);
             MdlPagesPtr += ((ULONG_PTR)CurrentVa - (ULONG_PTR)Mdl->StartVa) >> PAGE_SHIFT;
-
-            PhysicalAddress.QuadPart = *MdlPagesPtr << PAGE_SHIFT;
-            PhysicalAddress.QuadPart += BYTE_OFFSET(CurrentVa);
-
             HighestAcceptableAddress = HalpGetAdapterMaximumPhysicalAddress(AdapterObject);
-            if ((PhysicalAddress.QuadPart + Length) > HighestAcceptableAddress.QuadPart)
+
+            while (Length > 0)
             {
-                HalpCopyBufferMap(Mdl,
-                                  RealMapRegisterBase,
-                                  CurrentVa,
-                                  Length,
-                                  FALSE);
+                ChunkLength = min(PAGE_SIZE - BYTE_OFFSET(ChunkVa), Length);
+
+                PhysicalAddress.QuadPart = (ULONGLONG)MdlPagesPtr[PageIndex] << PAGE_SHIFT;
+                PhysicalAddress.QuadPart += BYTE_OFFSET(ChunkVa);
+
+                if ((ULONGLONG)(PhysicalAddress.QuadPart + ChunkLength - 1) >
+                    (ULONGLONG)HighestAcceptableAddress.QuadPart)
+                {
+                    HalpCopyBufferMap(Mdl,
+                                      RealMapRegisterBase + PageIndex,
+                                      ChunkVa,
+                                      ChunkLength,
+                                      FALSE);
+                }
+
+                ChunkVa += ChunkLength;
+                Length -= ChunkLength;
+                PageIndex++;
             }
         }
     }
@@ -2134,7 +2284,17 @@ IoMapTransfer(IN PADAPTER_OBJECT AdapterObject,
         MdlPage1 = *MdlPagesPtr;
         MdlPage2 = *(MdlPagesPtr + 1);
         if (MdlPage1 + 1 != MdlPage2) break;
-        if (!HalpEisaDma && ((MdlPage1 ^ MdlPage2) & ~0xF)) break;
+        if (AdapterObject && AdapterObject->MasterDevice &&
+            !((ULONG_PTR)MapRegisterBase & MAP_BASE_SW_SG))
+        {
+            /*
+             * Hardware S/G bus master: no 64Kb limit, but never let a run
+             * cross the 4Gb boundary, so that either all or none of its
+             * pages are double-buffered (IoFlushAdapterBuffers relies on it).
+             */
+            if ((MdlPage1 ^ MdlPage2) & ~(PFN_NUMBER)0xFFFFF) break;
+        }
+        else if (!HalpEisaDma && ((MdlPage1 ^ MdlPage2) & ~0xF)) break;
         TransferLength += PAGE_SIZE;
         MdlPagesPtr++;
     }
@@ -2172,7 +2332,8 @@ IoMapTransfer(IN PADAPTER_OBJECT AdapterObject,
          * store the data.
          */
         HighestAcceptableAddress = HalpGetAdapterMaximumPhysicalAddress(AdapterObject);
-        if ((PhysicalAddress.QuadPart + TransferLength) > HighestAcceptableAddress.QuadPart)
+        if ((ULONGLONG)(PhysicalAddress.QuadPart + TransferLength - 1) >
+            (ULONGLONG)HighestAcceptableAddress.QuadPart)
         {
             UseMapRegisters = TRUE;
             PhysicalAddress = RealMapRegisterBase[Counter].PhysicalAddress;
