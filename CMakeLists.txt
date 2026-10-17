@@ -424,7 +424,7 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     # the runtime is in ntoskrnl (ntoskrnl/kcsan/kcsan.c), enabled with the
     # boot option KCSAN
     if(KCSAN_PROTOTYPE)
-        set(KCSAN_MODULES "fastfat" CACHE STRING "Kernel modules built with KCSAN data race checks")
+        set(KCSAN_MODULES "fastfat;ntfs" CACHE STRING "Kernel modules built with KCSAN data race checks")
         foreach(_module ${KCSAN_MODULES})
             if(NOT TARGET ${_module})
                 message(WARNING "KCSAN_MODULES: no module ${_module}")

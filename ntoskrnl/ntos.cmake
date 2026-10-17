@@ -441,7 +441,13 @@ option(KCSAN_PROTOTYPE "Build selected kernel files with KCSAN data race checks"
 if(KCSAN_PROTOTYPE)
     set(KCSAN_FILES
         ${REACTOS_SOURCE_DIR}/ntoskrnl/fsrtl/filelock.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/cc/cacheman.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/cc/copy.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/cc/fs.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/cc/lazywrite.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/cc/mdl.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/cc/pin.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/cc/view.c
         CACHE STRING "Kernel source files built with KCSAN checks")
     set_source_files_properties(${KCSAN_FILES} PROPERTIES
         COMPILE_OPTIONS "-fsanitize=thread"

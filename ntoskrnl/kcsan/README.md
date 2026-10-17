@@ -90,7 +90,7 @@ ntos.cmake is included by both ntoskrnl/ and ntoskrnl/ntkrnlmp/):
 ```cmake
 option(KCSAN_PROTOTYPE "..." OFF)
 if(KCSAN_PROTOTYPE)
-    set(KCSAN_FILES ntoskrnl/fsrtl/filelock.c ntoskrnl/cc/pin.c CACHE STRING "...")
+    set(KCSAN_FILES ntoskrnl/fsrtl/filelock.c ntoskrnl/cc/*.c CACHE STRING "...")
     set_source_files_properties(${KCSAN_FILES} PROPERTIES
         COMPILE_OPTIONS "-fsanitize=thread" SKIP_PRECOMPILE_HEADERS ON)
     list(APPEND SOURCE ntoskrnl/kcsan/kcsan.c)
@@ -104,7 +104,7 @@ with ntdll, so it cannot simply be instrumented; the prototype builds an extra s
 `rtl` into ntoskrnl/ntkrnlmp (the linker then takes those objects from it).
 
 For **drivers** it is the KASAN pattern: the `KCSAN_MODULES` list in the top CMakeLists.txt
-(default `fastfat`) builds each module with `-fsanitize=thread` and links it against ntoskrnl.
+(default `fastfat;ntfs`) builds each module with `-fsanitize=thread` and links it against ntoskrnl.
 The kernel exports the runtime only in KCSAN builds: `kcsan/kcsan.spec` lists the `__tsan_*`
 functions, and ntoskrnl/CMakeLists.txt writes `ntoskrnl_kcsan.spec` (ntoskrnl.spec + kcsan.spec)
 into the build directory and uses it for ntoskrnl.exe and ntkrnlmp.exe. A normal build is
@@ -113,6 +113,10 @@ driver's races can be symbolized with addr2line on the unstripped module, whatev
 address.
 
     cmake ... -DKCSAN_PROTOTYPE=ON -DKCSAN_MODULES="fastfat;ntfs"
+
+The default `KCSAN_FILES` are filelock.c and the whole cache manager (`ntoskrnl/cc/*.c`). Both
+lists are cache variables: an existing build directory keeps its old lists until they are given
+again with `-D` (or removed from CMakeCache.txt).
 
 ## Self-test for the prototype
 
