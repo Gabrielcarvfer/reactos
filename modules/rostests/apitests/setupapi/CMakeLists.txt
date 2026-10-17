@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     devclass.c
+    DevQuery.c
     SetupDiInstallClassExA.c
     SetupDiGetActualModelsSection.c
     SetupInstallServicesFromInfSectionEx.c

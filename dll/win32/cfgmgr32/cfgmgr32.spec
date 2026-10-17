@@ -203,3 +203,12 @@
 @ stub CM_Reset_Children_Marks # setupapi.CM_Reset_Children_Marks
 @ stub CM_Reset_Children_Marks_Ex # setupapi.CM_Reset_Children_Marks_Ex
 @ stdcall -version=0x602+ CM_Unregister_Notification(ptr) setupapi.CM_Unregister_Notification
+@ stdcall -version=0x602+ DevCloseObjectQuery(ptr)
+@ stdcall -version=0x602+ DevCreateObjectQuery(long long long ptr long ptr ptr ptr ptr)
+@ stdcall -version=0xA00+ DevCreateObjectQueryEx(long long long ptr long ptr long ptr ptr ptr ptr)
+@ stdcall -version=0x602+ DevFindProperty(ptr long wstr long ptr)
+@ stdcall -version=0x602+ DevFreeObjectProperties(long ptr)
+@ stdcall -version=0x602+ DevFreeObjects(long ptr)
+@ stdcall -version=0x602+ DevGetObjectProperties(long wstr long long ptr ptr ptr)
+@ stdcall -version=0x602+ DevGetObjects(long long long ptr long ptr ptr ptr)
+@ stdcall -version=0xA00+ DevGetObjectsEx(long long long ptr long ptr long ptr ptr ptr)
