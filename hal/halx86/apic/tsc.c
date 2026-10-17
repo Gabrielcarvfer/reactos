@@ -50,6 +50,50 @@ DoLinearRegression(
     return (SumXY + (SumXX/2)) / SumXX;
 }
 
+
+/* Measure the TSC against PIT channel 2 (1193182 Hz), polling its output
+ * bit, over 50 ms. The RTC calibration below only spans 4 periodic RTC
+ * interrupts (~3 ms): in a virtual machine each interrupt can arrive
+ * hundreds of microseconds late, which made the performance counter run
+ * 30% fast or several times slow depending on the boot. Returns 0 if the
+ * PIT doesn't behave. */
+#define PIT_FREQUENCY 1193182
+#define PIT_CALIBRATION_MS 50
+
+static
+ULONG64
+HalpCalibrateTscWithPit(VOID)
+{
+    ULONG Latch = PIT_FREQUENCY / (1000 / PIT_CALIBRATION_MS);
+    UCHAR Port61;
+    ULONG64 Start, End;
+    ULONG Loops = 0;
+
+    /* Gate channel 2 on, speaker off */
+    Port61 = __inbyte(0x61);
+    __outbyte(0x61, (Port61 & ~0x02) | 0x01);
+
+    /* Channel 2, low then high byte, mode 0 (output goes high at 0) */
+    __outbyte(0x43, 0xB0);
+    __outbyte(0x42, Latch & 0xFF);
+    __outbyte(0x42, (Latch >> 8) & 0xFF);
+
+    Start = __rdtsc();
+    do
+    {
+        End = __rdtsc();
+        Loops++;
+    } while (!(__inbyte(0x61) & 0x20) && Loops < 50000000);
+
+    __outbyte(0x61, Port61);
+
+    /* The output never went high, or went high at once */
+    if (!(__inbyte(0x61) & 0x20) && Loops >= 50000000) return 0;
+    if (Loops < 2) return 0;
+
+    return (End - Start) * (1000 / PIT_CALIBRATION_MS);
+}
+
 VOID
 NTAPI
 HalpInitializeTsc(VOID)
@@ -110,6 +154,25 @@ HalpInitializeTsc(VOID)
     /* Calculate an average, using simplified linear regression */
     HalpCpuClockFrequency.QuadPart = DoLinearRegression(NUM_SAMPLES - 1,
                                                         TscCalibrationArray);
+
+    /* Prefer a longer measurement against the PIT: take it when two of them
+     * agree within 0.5% */
+    {
+        ULONG64 Pit1 = HalpCalibrateTscWithPit();
+        ULONG64 Pit2 = HalpCalibrateTscWithPit();
+        if (Pit1 && Pit2 &&
+            (Pit1 > Pit2 ? Pit1 - Pit2 : Pit2 - Pit1) < Pit1 / 200)
+        {
+            DPRINT1("TSC: %I64u Hz (PIT), %I64u Hz (RTC)\n",
+                    (Pit1 + Pit2) / 2, HalpCpuClockFrequency.QuadPart);
+            HalpCpuClockFrequency.QuadPart = (Pit1 + Pit2) / 2;
+        }
+        else
+        {
+            DPRINT1("TSC: PIT calibration failed (%I64u, %I64u), RTC says %I64u Hz\n",
+                    Pit1, Pit2, HalpCpuClockFrequency.QuadPart);
+        }
+    }
 
     /* Restore flags */
     __writeeflags(Flags);
