@@ -3995,6 +3995,75 @@ INT WINAPI CompareStringEx(LPCWSTR locale, DWORD flags, LPCWSTR str1, INT len1,
 }
 
 /******************************************************************************
+ *           FindNLSStringEx    (KERNEL32.@)
+ *
+ * Find a string in another one, comparing like CompareStringEx (adapted from
+ * Wine 5.0). .NET's CompareInfo (IndexOf, StartsWith, ...) uses it when it
+ * runs without ICU.
+ */
+INT WINAPI FindNLSStringEx(LPCWSTR locale, DWORD flags, LPCWSTR src, INT src_size,
+                           LPCWSTR value, INT value_size, LPINT found,
+                           LPNLSVERSIONINFO version, LPVOID reserved, LPARAM handle)
+{
+    /* FIXME: this function should normalize strings before calling CompareStringEx() */
+    DWORD mask;
+    int offset, inc, count;
+
+    TRACE("%s %lx %s %d %s %d %p %p %p %Ix\n", debugstr_w(locale), flags,
+          debugstr_w(src), src_size, debugstr_w(value), value_size, found,
+          version, reserved, handle);
+
+    /* The sort handle (from LCMapStringEx(LCMAP_SORTHANDLE)) is ignored, like
+       the locale: CompareStringEx compares the same way for all locales */
+    if (version || reserved || !src || !src_size || src_size < -1 ||
+        !value || !value_size || value_size < -1)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return -1;
+    }
+    if (src_size == -1)
+        src_size = strlenW(src);
+    if (value_size == -1)
+        value_size = strlenW(value);
+
+    src_size -= value_size;
+    if (src_size < 0) return -1;
+
+    mask = flags & ~(FIND_FROMSTART | FIND_FROMEND | FIND_STARTSWITH | FIND_ENDSWITH);
+    count = flags & (FIND_FROMSTART | FIND_FROMEND) ? src_size + 1 : 1;
+    offset = flags & (FIND_FROMSTART | FIND_STARTSWITH) ? 0 : src_size;
+    inc = flags & (FIND_FROMSTART | FIND_STARTSWITH) ? 1 : -1;
+    while (count--)
+    {
+        if (CompareStringEx(locale, mask, src + offset, value_size, value, value_size, NULL, NULL, 0) == CSTR_EQUAL)
+        {
+            if (found)
+                *found = value_size;
+            return offset;
+        }
+        offset += inc;
+    }
+
+    return -1;
+}
+
+/******************************************************************************
+ *           FindNLSString    (KERNEL32.@)
+ */
+INT WINAPI FindNLSString(LCID lcid, DWORD flags, LPCWSTR src, INT src_size,
+                         LPCWSTR value, INT value_size, LPINT found)
+{
+    WCHAR locale[LOCALE_NAME_MAX_LENGTH];
+
+    if (!LCIDToLocaleName(lcid, locale, ARRAY_SIZE(locale), 0))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return -1;
+    }
+    return FindNLSStringEx(locale, flags, src, src_size, value, value_size, found, NULL, NULL, 0);
+}
+
+/******************************************************************************
  *           CompareStringA    (KERNEL32.@)
  *
  * Compare two locale sensitive strings.

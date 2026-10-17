@@ -18,6 +18,7 @@ list(APPEND SOURCE
     FindActCtxSectionStringW.c
     FindFiles.c
     FindFirstFileEx.c
+    FindNLSString.c
     FLS.c
     FormatMessage.c
     GetComputerNameEx.c

@@ -17,6 +17,7 @@ extern void func_FatStress(void);
 extern void func_FindActCtxSectionStringW(void);
 extern void func_FindFiles(void);
 extern void func_FindFirstFileEx(void);
+extern void func_FindNLSString(void);
 extern void func_FLS(void);
 extern void func_FormatMessage(void);
 extern void func_GetComputerNameEx(void);
@@ -94,6 +95,7 @@ const struct test winetest_testlist[] =
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
     { "FindFiles",                   func_FindFiles },
     { "FindFirstFileEx", func_FindFirstFileEx },
+    { "FindNLSString",               func_FindNLSString },
     { "FLS",                         func_FLS },
     { "FormatMessage",               func_FormatMessage },
     { "GetComputerNameEx",           func_GetComputerNameEx },
