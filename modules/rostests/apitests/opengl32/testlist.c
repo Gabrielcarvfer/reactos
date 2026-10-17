@@ -4,11 +4,13 @@
 
 extern void func_sw_extensions(void);
 extern void func_sw_pixelformat(void);
+extern void func_wglShareLists(void);
 
 const struct test winetest_testlist[] =
 {
     { "sw_extensions", func_sw_extensions },
     { "sw_pixelformat", func_sw_pixelformat },
+    { "wglShareLists", func_wglShareLists },
 
     { 0, 0 }
 };
