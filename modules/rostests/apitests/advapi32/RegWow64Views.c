@@ -243,10 +243,10 @@ static void TestClassesRelative(void)
 
     ReadRelative(HKEY_CLASSES_ROOT, NULL, 0, L"CLSID\\" TEST_CLSID, Mine, FALSE);
     ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes", 0, L"CLSID\\" TEST_CLSID, Mine, FALSE);
-    /* (ReactOS knows the view of a root key from its path only: a key that is
-       the same in both views counts as opened in the view of the program) */
+    /* (ReactOS knows the view of a root key opened by a 64-bit program from
+       its path only: the shared Classes key counts as a 64-bit view key) */
     ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes", KEY_WOW64_32KEY, L"CLSID\\" TEST_CLSID, L"32", !Is32Bit);
-    ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes", KEY_WOW64_64KEY, L"CLSID\\" TEST_CLSID, L"64", Is32Bit);
+    ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes", KEY_WOW64_64KEY, L"CLSID\\" TEST_CLSID, L"64", FALSE);
     ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes\\CLSID", 0, TEST_CLSID, Mine, FALSE);
     ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes\\CLSID", KEY_WOW64_32KEY, TEST_CLSID, L"32", FALSE);
     ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes\\CLSID", KEY_WOW64_64KEY, TEST_CLSID, L"64", FALSE);
