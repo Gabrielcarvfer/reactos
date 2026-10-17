@@ -150,9 +150,26 @@ KcsanPrintPc(PVOID Pc)
 
     Base = KiPcToFileHeader(Pc, &LdrEntry, FALSE, &InKernel);
     if (Base)
-        DbgPrint(" %wZ+0x%Ix", &LdrEntry->BaseDllName, (ULONG_PTR)Pc - (ULONG_PTR)Base);
+    {
+        /* (Reports run at raised IRQL, under a spin lock: %wZ would convert the
+         * name with pageable NLS code, so copy it to ASCII by hand) */
+        CHAR Name[32];
+        ULONG i, Length = LdrEntry->BaseDllName.Length / sizeof(WCHAR);
+
+        if (Length >= sizeof(Name))
+            Length = sizeof(Name) - 1;
+        for (i = 0; i < Length; i++)
+        {
+            WCHAR Char = LdrEntry->BaseDllName.Buffer[i];
+            Name[i] = (Char < 0x80) ? (CHAR)Char : '?';
+        }
+        Name[Length] = ANSI_NULL;
+        DbgPrint(" %s+0x%Ix", Name, (ULONG_PTR)Pc - (ULONG_PTR)Base);
+    }
     else
+    {
         DbgPrint(" %p", Pc);
+    }
 }
 
 static VOID
