@@ -328,6 +328,22 @@ KiDeferredReadyThread(IN PKTHREAD Thread)
 
     /* Get the next scheduled thread */
     NextThread = Prcb->NextThread;
+#ifdef CONFIG_SMP
+    if (NextThread && (NextThread == Prcb->IdleThread))
+    {
+        /* That processor was about to go idle (its thread left it, e.g. for
+           another processor's affinity): run this one instead. The idle
+           thread must never go to a ready list. */
+        Thread->State = Standby;
+        Prcb->NextThread = Thread;
+        InterlockedAndSetMember(&KiIdleSummary, ~Prcb->SetMember);
+        KiReleasePrcbLock(Prcb);
+
+        if (KeGetCurrentProcessorNumber() != Processor)
+            KiIpiSend(AFFINITY_MASK(Processor), IPI_DPC);
+        return;
+    }
+#endif
     if (NextThread)
     {
         /* Sanity check */
@@ -485,6 +501,31 @@ KiSwapThread(IN PKTHREAD CurrentThread,
     /* Save the wait IRQL */
     WaitIrql = CurrentThread->WaitIrql;
 
+#ifdef CONFIG_SMP
+    if (NextThread == CurrentThread)
+    {
+        /* Another processor satisfied our wait and gave us back to this
+           processor before we could switch away (the dispatcher lock is
+           released before KiSwapThread): keep running. Switching to
+           ourselves would wait forever for our own SwapBusy. */
+        CurrentThread->SwapBusy = FALSE;
+
+        /* Kernel APCs may be pending (as KiSwapContext would report) */
+        if (CurrentThread->ApcState.KernelApcPending)
+        {
+            if ((CurrentThread->SpecialApcDisable == 0) &&
+                (WaitIrql == PASSIVE_LEVEL))
+            {
+                ApcState = TRUE;
+            }
+            else
+            {
+                HalRequestSoftwareInterrupt(APC_LEVEL);
+            }
+        }
+    }
+    else
+#endif
     /* Swap contexts */
     ApcState = KiSwapContext(WaitIrql, CurrentThread);
 

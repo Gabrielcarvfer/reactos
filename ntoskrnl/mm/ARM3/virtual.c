@@ -364,12 +364,14 @@ MiDeleteSystemPageableVm(IN PMMPTE PointerPte,
     return ActualPages;
 }
 
-VOID
-NTAPI
-MiDeletePte(IN PMMPTE PointerPte,
-            IN PVOID VirtualAddress,
-            IN PEPROCESS CurrentProcess,
-            IN PMMPTE PrototypePte)
+/* Returns TRUE if a valid PTE was erased: the TLBs must be flushed
+   before the PFN lock is released (the page may be reused then) */
+static
+BOOLEAN
+MiDeletePteNoFlush(IN PMMPTE PointerPte,
+                   IN PVOID VirtualAddress,
+                   IN PEPROCESS CurrentProcess,
+                   IN PMMPTE PrototypePte)
 {
     PMMPFN Pfn1;
     MMPTE TempPte;
@@ -434,7 +436,7 @@ MiDeletePte(IN PMMPTE PointerPte,
                 /* This will put it back in free list and clean properly up */
                 MiDecrementReferenceCount(Pfn1, PageFrameIndex);
             }
-            return;
+            return FALSE;
         }
     }
 
@@ -521,8 +523,21 @@ MiDeletePte(IN PMMPTE PointerPte,
         //CurrentProcess->NumberOfPrivatePages--;
     }
 
-    /* Flush the TLB (of every processor: they may run this process too) */
-    KeFlushProcessTb();
+    return TRUE;
+}
+
+VOID
+NTAPI
+MiDeletePte(IN PMMPTE PointerPte,
+            IN PVOID VirtualAddress,
+            IN PEPROCESS CurrentProcess,
+            IN PMMPTE PrototypePte)
+{
+    if (MiDeletePteNoFlush(PointerPte, VirtualAddress, CurrentProcess, PrototypePte))
+    {
+        /* Flush the TLB (of every processor: they may run this process too) */
+        KeFlushProcessTb();
+    }
 }
 
 VOID
@@ -544,6 +559,7 @@ MiDeleteVirtualAddresses(
     PEPROCESS CurrentProcess;
     KIRQL OldIrql;
     BOOLEAN AddressGap = FALSE;
+    BOOLEAN NeedFlush = FALSE;
     PSUBSECTION Subsection;
 
     /* We should never get RosMm memory areas here */
@@ -699,11 +715,11 @@ MiDeleteVirtualAddresses(
                     }
                     else
                     {
-                        /* Delete the PTE proper */
-                        MiDeletePte(PointerPte,
-                                    (PVOID)Va,
-                                    CurrentProcess,
-                                    PrototypePte);
+                        /* Delete the PTE proper (one TLB flush for all, below) */
+                        NeedFlush |= MiDeletePteNoFlush(PointerPte,
+                                                        (PVOID)Va,
+                                                        CurrentProcess,
+                                                        PrototypePte);
                     }
                 }
                 else
@@ -716,8 +732,9 @@ MiDeleteVirtualAddresses(
                 {
                     ASSERT(PointerPde->u.Long != 0);
 
-                    /* Delete the PDE proper */
+                    /* Delete the PDE proper (this flushes the TLBs) */
                     MiDeletePde(PointerPde, CurrentProcess);
+                    NeedFlush = FALSE;
 
                     /* Continue with the next PDE */
                     Va = (ULONG_PTR)MiPdeToAddress(PointerPde + 1);
@@ -735,6 +752,13 @@ MiDeleteVirtualAddresses(
             PointerPte++;
             PrototypePte++;
         } while ((Va & (PDE_MAPPED_VA - 1)) && (Va <= EndingAddress));
+
+        /* Flush the TLBs of every processor before the freed pages can be reused */
+        if (NeedFlush)
+        {
+            KeFlushProcessTb();
+            NeedFlush = FALSE;
+        }
 
         /* Release the lock */
         MiReleasePfnLock(OldIrql);
