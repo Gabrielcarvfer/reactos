@@ -300,9 +300,17 @@ ExpFreeHandleTableEntry(IN PHANDLE_TABLE HandleTable,
         /* Select a lock index */
         LockIndex = Handle.Index % 4;
 
-        /* Select which entry to use */
+        /* Select which entry to use. While an allocator holds this lock it
+           may be in the middle of popping this very handle's slot off the
+           first-free list (it read FirstFree and the entry's next link):
+           pushing the handle back there would let its compare-exchange
+           succeed with a stale next link (ABA), putting a handle that is in
+           use, or garbage, on the free list. So only push to the first-free
+           list when the lock is free, otherwise defer to the last-free list
+           (Windows: ExTryAcquireReleasePushLockExclusive). This was the
+           other way round. */
         Free = (HandleTable->HandleTableLock[LockIndex].Locked) ?
-                &HandleTable->FirstFree : &HandleTable->LastFree;
+                &HandleTable->LastFree : &HandleTable->FirstFree;
     }
     else
     {
@@ -661,7 +669,7 @@ ExpMoveFreeHandles(IN PHANDLE_TABLE HandleTable)
 
     /* Acquire the locks we need (the caller holds lock 0): no allocation
        can pop entries from the first-free list while we push ours. A free
-       meanwhile sees the lock taken and pushes to the first-free list too. */
+       meanwhile sees its lock taken and pushes to the last-free list. */
     for (i = 1; i < 4; i++)
     {
         /* Acquire this lock exclusively */
