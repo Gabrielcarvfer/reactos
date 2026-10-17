@@ -228,7 +228,12 @@ ExpReleaseOrWaitForKeyedEvent(
         else
         {
             /* The other side took us out of the list and signaled us, and
-               it was told that we got its release (or wait): we did */
+               it was told that we got its release (or wait): we did. Take
+               its signal too: the semaphore is shared with LPC (it is
+               LpcReplySemaphore), whose next reply would otherwise find it
+               signaled already and exceed its limit (bugcheck 0x1E with
+               STATUS_SEMAPHORE_LIMIT_EXCEEDED) */
+            KeInitializeSemaphore(&CurrentThread->KeyedWaitSemaphore, 0, 1);
             Status = STATUS_SUCCESS;
         }
 
