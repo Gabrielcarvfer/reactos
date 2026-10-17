@@ -812,13 +812,6 @@ RtlpUnwindInternal(
         /* Check if we have an exception routine */
         if (ExceptionRoutine != NULL)
         {
-            /* Check if this is the target frame */
-            if (EstablisherFrame == (ULONG64)TargetFrame)
-            {
-                /* Set flag to inform the language handler */
-                ExceptionRecord->ExceptionFlags |= EXCEPTION_TARGET_UNWIND;
-            }
-
             /* Log the exception if it's enabled */
             RtlpCheckLogException(ExceptionRecord,
                                   &UnwindContext,
@@ -838,6 +831,16 @@ RtlpUnwindInternal(
              /* Loop all nested handlers */
             do
             {
+                /* Check if this is the target frame. (Inside the loop: after a
+                   collided unwind, the frame of the original unwind is called
+                   again, and it can be the target of the new one. LLVM's and
+                   GCC's C++ handlers set the landing pad's RDX only then.) */
+                if (EstablisherFrame == (ULONG64)TargetFrame)
+                {
+                    /* Set flag to inform the language handler */
+                    ExceptionRecord->ExceptionFlags |= EXCEPTION_TARGET_UNWIND;
+                }
+
                 /* Call the language specific handler */
                 Disposition = RtlpExecuteHandlerForUnwind(ExceptionRecord,
                                                           (PVOID)EstablisherFrame,
@@ -891,8 +894,14 @@ RtlpUnwindInternal(
                                      &EstablisherFrame,
                                      NULL);
 
-                    /* Restore the context pointer and establisher frame. */
-                    DispatcherContext.ContextRecord = &UnwindContext;
+                    /* Restore the context pointer and establisher frame. The
+                       handler gets the context of its own frame, as before the
+                       collision: ContextRecord, which is also the context that
+                       gets restored, if this frame is the target (a handler
+                       may set registers in it, e.g. RDX for a landing pad).
+                       Not UnwindContext, which is the caller's context now. */
+                    DispatcherContext.ContextRecord =
+                        (HandlerType == UNW_FLAG_UHANDLER) ? ContextRecord : &UnwindContext;
                     EstablisherFrame = DispatcherContext.EstablisherFrame;
 
                     /* Set the exception flags to indicate that we collided
