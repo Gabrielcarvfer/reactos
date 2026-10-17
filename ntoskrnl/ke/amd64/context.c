@@ -14,6 +14,66 @@
 
 /* FUNCTIONS *****************************************************************/
 
+/*
+ * The x87 part of the user floating point state (control, status and tag
+ * words, error pointers, ST0-ST7) is not in the trap frame: the kernel does
+ * not use the x87 unit and a thread switch saves and restores it, so while a
+ * thread runs in the kernel its FPU still holds it. 32-bit programs (WOW64)
+ * depend on it: an exception handler that changes the context, or resumes
+ * after its own x87 code changed the control word, must find the x87 state
+ * of the context when it continues.
+ */
+#define KI_FX_LEGACY_HEADER FIELD_OFFSET(XSAVE_FORMAT, MxCsr)
+
+/* (GCC's _fxsave/_fxrstor builtins don't tell the compiler that they write
+   and read the buffer: it dropped the stores to it) */
+#if defined(__GNUC__)
+#define KiFxSave(Area) __asm__ __volatile__("fxsave %0" : "=m" (*(Area)))
+#define KiFxRestore(Area) __asm__ __volatile__("fxrstor %0" : : "m" (*(Area)))
+#else
+#define KiFxSave(Area) _fxsave(Area)
+#define KiFxRestore(Area) _fxrstor(Area)
+#endif
+
+static
+VOID
+KiGetLegacyFloatingPointState(
+    _Out_ PXSAVE_FORMAT FltSave)
+{
+    XSAVE_FORMAT DECLSPEC_ALIGN(16) Area;
+
+    KiFxSave(&Area);
+    RtlCopyMemory(FltSave, &Area, KI_FX_LEGACY_HEADER);
+    FltSave->MxCsr_Mask = Area.MxCsr_Mask;
+    RtlCopyMemory(FltSave->FloatRegisters, Area.FloatRegisters, sizeof(Area.FloatRegisters));
+}
+
+static
+VOID
+KiSetLegacyFloatingPointState(
+    _In_ const XSAVE_FORMAT *FltSave)
+{
+    XSAVE_FORMAT DECLSPEC_ALIGN(16) Area;
+
+    /* Keep MXCSR and the XMM registers as they are (they are restored from
+       the trap and exception frames), replace the x87 part */
+    KiFxSave(&Area);
+    RtlCopyMemory(&Area, FltSave, KI_FX_LEGACY_HEADER);
+    RtlCopyMemory(Area.FloatRegisters, FltSave->FloatRegisters, sizeof(Area.FloatRegisters));
+    KiFxRestore(&Area);
+}
+
+static
+ULONG
+KiGetMxCsrMask(VOID)
+{
+    XSAVE_FORMAT DECLSPEC_ALIGN(16) Area;
+
+    Area.MxCsr_Mask = 0;
+    KiFxSave(&Area);
+    return Area.MxCsr_Mask ? Area.MxCsr_Mask : 0xFFBF;
+}
+
 VOID
 NTAPI
 KeContextToTrapFrame(IN PCONTEXT Context,
@@ -58,7 +118,10 @@ KeContextToTrapFrame(IN PCONTEXT Context,
     /* Handle floating point registers */
     if (ContextFlags & CONTEXT_FLOATING_POINT)
     {
+        /* (Reserved MXCSR bits would fault when the trap returns) */
         TrapFrame->MxCsr = Context->MxCsr;
+        if (PreviousMode != KernelMode) TrapFrame->MxCsr &= KiGetMxCsrMask();
+        KiSetLegacyFloatingPointState(&Context->FltSave);
         TrapFrame->Xmm0 = Context->Xmm0;
         TrapFrame->Xmm1 = Context->Xmm1;
         TrapFrame->Xmm2 = Context->Xmm2;
@@ -209,6 +272,8 @@ KeTrapFrameToContext(IN PKTRAP_FRAME TrapFrame,
     /* Handle floating point registers */
     if (ContextFlags & CONTEXT_FLOATING_POINT)
     {
+        KiGetLegacyFloatingPointState(&Context->FltSave);
+        Context->FltSave.MxCsr = TrapFrame->MxCsr;
         Context->MxCsr = TrapFrame->MxCsr;
         Context->Xmm0 = TrapFrame->Xmm0;
         Context->Xmm1 = TrapFrame->Xmm1;

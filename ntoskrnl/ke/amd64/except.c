@@ -959,5 +959,12 @@ KiXmmExceptionHandler(
         ASSERT(FALSE);
     }
 
+    /* 32-bit code (WoW64) gets the code of the i386 SIMD exception handler,
+     * as on Windows: the details are in MXCSR */
+    if (TrapFrame->SegCs == (KGDT64_R3_CMCODE | RPL_MASK))
+    {
+        ExceptionCode = STATUS_FLOAT_MULTIPLE_FAULTS;
+    }
+
     return ExceptionCode;
 }
