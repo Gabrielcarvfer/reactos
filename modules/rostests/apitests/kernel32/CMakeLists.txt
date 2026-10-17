@@ -42,6 +42,7 @@ list(APPEND SOURCE
     LockStress.c
     LocaleNameToLCID.c
     LockFileEx.c
+    LockedReadWrite.c
     lstrcpynW.c
     lstrlen.c
     Mailslot.c
@@ -68,6 +69,7 @@ list(APPEND SOURCE
     SuspendedChildPeb.c
     SystemFirmware.c
     TerminateProcess.c
+    Toolhelp32.c
     TunnelCache.c
     UEFIFirmware.c
     UnregisterWaitEx.c

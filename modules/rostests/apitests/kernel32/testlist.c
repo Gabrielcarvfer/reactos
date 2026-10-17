@@ -41,6 +41,7 @@ extern void func_LoadLibraryExW(void);
 extern void func_LockStress(void);
 extern void func_LocaleNameToLCID(void);
 extern void func_LockFileEx(void);
+extern void func_LockedReadWrite(void);
 extern void func_lstrcpynW(void);
 extern void func_lstrlen(void);
 extern void func_MailslotRead(void);
@@ -65,6 +66,7 @@ extern void func_StackGuard(void);
 extern void func_SuspendedChildPeb(void);
 extern void func_SystemFirmware(void);
 extern void func_TerminateProcess(void);
+extern void func_Toolhelp32(void);
 extern void func_TunnelCache(void);
 extern void func_UEFIFirmware(void);
 extern void func_UnregisterWaitEx(void);
@@ -114,6 +116,7 @@ const struct test winetest_testlist[] =
     { "LockStress",                  func_LockStress },
     { "LocaleNameToLCID",            func_LocaleNameToLCID },
     { "LockFileEx",                  func_LockFileEx },
+    { "LockedReadWrite",             func_LockedReadWrite },
     { "lstrcpynW",                   func_lstrcpynW },
     { "lstrlen",                     func_lstrlen },
     { "MailslotRead",                func_MailslotRead },
@@ -138,6 +141,7 @@ const struct test winetest_testlist[] =
     { "SuspendedChildPeb",           func_SuspendedChildPeb },
     { "SystemFirmware",              func_SystemFirmware },
     { "TerminateProcess",            func_TerminateProcess },
+    { "Toolhelp32",                  func_Toolhelp32 },
     { "TunnelCache",                 func_TunnelCache },
     { "UEFIFirmware",                func_UEFIFirmware },
     { "UnregisterWaitEx",            func_UnregisterWaitEx },
