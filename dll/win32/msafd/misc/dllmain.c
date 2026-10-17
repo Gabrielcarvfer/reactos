@@ -3357,8 +3357,10 @@ WSPSetSockOpt(
                   return SOCKET_ERROR;
               }
 
-              /* FIXME: We should not have to limit the packet receive buffer size like this. workaround for CORE-15804 */
-              if (*(PULONG)optval > 0x2000)
+              /* FIXME: We should not have to limit the packet receive buffer size like this. workaround for CORE-15804
+               * (datagram sockets only: a stream socket's AFD buffer is a copy
+               * stage, and 8 KB cut its downloads; AFD caps it at 64 KB) */
+              if (Socket->SharedData->SocketType != SOCK_STREAM && *(PULONG)optval > 0x2000)
                   *(PULONG)optval = 0x2000;
 
               SetSocketInformation(Socket,
