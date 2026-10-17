@@ -199,6 +199,97 @@ SetThreadDpiAwarenessContext(
     return DPI_AWARENESS_CONTEXT_SYSTEM_AWARE;
 }
 
+/* The DPI hosting behavior of each thread (a TLS slot holds the value + 2,
+ * so an unset slot reads as DPI_HOSTING_BEHAVIOR_DEFAULT) */
+static DWORD HostingBehaviorTls = TLS_OUT_OF_INDEXES;
+
+static DWORD
+GetHostingBehaviorTls(VOID)
+{
+    DWORD Index = HostingBehaviorTls;
+
+    if (Index == TLS_OUT_OF_INDEXES)
+    {
+        Index = TlsAlloc();
+        if (Index == TLS_OUT_OF_INDEXES)
+            return Index;
+        if (InterlockedCompareExchange((LONG *)&HostingBehaviorTls, Index, TLS_OUT_OF_INDEXES) != TLS_OUT_OF_INDEXES)
+        {
+            TlsFree(Index);
+            Index = HostingBehaviorTls;
+        }
+    }
+    return Index;
+}
+
+/*
+ * @implemented
+ */
+DPI_HOSTING_BEHAVIOR
+WINAPI
+GetThreadDpiHostingBehavior(VOID)
+{
+    DWORD Index = GetHostingBehaviorTls();
+    ULONG_PTR Value;
+
+    if (Index == TLS_OUT_OF_INDEXES)
+        return DPI_HOSTING_BEHAVIOR_DEFAULT;
+    Value = (ULONG_PTR)TlsGetValue(Index);
+    return Value ? (DPI_HOSTING_BEHAVIOR)(Value - 2) : DPI_HOSTING_BEHAVIOR_DEFAULT;
+}
+
+/*
+ * @implemented
+ */
+DPI_HOSTING_BEHAVIOR
+WINAPI
+SetThreadDpiHostingBehavior(
+    _In_ DPI_HOSTING_BEHAVIOR value)
+{
+    DPI_HOSTING_BEHAVIOR Previous;
+    DWORD Index;
+
+    if (value != DPI_HOSTING_BEHAVIOR_DEFAULT && value != DPI_HOSTING_BEHAVIOR_MIXED)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return DPI_HOSTING_BEHAVIOR_INVALID;
+    }
+    Previous = GetThreadDpiHostingBehavior();
+    Index = GetHostingBehaviorTls();
+    if (Index != TLS_OUT_OF_INDEXES)
+        TlsSetValue(Index, (PVOID)(ULONG_PTR)(value + 2));
+    return Previous;
+}
+
+/*
+ * @implemented
+ */
+DPI_HOSTING_BEHAVIOR
+WINAPI
+GetWindowDpiHostingBehavior(
+    _In_ HWND hwnd)
+{
+    if (!IsWindow(hwnd))
+    {
+        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+        return DPI_HOSTING_BEHAVIOR_INVALID;
+    }
+    /* No window is ever scaled: they all behave the same */
+    return DPI_HOSTING_BEHAVIOR_DEFAULT;
+}
+
+/*
+ * @implemented
+ */
+BOOL
+WINAPI
+GetPhysicalCursorPos(
+    _Out_ LPPOINT lpPoint)
+{
+    /* Logical and physical coordinates are the same */
+    return GetCursorPos(lpPoint);
+}
+
 /*
  * @implemented
  */

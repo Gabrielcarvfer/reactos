@@ -355,6 +355,7 @@
 @ stdcall GetNextDlgTabItem(long long long)
 @ stdcall GetOpenClipboardWindow() NtUserGetOpenClipboardWindow
 @ stdcall GetParent(long)
+@ stdcall -version=0x600+ GetPhysicalCursorPos(ptr)
 @ stdcall -version=0x602+ GetPointerDevice(ptr ptr)
 @ stdcall -version=0x602+ GetPointerDeviceProperties(ptr ptr ptr)
 @ stdcall -version=0x602+ GetPointerFrameInfo(long ptr ptr)
@@ -404,6 +405,7 @@
 @ stdcall GetTaskmanWindow ()
 @ stdcall GetThreadDesktop(long)
 @ stdcall -version=0xA00+ GetThreadDpiAwarenessContext()
+@ stdcall -version=0xA00+ GetThreadDpiHostingBehavior()
 @ stdcall GetTitleBarInfo(long ptr) NtUserGetTitleBarInfo
 @ stdcall GetTopWindow(long)
 @ stdcall -version=0x601+ GetTouchInputInfo(long long ptr long)
@@ -415,6 +417,7 @@
 @ stdcall GetUserObjectSecurity (long ptr ptr long ptr)
 @ stdcall -version=0x602+ GetWindowBand(ptr ptr)
 @ stdcall -version=0xA00+ GetWindowDpiAwarenessContext(ptr)
+@ stdcall -version=0xA00+ GetWindowDpiHostingBehavior(ptr)
 @ stdcall GetWinStationInfo(ptr)
 @ stdcall GetWindow(long long)
 @ stdcall GetWindowContextHelpId(long)
@@ -722,6 +725,7 @@
 @ stdcall SetTaskmanWindow (long)
 @ stdcall SetThreadDesktop(long) NtUserSetThreadDesktop
 @ stdcall -version=0xA00+ SetThreadDpiAwarenessContext(long)
+@ stdcall -version=0xA00+ SetThreadDpiHostingBehavior(long)
 @ stdcall SetTimer(long long long ptr) NtUserSetTimer
 @ stdcall SetUserObjectInformationA(long long ptr long) NtUserSetObjectInformation
 @ stdcall SetUserObjectInformationW(long long ptr long) NtUserSetObjectInformation

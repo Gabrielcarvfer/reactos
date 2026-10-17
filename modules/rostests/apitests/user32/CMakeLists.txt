@@ -12,6 +12,7 @@ list(APPEND SOURCE
     DeferWindowPos.c
     DestroyCursorIcon.c
     DM_REPOSITION.c
+    DpiHostingBehavior.c
     DrawIconEx.c
     DrawText.c
     desktop.c
