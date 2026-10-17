@@ -15,8 +15,10 @@
 #include <trapamd64.inc>
 .code
 
-TRAP_ENTRY HalpClockInterrupt, TF_SEND_EOI
-TRAP_ENTRY HalpClockIpi, TF_SEND_EOI
+/* The C handlers end with KiEndInterrupt -> HalEndSystemInterrupt, which
+   already sends the EOI; a second one would end a nested interrupt */
+TRAP_ENTRY HalpClockInterrupt, 0
+TRAP_ENTRY HalpClockIpi, 0
 TRAP_ENTRY HalpProfileInterrupt, TF_SEND_EOI
 
 PUBLIC ApicSpuriousService
