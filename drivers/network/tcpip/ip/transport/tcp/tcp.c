@@ -544,6 +544,12 @@ NTSTATUS TCPReceiveData
 
     NdisQueryBuffer(Buffer, &DataBuffer, &DataLen);
 
+    /* Check for data and queue the request under the same lock: data that
+       arrives in between (TCPRecvEventHandler, in the lwIP thread, maybe on
+       another processor) would otherwise find no request to complete, and
+       the request would wait forever - the end of a download never came */
+    LockObject(Connection);
+
     Status = LibTCPGetDataFromConnectionQueue(Connection, DataBuffer, DataLen, &Received);
 
     if (Status == STATUS_PENDING)
@@ -551,6 +557,7 @@ NTSTATUS TCPReceiveData
         Bucket = ExAllocateFromNPagedLookasideList(&TdiBucketLookasideList);
         if (!Bucket)
         {
+            UnlockObject(Connection);
             TI_DbgPrint(DEBUG_TCP,("[IP, TCPReceiveData] Failed to allocate bucket\n"));
 
             return STATUS_NO_MEMORY;
@@ -559,7 +566,6 @@ NTSTATUS TCPReceiveData
         Bucket->Request.RequestNotifyObject = Complete;
         Bucket->Request.RequestContext = Context;
 
-        LockObject(Connection);
         InsertTailList( &Connection->ReceiveRequest, &Bucket->Entry );
         UnlockObject(Connection);
         TI_DbgPrint(DEBUG_TCP,("[IP, TCPReceiveData] Queued read irp\n"));
@@ -570,6 +576,7 @@ NTSTATUS TCPReceiveData
     }
     else
     {
+        UnlockObject(Connection);
         (*BytesReceived) = Received;
     }
 
