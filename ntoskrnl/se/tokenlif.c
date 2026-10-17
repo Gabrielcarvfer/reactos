@@ -1132,14 +1132,29 @@ SepPerformTokenFiltering(
          * Now let's begin inserting the restricted SIDs into the filtered
          * access token from the list the caller gave us.
          */
+        /*
+         * Copy the SIDs themselves into the token, not just the array:
+         * the caller's (captured) SIDs are freed when we return, and a
+         * token pointing at them broke later (NtDuplicateToken of Chrome's
+         * GPU sandbox token: "buffer too small", the GPU process died).
+         */
         AccessToken->RestrictedSidCount = RestrictedSidsCount;
         AccessToken->RestrictedSids = EndMem;
-        EndMem = (PVOID)((ULONG_PTR)EndMem + RestrictedSidsLength);
-        VariableLength -= RestrictedSidsLength;
+        EndMem = &AccessToken->RestrictedSids[RestrictedSidsCount];
+        VariableLength -= ((ULONG_PTR)EndMem - (ULONG_PTR)AccessToken->RestrictedSids);
 
-        RtlCopyMemory(AccessToken->RestrictedSids,
-                      RestrictedSidsIntoToken,
-                      AccessToken->RestrictedSidCount * sizeof(SID_AND_ATTRIBUTES));
+        Status = RtlCopySidAndAttributesArray(RestrictedSidsCount,
+                                              RestrictedSidsIntoToken,
+                                              VariableLength,
+                                              AccessToken->RestrictedSids,
+                                              EndMem,
+                                              &EndMem,
+                                              &VariableLength);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("RtlCopySidAndAttributesArray(RestrictedSidsIntoToken) failed (Status 0x%lx)\n", Status);
+            goto Quit;
+        }
 
         /*
          * As we've copied the restricted SIDs into
