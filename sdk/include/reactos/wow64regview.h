@@ -213,6 +213,14 @@ static BOOL GetKeyView32(const WCHAR *Path, SIZE_T Length, WCHAR *Out, SIZE_T Ou
         return FALSE;
     }
 
+    /* (a key with nothing after "Classes\", i.e. Classes itself, is the same
+       key in both views: no trailing backslash) */
+    {
+        SIZE_T OutLength = wcslen(Out);
+        while (OutLength && Out[OutLength - 1] == L'\\')
+            Out[--OutLength] = 0;
+    }
+
     return wcslen(Out) != Length || _wcsnicmp(Out, Path, Length);
 }
 

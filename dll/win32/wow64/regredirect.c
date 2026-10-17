@@ -66,13 +66,19 @@ BOOL get_key_redirect(OBJECT_ATTRIBUTES *attr, ACCESS_MASK access, WCHAR *Buffer
         Length = Root.Info.NameLength / sizeof(WCHAR);
         memcpy(Path, Root.Info.Name, Length * sizeof(WCHAR));
 
-        /* A root key that is in the 64-bit view (opened with KEY_WOW64_64KEY,
-         * e.g. HKLM\SOFTWARE or HKLM\SOFTWARE\Vendor) keeps its subkeys in
-         * that view, as on Windows (checked on Windows 11): a relative name
-         * is only redirected when the root is a key of the 32-bit view.
-         * (TeamViewer's installer creates SOFTWARE\TVInstallTemp in the
-         * 64-bit view, then opens RestoreInfo below that handle without the
-         * flag.) */
+        /* Windows remembers the view a key was opened in, and relative names
+         * stay in it (checked on Windows 11 with a 32-bit program). Here the
+         * path of the root tells it: a key that a 32-bit program sees
+         * elsewhere (HKLM\SOFTWARE, HKLM\SOFTWARE\Vendor, Classes\CLSID) can
+         * only have been opened with KEY_WOW64_64KEY, and keeps its subkeys
+         * in the 64-bit view. (TeamViewer's installer creates
+         * SOFTWARE\TVInstallTemp in the 64-bit view, then opens RestoreInfo
+         * below that handle without the flag.) A key that is the same in
+         * both views (HKLM\SOFTWARE\Classes, HKCR, shared keys) is taken as
+         * opened without the flag: names below it are redirected (COM looks
+         * up CLSID\{...} relative to HKCR). Only a shared key opened with
+         * KEY_WOW64_64KEY differs from Windows, whose relative opens below it
+         * stay in the 64-bit view. */
         if (GetKeyView32(Path, Length, Buffer, BufferSize))
         {
             RtlFreeHeap(GetProcessHeap(), 0, Path);

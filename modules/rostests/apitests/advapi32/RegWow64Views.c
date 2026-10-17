@@ -19,6 +19,7 @@
 #define TEST_KEY L"Software\\ReactOS_RegWow64Views_Test"
 #define TEST_KEY_PARENTS L"Software\\ReactOS_RegWow64Views_Test2"
 #define TEST_KEY_CLASSES L"Software\\Classes\\ReactOS_RegWow64Views_Test3"
+#define TEST_CLSID L"{7B1A1E9C-5D3A-4E8B-9C2F-52454143544F}"
 
 typedef HRESULT (WINAPI *PFN_SHGetFolderPathW)(HWND, int, HANDLE, DWORD, LPWSTR);
 
@@ -194,6 +195,68 @@ static void TestParents(void)
     ok(!KeyExists(HKEY_LOCAL_MACHINE, TEST_KEY_CLASSES, KEY_WOW64_64KEY), "Classes test key left\n");
 }
 
+/* Relative opens below the classes: COM (CoCreateInstance) reads CLSID\{...}
+ * relative to HKCR, and a 32-bit program must find its 32-bit registration
+ * (Google's updater: REGDB_E_CLASSNOTREG). Windows keeps the view a key was
+ * opened in, so the same Classes key behaves differently when opened with
+ * KEY_WOW64_64KEY. */
+static void ReadRelative(HKEY Root, PCWSTR RootPath, REGSAM RootView, PCWSTR Name, PCWSTR Expected, BOOL Todo)
+{
+    WCHAR Buffer[MAX_PATH] = L"";
+    HKEY Key = Root;
+
+    if (RootPath && RegOpenKeyExW(Root, RootPath, 0, KEY_READ | RootView, &Key))
+    {
+        ok(0, "Cannot open %ls (view 0x%lx)\n", RootPath, RootView);
+        return;
+    }
+    ReadString(Key, Name, 0, L"Bits", Buffer, sizeof(Buffer));
+    todo_ros_if(Todo)
+    ok(!wcscmp(Buffer, Expected), "%ls (view 0x%lx) + %ls: '%ls', expected '%ls'\n",
+       RootPath ? RootPath : L"(root)", RootView, Name, Buffer, Expected);
+    if (RootPath) RegCloseKey(Key);
+}
+
+static void TestClassesRelative(void)
+{
+    static const WCHAR Clsid[] = L"Software\\Classes\\CLSID\\" TEST_CLSID;
+    PCWSTR Mine = Is32Bit ? L"32" : L"64";
+    LONG Ret;
+
+    if (!IsOs64)
+    {
+        skip("32-bit Windows: one view of the classes\n");
+        return;
+    }
+
+    DeleteTree(HKEY_LOCAL_MACHINE, Clsid, KEY_WOW64_32KEY);
+    DeleteTree(HKEY_LOCAL_MACHINE, Clsid, KEY_WOW64_64KEY);
+    Ret = CreateWithValue(HKEY_LOCAL_MACHINE, Clsid, KEY_WOW64_32KEY, L"32");
+    if (Ret == ERROR_ACCESS_DENIED)
+    {
+        skip("No write access to HKLM\\Software\\Classes\n");
+        return;
+    }
+    ok(Ret == ERROR_SUCCESS, "Creating the 32-bit CLSID: %ld\n", Ret);
+    Ret = CreateWithValue(HKEY_LOCAL_MACHINE, Clsid, KEY_WOW64_64KEY, L"64");
+    ok(Ret == ERROR_SUCCESS, "Creating the 64-bit CLSID: %ld\n", Ret);
+
+    ReadRelative(HKEY_CLASSES_ROOT, NULL, 0, L"CLSID\\" TEST_CLSID, Mine, FALSE);
+    ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes", 0, L"CLSID\\" TEST_CLSID, Mine, FALSE);
+    /* (ReactOS knows the view of a root key from its path only: a key that is
+       the same in both views counts as opened in the view of the program) */
+    ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes", KEY_WOW64_32KEY, L"CLSID\\" TEST_CLSID, L"32", !Is32Bit);
+    ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes", KEY_WOW64_64KEY, L"CLSID\\" TEST_CLSID, L"64", Is32Bit);
+    ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes\\CLSID", 0, TEST_CLSID, Mine, FALSE);
+    ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes\\CLSID", KEY_WOW64_32KEY, TEST_CLSID, L"32", FALSE);
+    ReadRelative(HKEY_LOCAL_MACHINE, L"Software\\Classes\\CLSID", KEY_WOW64_64KEY, TEST_CLSID, L"64", FALSE);
+
+    DeleteTree(HKEY_LOCAL_MACHINE, Clsid, KEY_WOW64_32KEY);
+    DeleteTree(HKEY_LOCAL_MACHINE, Clsid, KEY_WOW64_64KEY);
+    ok(!KeyExists(HKEY_LOCAL_MACHINE, Clsid, KEY_WOW64_32KEY), "Test CLSID left in the 32-bit view\n");
+    ok(!KeyExists(HKEY_LOCAL_MACHINE, Clsid, KEY_WOW64_64KEY), "Test CLSID left in the 64-bit view\n");
+}
+
 static void TestProgramFolders(void)
 {
     static const WCHAR CurrentVersion[] = L"Software\\Microsoft\\Windows\\CurrentVersion";
@@ -253,5 +316,6 @@ START_TEST(RegWow64Views)
 
     TestViews();
     TestParents();
+    TestClassesRelative();
     TestProgramFolders();
 }
