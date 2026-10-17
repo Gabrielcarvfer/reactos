@@ -25,10 +25,12 @@ INT WINAPI GetLocaleInfoEx(LPCWSTR locale, LCTYPE info, LPWSTR buffer, INT len)
 
     if (!lcid) return 0;
 
-    /* special handling for neutral locale names */
+    /* special handling for neutral locale names (also with
+       LOCALE_NOUSEROVERRIDE, as .NET asks: the parent of "en" was "en", and
+       .NET looked for resources in a loop forever, HandBrake) */
     if (locale && strlenW(locale) == 2)
     {
-        switch (info)
+        switch (info & ~(LOCALE_NOUSEROVERRIDE | LOCALE_USE_CP_ACP))
         {
         case LOCALE_SNAME:
             if (len && len < 3)

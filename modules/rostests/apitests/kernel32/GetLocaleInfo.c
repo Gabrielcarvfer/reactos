@@ -83,8 +83,40 @@ static void Test_GetLocaleInfoEx(void)
 
 }
 
+#ifndef LOCALE_SPARENT
+#define LOCALE_SPARENT 0x0000006d
+#endif
+#ifndef LOCALE_NAME_MAX_LENGTH
+#define LOCALE_NAME_MAX_LENGTH 85
+#endif
+
+/* A neutral locale ("en") has the invariant locale as its parent and its own
+ * name, whatever the flags: .NET asks with LOCALE_NOUSEROVERRIDE, and walks
+ * the parents until the invariant culture */
+static void Test_NeutralParent(void)
+{
+    static const DWORD flags[] = { 0, LOCALE_NOUSEROVERRIDE };
+    WCHAR Buffer[LOCALE_NAME_MAX_LENGTH];
+    int Ret;
+    UINT i;
+
+    if (!pGetLocaleInfoEx)
+        return;
+    for (i = 0; i < _countof(flags); i++)
+    {
+        memset(Buffer, 'x', sizeof(Buffer));
+        Ret = pGetLocaleInfoEx(L"en", LOCALE_SPARENT | flags[i], Buffer, _countof(Buffer));
+        ok(Ret == 1 && Buffer[0] == UNICODE_NULL, "%u: parent of en: %d '%.10ls'\n", i, Ret, Buffer);
+        Ret = pGetLocaleInfoEx(L"en", LOCALE_SNAME | flags[i], Buffer, _countof(Buffer));
+        ok(Ret == 3 && !wcscmp(Buffer, L"en"), "%u: name of en: %d '%.10ls'\n", i, Ret, Buffer);
+        Ret = pGetLocaleInfoEx(L"en-US", LOCALE_SPARENT | flags[i], Buffer, _countof(Buffer));
+        ok(Ret == 3 && !wcscmp(Buffer, L"en"), "%u: parent of en-US: %d '%.10ls'\n", i, Ret, Buffer);
+    }
+}
+
 #undef GetLocaleInfo
 START_TEST(GetLocaleInfo)
 {
     Test_GetLocaleInfoEx();
+    Test_NeutralParent();
 }
