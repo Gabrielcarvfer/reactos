@@ -130,6 +130,69 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
     }
   }
 
+  /* Fast path: plain SRCCOPY, no mask. Same pixel selection as the generic
+   * loop below, but no destination read (slow on video memory), no ROP and
+   * no per-pixel divisions; direct access when both surfaces are 32 bpp. */
+  if (ROP == ROP4_FROM_INDEX(R3_OPINDEX_SRCCOPY) && !MaskSurf &&
+      DstWidth > 0 && DstHeight > 0)
+  {
+    PLONG SxTable = ExAllocatePoolWithTag(PagedPool, DstWidth * sizeof(LONG), TAG_DIB);
+    if (SxTable)
+    {
+      BOOL bDirect32 = (SourceSurf->iBitmapFormat == BMF_32BPP &&
+                        DestSurf->iBitmapFormat == BMF_32BPP);
+      BOOL bTrivial = (!ColorTranslation || (ColorTranslation->flXlate & XO_TRIVIAL));
+      LONG FirstX = DstWidth, LastX = -1, i;
+
+      /* sx is monotonic in i, so the in-range columns are contiguous */
+      for (i = 0; i < DstWidth; i++)
+      {
+        sx = bLeftToRight ? SourceRect->right - i * SrcWidth / DstWidth
+                          : SourceRect->left + i * SrcWidth / DstWidth;
+        SxTable[i] = sx;
+        if (sx >= 0 && sx < SourceSurf->sizlBitmap.cx)
+        {
+          if (FirstX > i) FirstX = i;
+          LastX = i;
+        }
+      }
+
+      for (DesY = DestRect->top; DesY < DestRect->bottom; DesY++)
+      {
+        sy = bTopToBottom ? SourceRect->bottom - (DesY - DestRect->top) * SrcHeight / DstHeight
+                          : SourceRect->top + (DesY - DestRect->top) * SrcHeight / DstHeight;
+        if (sy < 0 || sy >= SourceCy)
+          continue;
+
+        if (bDirect32)
+        {
+          PULONG Src = (PULONG)((PBYTE)SourceSurf->pvScan0 + sy * SourceSurf->lDelta);
+          PULONG Dst = (PULONG)((PBYTE)DestSurf->pvScan0 + DesY * DestSurf->lDelta) + DestRect->left;
+          if (bTrivial)
+          {
+            for (i = FirstX; i <= LastX; i++)
+              Dst[i] = Src[SxTable[i]];
+          }
+          else
+          {
+            for (i = FirstX; i <= LastX; i++)
+              Dst[i] = XLATEOBJ_iXlate(ColorTranslation, Src[SxTable[i]]);
+          }
+        }
+        else
+        {
+          for (i = FirstX; i <= LastX; i++)
+          {
+            Source = XLATEOBJ_iXlate(ColorTranslation, fnSource_GetPixel(SourceSurf, SxTable[i], sy));
+            fnDest_PutPixel(DestSurf, DestRect->left + i, DesY, Source & xxBPPMask);
+          }
+        }
+      }
+      ExFreePoolWithTag(SxTable, TAG_DIB);
+      return TRUE;
+    }
+  }
+
   if (PatternSurface)
   {
     DPRINT("PatternSurface is not NULL.\n");
