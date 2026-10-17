@@ -49,3 +49,37 @@ CloseTrace(IN TRACEHANDLE TraceHandle)
 {
     return ERROR_INVALID_HANDLE;
 }
+
+/* Enabling providers needs a trace session, which ReactOS cannot start yet
+   (StartTrace): report it like OpenTrace does. Programs only need the exports
+   (Wireshark's etwdump.exe imports EnableTraceEx2). */
+ULONG
+WINAPI
+EnableTraceEx(IN LPCGUID ProviderId,
+              IN LPCGUID SourceId OPTIONAL,
+              IN TRACEHANDLE TraceHandle,
+              IN ULONG IsEnabled,
+              IN UCHAR Level,
+              IN ULONGLONG MatchAnyKeyword,
+              IN ULONGLONG MatchAllKeyword,
+              IN ULONG EnableProperty,
+              IN PEVENT_FILTER_DESCRIPTOR EnableFilterDesc OPTIONAL)
+{
+    UNIMPLEMENTED;
+    return ERROR_ACCESS_DENIED;
+}
+
+ULONG
+WINAPI
+EnableTraceEx2(IN TRACEHANDLE TraceHandle,
+               IN LPCGUID ProviderId,
+               IN ULONG ControlCode,
+               IN UCHAR Level,
+               IN ULONGLONG MatchAnyKeyword,
+               IN ULONGLONG MatchAllKeyword,
+               IN ULONG Timeout,
+               IN PENABLE_TRACE_PARAMETERS EnableParameters OPTIONAL)
+{
+    UNIMPLEMENTED;
+    return ERROR_ACCESS_DENIED;
+}
