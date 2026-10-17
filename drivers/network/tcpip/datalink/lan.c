@@ -33,6 +33,16 @@ typedef struct _RECONFIGURE_CONTEXT {
     PLAN_ADAPTER Adapter;
 } RECONFIGURE_CONTEXT, *PRECONFIGURE_CONTEXT;
 
+/* Received packets wait in this queue for the one worker that hands them to
+ * IP, in arrival order. A work item per packet let several worker threads run
+ * at once: TCP segments reached lwIP out of order, each reordering cost dup
+ * ACKs and a spurious fast retransmit at the sender, which shrank its
+ * congestion window, and downloads stalled for ~250 ms at a time (lwIP's
+ * delayed ACK timer) */
+static LIST_ENTRY LanReceiveQueue;
+static KSPIN_LOCK LanReceiveQueueLock;
+static BOOLEAN LanReceiveWorkerActive;
+
 NDIS_HANDLE NdisProtocolHandle = (NDIS_HANDLE)NULL;
 BOOLEAN ProtocolRegistered     = FALSE;
 LIST_ENTRY AdapterListHead;
@@ -385,6 +395,29 @@ VOID LanReceiveWorker( PVOID Context ) {
     }
 }
 
+static VOID LanReceiveQueueWorker(PVOID Context)
+{
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    for (;;)
+    {
+        KeAcquireSpinLock(&LanReceiveQueueLock, &OldIrql);
+        if (IsListEmpty(&LanReceiveQueue))
+        {
+            LanReceiveWorkerActive = FALSE;
+            KeReleaseSpinLock(&LanReceiveQueueLock, OldIrql);
+            return;
+        }
+        Entry = RemoveHeadList(&LanReceiveQueue);
+        KeReleaseSpinLock(&LanReceiveQueueLock, OldIrql);
+
+        LanReceiveWorker(CONTAINING_RECORD(Entry, LAN_WQ_ITEM, ListEntry));
+    }
+}
+
 VOID LanSubmitReceiveWork(
     NDIS_HANDLE BindingContext,
     PNDIS_PACKET Packet,
@@ -393,6 +426,8 @@ VOID LanSubmitReceiveWork(
     PLAN_WQ_ITEM WQItem = ExAllocatePoolWithTag(NonPagedPool, sizeof(LAN_WQ_ITEM),
                                                 WQ_CONTEXT_TAG);
     PLAN_ADAPTER Adapter = (PLAN_ADAPTER)BindingContext;
+    BOOLEAN StartWorker;
+    KIRQL OldIrql;
 
     TI_DbgPrint(DEBUG_DATALINK,("called\n"));
 
@@ -403,8 +438,19 @@ VOID LanSubmitReceiveWork(
     WQItem->BytesTransferred = BytesTransferred;
     WQItem->LegacyReceive = LegacyReceive;
 
-    if (!ChewCreate( LanReceiveWorker, WQItem ))
-        ExFreePoolWithTag(WQItem, WQ_CONTEXT_TAG);
+    KeAcquireSpinLock(&LanReceiveQueueLock, &OldIrql);
+    InsertTailList(&LanReceiveQueue, &WQItem->ListEntry);
+    StartWorker = !LanReceiveWorkerActive;
+    LanReceiveWorkerActive = TRUE;
+    KeReleaseSpinLock(&LanReceiveQueueLock, OldIrql);
+
+    /* (if this fails, the packets stay queued for the next attempt) */
+    if (StartWorker && !ChewCreate(LanReceiveQueueWorker, NULL))
+    {
+        KeAcquireSpinLock(&LanReceiveQueueLock, &OldIrql);
+        LanReceiveWorkerActive = FALSE;
+        KeReleaseSpinLock(&LanReceiveQueueLock, OldIrql);
+    }
 }
 
 VOID NTAPI ProtocolTransferDataComplete(
@@ -1687,6 +1733,8 @@ NTSTATUS LANRegisterProtocol(
 
     InitializeListHead(&AdapterListHead);
     KeInitializeSpinLock(&AdapterListLock);
+    InitializeListHead(&LanReceiveQueue);
+    KeInitializeSpinLock(&LanReceiveQueueLock);
 
     /* Set up protocol characteristics */
     RtlZeroMemory(&ProtChars, sizeof(NDIS_PROTOCOL_CHARACTERISTICS));
