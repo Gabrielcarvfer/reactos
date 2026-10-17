@@ -864,6 +864,29 @@ AccRewriteSetHandleRights(HANDLE handle,
             Ret = (DWORD)RegSetKeySecurity((HKEY)handle,
                                            SecurityInfo,
                                            pSecurityDescriptor);
+            if (Ret == ERROR_ACCESS_DENIED)
+            {
+                HKEY hReopened;
+                ACCESS_MASK DesiredAccess = 0;
+
+                /* Windows lets SetSecurityInfo change a key's DACL through a
+                 * handle without WRITE_DAC when the caller may change it:
+                 * Google's updater (running as SYSTEM) opens ClientStateMedium
+                 * with KEY_WRITE and then adds an ACE to it. Open the key
+                 * again through the handle with the needed rights; that open
+                 * checks the caller against the key's own security, so it
+                 * grants nothing the caller couldn't get by opening the key
+                 * by name. */
+                SetSecurityAccessMask(SecurityInfo, (PDWORD)&DesiredAccess);
+                if (RegOpenKeyExW((HKEY)handle, NULL, 0, DesiredAccess,
+                                  &hReopened) == ERROR_SUCCESS)
+                {
+                    Ret = (DWORD)RegSetKeySecurity(hReopened,
+                                                   SecurityInfo,
+                                                   pSecurityDescriptor);
+                    RegCloseKey(hReopened);
+                }
+            }
             break;
         }
 

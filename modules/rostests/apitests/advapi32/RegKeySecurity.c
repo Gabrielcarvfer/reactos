@@ -9,6 +9,8 @@
  * process may create subkeys, add an ACE for the user with SetEntriesInAcl and
  * write it back with SetNamedSecurityInfo. The HKLM keys are only read; the
  * write-back is done on a key of the test under HKCU.
+ *
+ * Also what Google's updater does: SetSecurityInfo through a KEY_WRITE handle.
  */
 
 #include "precomp.h"
@@ -164,6 +166,78 @@ static void TestByHandle(HKEY Root, PCWSTR SubKey, REGSAM View, REGSAM Access)
     RegCloseKey(Key);
 }
 
+/*
+ * What Google's updater does (CreateClientStateMedium): open a key with
+ * KEY_WRITE only (no WRITE_DAC), read its DACL with GetSecurityInfo, add an
+ * inheritable ACE and write it back with SetSecurityInfo on the same handle.
+ * That works on Windows when the caller may change the key's security.
+ */
+static void TestSetInfoThroughWriteHandle(void)
+{
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
+    PSID Interactive = NULL;
+    PSECURITY_DESCRIPTOR Sd = NULL, Sd2 = NULL;
+    PACL Dacl = NULL, Dacl2 = NULL, NewAcl = NULL;
+    ACL_SIZE_INFORMATION Info, Info2;
+    DWORD Size, i, Err;
+    PVOID Ace;
+    HKEY Key;
+    LONG Ret;
+
+    Ret = RegCreateKeyExW(HKEY_CURRENT_USER, TEST_KEY, 0, NULL, 0, KEY_WRITE, NULL, &Key, NULL);
+    ok(Ret == ERROR_SUCCESS, "RegCreateKeyEx(KEY_WRITE): %ld\n", Ret);
+    if (Ret)
+        return;
+
+    Err = GetSecurityInfo(Key, SE_REGISTRY_KEY, DACL_SECURITY_INFORMATION, NULL, NULL, &Dacl, NULL, &Sd);
+    ok(Err == ERROR_SUCCESS, "GetSecurityInfo(KEY_WRITE handle): %lu\n", Err);
+    if (Err || !Dacl)
+        goto Cleanup;
+
+    AllocateAndInitializeSid(&NtAuthority, 1, SECURITY_INTERACTIVE_RID, 0, 0, 0, 0, 0, 0, 0, &Interactive);
+    GetAclInformation(Dacl, &Info, sizeof(Info), AclSizeInformation);
+    Size = Info.AclBytesInUse + sizeof(ACCESS_ALLOWED_ACE) + GetLengthSid(Interactive);
+    NewAcl = LocalAlloc(LMEM_FIXED, Size);
+    InitializeAcl(NewAcl, Size, ACL_REVISION);
+    for (i = 0; i < Info.AceCount; i++)
+    {
+        if (GetAce(Dacl, i, &Ace))
+            AddAce(NewAcl, ACL_REVISION, MAXDWORD, Ace, ((PACE_HEADER)Ace)->AceSize);
+    }
+    ok(AddAccessAllowedAceEx(NewAcl, ACL_REVISION, CONTAINER_INHERIT_ACE | INHERIT_ONLY_ACE | OBJECT_INHERIT_ACE,
+                             KEY_READ | KEY_SET_VALUE | KEY_CREATE_SUB_KEY, Interactive),
+       "AddAccessAllowedAceEx failed: %lu\n", GetLastError());
+
+    /* The handle itself has no WRITE_DAC */
+    {
+        SECURITY_DESCRIPTOR NewSd;
+
+        InitializeSecurityDescriptor(&NewSd, SECURITY_DESCRIPTOR_REVISION);
+        SetSecurityDescriptorDacl(&NewSd, TRUE, NewAcl, FALSE);
+        Ret = RegSetKeySecurity(Key, DACL_SECURITY_INFORMATION, &NewSd);
+        ok(Ret == ERROR_ACCESS_DENIED, "RegSetKeySecurity(KEY_WRITE handle): %ld\n", Ret);
+    }
+
+    /* ...but SetSecurityInfo succeeds, the caller may change the DACL */
+    Err = SetSecurityInfo(Key, SE_REGISTRY_KEY, DACL_SECURITY_INFORMATION, NULL, NULL, NewAcl, NULL);
+    ok(Err == ERROR_SUCCESS, "SetSecurityInfo(KEY_WRITE handle): %lu\n", Err);
+
+    Err = GetSecurityInfo(Key, SE_REGISTRY_KEY, DACL_SECURITY_INFORMATION, NULL, NULL, &Dacl2, NULL, &Sd2);
+    ok(Err == ERROR_SUCCESS, "GetSecurityInfo again: %lu\n", Err);
+    if (Err == ERROR_SUCCESS && Dacl2)
+    {
+        GetAclInformation(Dacl2, &Info2, sizeof(Info2), AclSizeInformation);
+        ok(Info2.AceCount == Info.AceCount + 1, "ACE count %lu, expected %lu\n", Info2.AceCount, Info.AceCount + 1);
+    }
+
+Cleanup:
+    if (Sd2) LocalFree(Sd2);
+    if (NewAcl) LocalFree(NewAcl);
+    if (Interactive) FreeSid(Interactive);
+    if (Sd) LocalFree(Sd);
+    RegCloseKey(Key);
+}
+
 START_TEST(RegKeySecurity)
 {
     static const PCWSTR MachineNames[] =
@@ -197,6 +271,7 @@ START_TEST(RegKeySecurity)
     RegCloseKey(Key);
     TestNamed(L"CURRENT_USER\\" TEST_KEY, SE_REGISTRY_KEY, TRUE);
     TestByHandle(HKEY_CURRENT_USER, TEST_KEY, 0, READ_CONTROL | WRITE_DAC);
+    TestSetInfoThroughWriteHandle();
     Ret = RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
     ok(Ret == ERROR_SUCCESS, "RegDeleteKey: %ld\n", Ret);
 }
