@@ -17,6 +17,7 @@ EXTERN MmAccessFault:PROC
 EXTERN KiSystemFatalException:PROC
 EXTERN KiNpxNotAvailableFaultHandler:PROC
 EXTERN KiGeneralProtectionFaultHandler:PROC
+EXTERN KiStackFaultHandler:PROC
 EXTERN KiXmmExceptionHandler:PROC
 EXTERN KiDeliverApc:PROC
 EXTERN KiDpcInterruptHandler:PROC
@@ -388,6 +389,17 @@ FUNC KiStackFault
     /* We have an error code */
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
+    /* Call the C handler: an access violation for user mode, else fatal */
+    mov rcx, rbp
+    call KiStackFaultHandler
+    cmp eax, STATUS_ACCESS_VIOLATION
+    jne KiStackFaultFatal
+
+    /* Dispatch an access violation (address unknown) to the program */
+    DispatchException eax, 2, 0, -1, 0
+    ExitTrap TF_SAVE_ALL
+
+KiStackFaultFatal:
     /* Bugcheck */
     Fatal EXCEPTION_STACK_FAULT
     jmp $

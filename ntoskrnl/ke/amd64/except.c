@@ -769,6 +769,30 @@ KiGeneralProtectionFaultUserMode(
     return Status;
 }
 
+/*
+ * A stack fault (#SS). From user mode it is the program's error (e.g. 32-bit code
+ * with an unusable stack segment, or a non-canonical RSP): Windows raises an
+ * access violation in that program instead of stopping the system. From kernel
+ * mode it stays fatal (the caller bugchecks).
+ */
+NTSTATUS
+NTAPI
+KiStackFaultHandler(
+    IN PKTRAP_FRAME TrapFrame)
+{
+    if (TrapFrame->SegCs & 3)
+    {
+        DPRINT1("Stack fault (#SS) in user mode: %.16s, Cs %x Rip %p, Ss %x Rsp %p, error code %lx\n",
+                PsGetCurrentProcess()->ImageFileName, TrapFrame->SegCs, (PVOID)TrapFrame->Rip,
+                TrapFrame->SegSs, (PVOID)TrapFrame->Rsp, (ULONG)TrapFrame->ErrorCode);
+        return STATUS_ACCESS_VIOLATION;
+    }
+
+    DPRINT1("Stack fault (#SS) in kernel mode: Rip %p, Ss %x Rsp %p, error code %lx\n",
+            (PVOID)TrapFrame->Rip, TrapFrame->SegSs, (PVOID)TrapFrame->Rsp, (ULONG)TrapFrame->ErrorCode);
+    return STATUS_UNSUCCESSFUL;
+}
+
 NTSTATUS
 NTAPI
 KiGeneralProtectionFaultHandler(
