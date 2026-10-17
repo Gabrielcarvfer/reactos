@@ -2664,6 +2664,7 @@ HRESULT d2d_effect_create(struct d2d_device_context *context, const CLSID *effec
     const struct d2d_effect_registration *reg;
     struct d2d_effect *object;
     UINT32 input_count;
+    IUnknown *impl;
     WCHAR clsidW[39];
     HRESULT hr;
 
@@ -2706,9 +2707,20 @@ HRESULT d2d_effect_create(struct d2d_device_context *context, const CLSID *effec
         return hr;
     }
 
-    if (FAILED(hr = reg->factory((IUnknown **)&object->impl)))
+    if (FAILED(hr = reg->factory(&impl)))
     {
         WARN("Failed to create implementation object, hr %#lx.\n", hr);
+        ID2D1Effect_Release(&object->ID2D1Effect_iface);
+        return hr;
+    }
+
+    /* The factory gives an IUnknown, which need not be the ID2D1EffectImpl
+     * interface itself (e.g. effects written in .NET). */
+    hr = IUnknown_QueryInterface(impl, &IID_ID2D1EffectImpl, (void **)&object->impl);
+    IUnknown_Release(impl);
+    if (FAILED(hr))
+    {
+        WARN("Failed to get the ID2D1EffectImpl interface, hr %#lx.\n", hr);
         ID2D1Effect_Release(&object->ID2D1Effect_iface);
         return hr;
     }
