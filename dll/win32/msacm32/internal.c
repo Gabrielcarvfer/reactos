@@ -391,6 +391,13 @@ void MSACM_RegisterAllDrivers(void)
 	    if (!_wcsnicmp(valname, msacmW, ARRAY_SIZE(msacmW)))
 		MSACM_RegisterDriver(valname, buf, 0);
 	    ++i;
+#ifdef __REACTOS__
+	    /* Both sizes are in/out: reset them, or the next longer name
+	     * fails with ERROR_MORE_DATA and ends the loop (no ACM codec
+	     * after "wavemapper" was ever registered). */
+	    cnt = ARRAY_SIZE(valname);
+	    bufLen = sizeof(buf);
+#endif
 	}
     	RegCloseKey( hKey );
     }
