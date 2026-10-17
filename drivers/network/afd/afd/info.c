@@ -124,7 +124,16 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 FCB->OobInline = InfoReq->Information.Boolean;
                 break;
             case AFD_INFO_RECEIVE_WINDOW_SIZE:
-                if (FCB->SharedData.State == SOCKET_STATE_CONNECTED ||
+                if (!(FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) && !FCB->Recv.Window)
+                {
+                    /* Not connected yet: the buffer gets this size when it
+                     * connects (SO_RCVBUF/SO_SNDBUF set before connect() were
+                     * ignored). At most 64 KB, like the default */
+                    if (InfoReq->Information.Ulong > 0)
+                        FCB->Recv.Size = min(InfoReq->Information.Ulong, 0x10000);
+                    Status = STATUS_SUCCESS;
+                }
+                else if (FCB->SharedData.State == SOCKET_STATE_CONNECTED ||
                     FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS)
                 {
                     /* FIXME: likely not right, check tcpip.sys for TDI_QUERY_MAX_DATAGRAM_INFO */
@@ -170,7 +179,16 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 }
                 break;
             case AFD_INFO_SEND_WINDOW_SIZE:
-                if (FCB->SharedData.State == SOCKET_STATE_CONNECTED ||
+                if (!(FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) && !FCB->Send.Window)
+                {
+                    /* Not connected yet: the buffer gets this size when it
+                     * connects (SO_RCVBUF/SO_SNDBUF set before connect() were
+                     * ignored). At most 64 KB, like the default */
+                    if (InfoReq->Information.Ulong > 0)
+                        FCB->Send.Size = min(InfoReq->Information.Ulong, 0x10000);
+                    Status = STATUS_SUCCESS;
+                }
+                else if (FCB->SharedData.State == SOCKET_STATE_CONNECTED ||
                     FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS)
                 {
                     if (InfoReq->Information.Ulong > 0 && InfoReq->Information.Ulong < 0xFFFF &&

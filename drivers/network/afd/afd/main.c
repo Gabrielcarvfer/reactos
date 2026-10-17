@@ -26,6 +26,10 @@ DWORD DebugTraceLevel = MIN_TRACE;
 /* FIXME: should depend on SystemSize */
 ULONG AfdReceiveWindowSize = 0x2000;
 ULONG AfdSendWindowSize = 0x2000;
+/* Stream sockets: each recv() returned at most the receive buffer and each
+ * buffer's worth of sends took a TDI round trip, so 8 KB capped throughput
+ * (Windows' default SO_RCVBUF/SO_SNDBUF is 64 KB too) */
+ULONG AfdStreamWindowSize = 0x10000;
 
 void OskitDumpBuffer( PCHAR Data, UINT Len ) {
     unsigned int i;
@@ -378,6 +382,11 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     FCB->Connection.Handle = INVALID_HANDLE_VALUE;
     FCB->Recv.Size = AfdReceiveWindowSize;
     FCB->Send.Size = AfdSendWindowSize;
+    if (!(FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS))
+    {
+        FCB->Recv.Size = AfdStreamWindowSize;
+        FCB->Send.Size = AfdStreamWindowSize;
+    }
 
     KeInitializeMutex( &FCB->Mutex, 0 );
 
