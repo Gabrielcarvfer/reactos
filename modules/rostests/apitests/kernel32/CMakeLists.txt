@@ -73,6 +73,7 @@ list(APPEND SOURCE
     TunnelCache.c
     UEFIFirmware.c
     UnregisterWaitEx.c
+    VirtualAlloc2.c
     WideCharToMultiByte.c
     Wow64Basics.c
     Wow64FsRedirection.c

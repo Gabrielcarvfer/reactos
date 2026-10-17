@@ -1175,6 +1175,21 @@ LdrpApplyFileNameRedirection(
         }
     }
 
+    /* KernelBase.dll by name (Cygwin/MSYS2 load it for VirtualAlloc2 and the
+       interrupt time functions): ReactOS's is kernelbase_ros.dll */
+    if (!*RedirectedDll)
+    {
+        static const UNICODE_STRING KernelBase = RTL_CONSTANT_STRING(L"kernelbase.dll");
+        static const UNICODE_STRING KernelBaseNoExt = RTL_CONSTANT_STRING(L"kernelbase");
+
+        if (RtlEqualUnicodeString(OriginalName, &KernelBase, TRUE) ||
+            RtlEqualUnicodeString(OriginalName, &KernelBaseNoExt, TRUE))
+        {
+            RtlInitUnicodeString(&ApisetName, L"kernelbase_ros.dll");
+            *RedirectedDll = TRUE;
+        }
+    }
+
     if (*RedirectedDll)
     {
         UNICODE_STRING NtSystemRoot;

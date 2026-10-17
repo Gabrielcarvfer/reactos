@@ -224,6 +224,7 @@
 @ stdcall NtAllocateUserPhysicalPages(ptr ptr ptr)
 @ stdcall NtAllocateUuids(ptr ptr ptr ptr)
 @ stdcall NtAllocateVirtualMemory(long ptr ptr ptr long long)
+@ stdcall -version=0xA00+ NtAllocateVirtualMemoryEx(long ptr ptr long long ptr long)
 @ stdcall -stub -version=0x600+ NtAlpcAcceptConnectPort(long long long long long long long long long)
 @ stdcall -stub -version=0x600+ NtAlpcCancelMessage(long long long)
 @ stdcall -stub -version=0x600+ NtAlpcConnectPort(long long long long long long long long long long long)
@@ -373,6 +374,7 @@
 @ stdcall NtMapUserPhysicalPages(ptr ptr ptr)
 @ stdcall NtMapUserPhysicalPagesScatter(ptr ptr ptr)
 @ stdcall NtMapViewOfSection(long long ptr long long ptr ptr long long long)
+@ stdcall -version=0xA00+ NtMapViewOfSectionEx(long long ptr ptr ptr long long ptr long)
 @ stdcall NtModifyBootEntry(ptr)
 @ stdcall NtModifyDriverEntry(ptr)
 @ stdcall NtNotifyChangeDirectoryFile(long long ptr ptr ptr ptr long long long)
@@ -1406,6 +1408,7 @@
 @ stdcall ZwAllocateUserPhysicalPages(ptr ptr ptr)
 @ stdcall ZwAllocateUuids(ptr ptr ptr ptr)
 @ stdcall ZwAllocateVirtualMemory(long ptr ptr ptr long long)
+@ stdcall -version=0xA00+ ZwAllocateVirtualMemoryEx(long ptr ptr long long ptr long) NtAllocateVirtualMemoryEx
 @ stub -version=0x600+ ZwAlpcAcceptConnectPort
 @ stub -version=0x600+ ZwAlpcCancelMessage
 @ stub -version=0x600+ ZwAlpcConnectPort
@@ -1552,6 +1555,7 @@
 @ stdcall ZwMapUserPhysicalPages(ptr ptr ptr)
 @ stdcall ZwMapUserPhysicalPagesScatter(ptr ptr ptr)
 @ stdcall ZwMapViewOfSection(long long ptr long long ptr ptr long long long)
+@ stdcall -version=0xA00+ ZwMapViewOfSectionEx(long long ptr ptr ptr long long ptr long) NtMapViewOfSectionEx
 @ stdcall ZwModifyBootEntry(ptr)
 @ stdcall ZwModifyDriverEntry(ptr)
 @ stdcall ZwNotifyChangeDirectoryFile(long long ptr ptr ptr ptr long long long)

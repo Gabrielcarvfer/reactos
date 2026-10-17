@@ -986,7 +986,7 @@
 # #@ stub MapPredefinedHandleInternal
 #@ stdcall MapUserPhysicalPages(ptr long ptr)
 #@ stdcall MapViewOfFile(long long long long long)
-#@ stdcall MapViewOfFile3(long long ptr int64 long long long ptr long)
+@ stdcall MapViewOfFile3(long long ptr int64 long long long ptr long)
 #@ stdcall MapViewOfFileEx(long long long long long ptr)
 #@ stdcall MapViewOfFileExNuma(long long long long long ptr long)
 #@ stdcall MapViewOfFileFromApp(long long int64 long)
@@ -1237,8 +1237,8 @@
 #@ stdcall QueryIoRingCapabilities(ptr)
 #@ stdcall QueryIdleProcessorCycleTime(ptr ptr)
 #@ stdcall QueryIdleProcessorCycleTimeEx(long ptr ptr)
-#@ stdcall QueryInterruptTime(ptr)
-#@ stdcall QueryInterruptTimePrecise(ptr)
+@ stdcall QueryInterruptTime(ptr) kernel32.QueryInterruptTime
+@ stdcall QueryInterruptTimePrecise(ptr) kernel32.QueryInterruptTimePrecise
 #@ stdcall QueryMemoryResourceNotification(ptr ptr)
 # #@ stub QueryOptionalDelayLoadedAPI
 #@ stdcall QueryPerformanceCounter(ptr) ntdll.RtlQueryPerformanceCounter
@@ -1252,8 +1252,8 @@
 # #@ stub QueryStateContainerItemInfo
 #@ stdcall QueryThreadCycleTime(long ptr)
 #@ stdcall QueryThreadpoolStackInformation(ptr ptr)
-#@ stdcall QueryUnbiasedInterruptTime(ptr) ntdll.RtlQueryUnbiasedInterruptTime
-#@ stdcall QueryUnbiasedInterruptTimePrecise(ptr)
+@ stdcall QueryUnbiasedInterruptTime(ptr) kernel32.QueryUnbiasedInterruptTime
+@ stdcall QueryUnbiasedInterruptTimePrecise(ptr) kernel32.QueryUnbiasedInterruptTimePrecise
 #@ stdcall QueryVirtualMemoryInformation(long ptr long ptr long ptr)
 #@ stdcall QueryWorkingSet(long ptr long)
 #@ stdcall QueryWorkingSetEx(long ptr long)
@@ -1521,7 +1521,7 @@
 #@ stdcall SetSystemTime(ptr)
 #@ stdcall SetSystemTimeAdjustment(long long)
 #@ stdcall SetThreadContext(long ptr)
-#@ stdcall SetThreadDescription(ptr wstr)
+@ stdcall SetThreadDescription(ptr wstr) kernel32.SetThreadDescription
 #@ stdcall SetThreadErrorMode(long ptr)
 #@ stdcall SetThreadGroupAffinity(long ptr ptr)
 #@ stdcall SetThreadIdealProcessor(long long)
@@ -1712,7 +1712,7 @@
 # #@ stub VerifyPackageId
 # #@ stub VerifyPackageRelativeApplicationId
 # #@ stub VerifyScripts
-#@ stdcall VirtualAlloc2(long ptr long long long ptr long)
+@ stdcall VirtualAlloc2(long ptr long long long ptr long)
 #@ stdcall VirtualAlloc2FromApp(long ptr long long long ptr long)
 #@ stdcall VirtualAlloc(ptr long long long)
 #@ stdcall VirtualAllocEx(long ptr long long long)

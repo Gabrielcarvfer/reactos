@@ -36,7 +36,8 @@ list(APPEND SOURCE
     ldr/ldrpe.c
     ldr/ldrutils.c
     ldr/verifier.c
-    rtl/asan.c)
+    rtl/asan.c
+    rtl/virtualex.c)
 
 if(ARCH STREQUAL "i386")
     list(APPEND ASM_SOURCE dispatch/i386/dispatch.S)

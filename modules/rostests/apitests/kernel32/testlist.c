@@ -70,6 +70,7 @@ extern void func_Toolhelp32(void);
 extern void func_TunnelCache(void);
 extern void func_UEFIFirmware(void);
 extern void func_UnregisterWaitEx(void);
+extern void func_VirtualAlloc2(void);
 extern void func_WideCharToMultiByte(void);
 extern void func_Wow64Basics(void);
 extern void func_Wow64FsRedirection(void);
@@ -145,6 +146,7 @@ const struct test winetest_testlist[] =
     { "TunnelCache",                 func_TunnelCache },
     { "UEFIFirmware",                func_UEFIFirmware },
     { "UnregisterWaitEx",            func_UnregisterWaitEx },
+    { "VirtualAlloc2",               func_VirtualAlloc2 },
     { "WideCharToMultiByte",         func_WideCharToMultiByte },
     { "Wow64Basics",                 func_Wow64Basics },
     { "Wow64FsRedirection",          func_Wow64FsRedirection },
