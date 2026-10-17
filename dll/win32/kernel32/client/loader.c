@@ -412,6 +412,7 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
     PWSTR SearchPath;
     ULONG DllCharacteristics = 0;
     BOOL FreeString = FALSE;
+    BOOL System32Only = FALSE;
 
     /* The other ways to load a module only to read its resources: as a data
      * file too (FindResource works on those) */
@@ -485,6 +486,25 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
         if (DllDirPath) RtlFreeHeap(RtlGetProcessHeap(), 0, DllDirPath);
         if (UsualPath) RtlFreeHeap(RtlGetProcessHeap(), 0, UsualPath);
     }
+    else if ((dwFlags & (0x00000100 | LOAD_LIBRARY_SEARCH_FLAGS_ROS)) == 0x00000800 /* LOAD_LIBRARY_SEARCH_SYSTEM32 */ &&
+             !(dwFlags & LOAD_WITH_ALTERED_SEARCH_PATH) &&
+             RtlDetermineDosPathNameType_U(DllName.Buffer) == RtlPathTypeRelative)
+    {
+        /* LOAD_LIBRARY_SEARCH_SYSTEM32 alone: System32 only, as on Windows
+           (not the program's folder, PATH or the added directories). The .NET
+           runtime looks for Windows' own ICU this way, LoadLibraryExW(L"icu.dll",
+           NULL, LOAD_LIBRARY_SEARCH_SYSTEM32), and needs all of ICU when it is
+           there; our converters-only icu.dll is in the Windows folder */
+        SIZE_T Length = BaseWindowsSystemDirectory.Length + sizeof(UNICODE_NULL);
+
+        System32Only = TRUE;
+        SearchPath = RtlAllocateHeap(RtlGetProcessHeap(), 0, Length);
+        if (SearchPath)
+        {
+            RtlCopyMemory(SearchPath, BaseWindowsSystemDirectory.Buffer, BaseWindowsSystemDirectory.Length);
+            SearchPath[BaseWindowsSystemDirectory.Length / sizeof(WCHAR)] = UNICODE_NULL;
+        }
+    }
     else
     {
         SearchPath = BaseComputeProcessDllPath((dwFlags & LOAD_WITH_ALTERED_SEARCH_PATH) ?
@@ -518,7 +538,7 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
                             &DllCharacteristics,
                             &DllName,
                             (PVOID*)&hInst);
-        if (Status == STATUS_DLL_NOT_FOUND && !IsListEmpty(&BasepDllDirectories))
+        if (Status == STATUS_DLL_NOT_FOUND && !System32Only && !IsListEmpty(&BasepDllDirectories))
             Status = BasepLoadFromAddedDllDirectories(&DllName, &DllCharacteristics, (PVOID*)&hInst);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
