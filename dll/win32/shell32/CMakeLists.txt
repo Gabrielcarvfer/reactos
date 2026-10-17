@@ -99,6 +99,8 @@ list(APPEND WINE_SOURCE
     wine/classes.c
     wine/clipboard.c
     wine/control.c
+    wine/ebrowser.c
+    wine/nstc.c
     wine/pidl.c
     wine/shell32_main.c
     wine/shellole.c

@@ -316,6 +316,47 @@ public:
 };
 
 
+/* ExplorerBrowser: the folder view host of the Vista style file dialogs
+ * (comdlg32 IFileOpenDialog/IFileSaveDialog), from Wine (wine/ebrowser.c) */
+EXTERN_C HRESULT WINAPI ExplorerBrowser_Constructor(IUnknown *pUnkOuter, REFIID riid, void **ppv);
+
+class CExplorerBrowserClass :
+    public CComCoClass<CExplorerBrowserClass, &CLSID_ExplorerBrowser>,
+    public CComObjectRootEx<CComMultiThreadModelNoCS>
+{
+public:
+    class _CreatorClass
+    {
+    public:
+        static HRESULT WINAPI CreateInstance(void *pv, REFIID riid, LPVOID *ppv)
+        {
+            return ExplorerBrowser_Constructor((IUnknown *)pv, riid, ppv);
+        }
+    };
+
+    DECLARE_REGISTRY_RESOURCEID(IDR_EXPLORERBROWSER)
+};
+
+/* NamespaceTreeControl: the ExplorerBrowser's navigation pane (wine/nstc.c) */
+EXTERN_C HRESULT WINAPI NamespaceTreeControl_Constructor(IUnknown *pUnkOuter, REFIID riid, void **ppv);
+
+class CNamespaceTreeControlClass :
+    public CComCoClass<CNamespaceTreeControlClass, &CLSID_NamespaceTreeControl>,
+    public CComObjectRootEx<CComMultiThreadModelNoCS>
+{
+public:
+    class _CreatorClass
+    {
+    public:
+        static HRESULT WINAPI CreateInstance(void *pv, REFIID riid, LPVOID *ppv)
+        {
+            return NamespaceTreeControl_Constructor((IUnknown *)pv, riid, ppv);
+        }
+    };
+
+    DECLARE_REGISTRY_RESOURCEID(IDR_NAMESPACETREECONTROL)
+};
+
 BEGIN_OBJECT_MAP(ObjectMap)
     OBJECT_ENTRY(CLSID_ActiveDesktop, CActiveDesktop)
     OBJECT_ENTRY(CLSID_ShellFSFolder, CFSFolder)
@@ -353,6 +394,8 @@ BEGIN_OBJECT_MAP(ObjectMap)
     OBJECT_ENTRY(CLSID_UserNotification, CUserNotification)
     OBJECT_ENTRY(CLSID_UserEventTimer, CUserEventTimer)
     OBJECT_ENTRY(CLSID_StartMenuPin, CStartMenuPin)
+    OBJECT_ENTRY(CLSID_ExplorerBrowser, CExplorerBrowserClass)
+    OBJECT_ENTRY(CLSID_NamespaceTreeControl, CNamespaceTreeControlClass)
 END_OBJECT_MAP()
 
 CShell32Module  gModule;
