@@ -611,6 +611,7 @@ BaseInitializeContext(IN PCONTEXT Context,
     }
 
 #elif defined(_M_AMD64)
+    ULONG ContextFlags = Context->ContextFlags;
     DPRINT("BaseInitializeContext: %p\n", Context);
     ASSERT(((ULONG_PTR)StackAddress & 15) == 0);
 
@@ -650,6 +651,15 @@ BaseInitializeContext(IN PCONTEXT Context,
 
     /* Set the Context Flags */
     Context->ContextFlags = CONTEXT_FULL;
+
+    /* A fiber starts with the initial FPU state (on x64 SwitchToFiber always
+     * switches the control word and MXCSR, as on Windows) */
+    if (ContextType == 2)
+    {
+        Context->ContextFlags |= ContextFlags & CONTEXT_FLOATING_POINT;
+        Context->FltSave.ControlWord = 0x27F;
+        Context->FltSave.MxCsr = INITIAL_MXCSR;
+    }
 #elif defined(_M_ARM)
     DPRINT("BaseInitializeContext: %p\n", Context);
 

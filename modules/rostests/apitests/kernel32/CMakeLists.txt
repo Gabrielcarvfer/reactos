@@ -15,6 +15,7 @@ list(APPEND SOURCE
     EnumSystemCodePages.c
     FastFail.c
     FatStress.c
+    FiberFpu.c
     FindActCtxSectionStringW.c
     FindFiles.c
     FindFirstFileEx.c

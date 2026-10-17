@@ -153,10 +153,26 @@ ConvertThreadToFiberEx(_In_opt_ LPVOID lpParameter,
     Fiber->GuaranteedStackBytes = Teb->GuaranteedStackBytes;
     Fiber->ActivationContextStackPointer = Teb->ActivationContextStackPointer;
 
-    /* Save FPU State if requested, otherwise just the basic registers */
+    /* Save FPU State if requested, otherwise just the basic registers. (The
+     * thread's state is saved here when it switches to another fiber; start
+     * from the initial one, as Windows does.) */
+    RtlZeroMemory(&Fiber->FiberContext, sizeof(Fiber->FiberContext));
     Fiber->FiberContext.ContextFlags = (dwFlags & FIBER_FLAG_FLOAT_SWITCH) ?
                                        (CONTEXT_FULL | CONTEXT_FLOATING_POINT) :
                                        CONTEXT_FULL;
+#if defined(_M_IX86)
+    if (dwFlags & FIBER_FLAG_FLOAT_SWITCH)
+    {
+        Fiber->FiberContext.FloatSave.ControlWord = 0x27F;
+        Fiber->FiberContext.FloatSave.TagWord = 0xFFFF;
+        Fiber->FiberContext.Dr6 = 0x1F80; /* MXCSR (see fiber.S) */
+    }
+#elif defined(_M_AMD64)
+    /* (always switched on x64) */
+    Fiber->FiberContext.FltSave.ControlWord = 0x27F;
+    Fiber->FiberContext.FltSave.MxCsr = 0x1F80;
+    Fiber->FiberContext.MxCsr = 0x1F80;
+#endif
 
     /* Associate the fiber to the current thread */
     Teb->NtTib.FiberData = Fiber;
@@ -169,6 +185,47 @@ ConvertThreadToFiberEx(_In_opt_ LPVOID lpParameter,
     /* Return opaque fiber data */
     return (LPVOID)Fiber;
 }
+
+#ifdef _M_AMD64
+/* fiber.S: save the non-volatile registers into Old, load them from New */
+VOID
+NTAPI
+BaseSwitchFiberContext(
+    _Out_ PCONTEXT OldContext,
+    _In_ PCONTEXT NewContext);
+
+/*
+ * @implemented
+ */
+VOID
+WINAPI
+SwitchToFiber(_In_ LPVOID lpFiber)
+{
+    PTEB Teb = NtCurrentTeb();
+    PFIBER OldFiber = Teb->NtTib.FiberData;
+    PFIBER NewFiber = lpFiber;
+
+    /* Keep what the TEB holds for the old fiber */
+    OldFiber->ExceptionList = Teb->NtTib.ExceptionList;
+    OldFiber->StackLimit = Teb->NtTib.StackLimit;
+    OldFiber->GuaranteedStackBytes = Teb->GuaranteedStackBytes;
+    OldFiber->FlsData = Teb->FlsData;
+    OldFiber->ActivationContextStackPointer = Teb->ActivationContextStackPointer;
+
+    /* Switch the TEB to the new one */
+    Teb->NtTib.FiberData = NewFiber;
+    Teb->NtTib.ExceptionList = NewFiber->ExceptionList;
+    Teb->NtTib.StackBase = NewFiber->StackBase;
+    Teb->NtTib.StackLimit = NewFiber->StackLimit;
+    Teb->DeallocationStack = NewFiber->DeallocationStack;
+    Teb->GuaranteedStackBytes = NewFiber->GuaranteedStackBytes;
+    Teb->FlsData = NewFiber->FlsData;
+    Teb->ActivationContextStackPointer = NewFiber->ActivationContextStackPointer;
+
+    /* Returns when another fiber switches back to this one */
+    BaseSwitchFiberContext(&OldFiber->FiberContext, &NewFiber->FiberContext);
+}
+#endif
 
 /*
  * @implemented

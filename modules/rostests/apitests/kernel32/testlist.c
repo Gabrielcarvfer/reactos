@@ -14,6 +14,7 @@ extern void func_dosdev(void);
 extern void func_EnumSystemCodePages(void);
 extern void func_FastFail(void);
 extern void func_FatStress(void);
+extern void func_FiberFpu(void);
 extern void func_FindActCtxSectionStringW(void);
 extern void func_FindFiles(void);
 extern void func_FindFirstFileEx(void);
@@ -92,6 +93,7 @@ const struct test winetest_testlist[] =
     { "EnumSystemCodePages",         func_EnumSystemCodePages },
     { "FastFail",                    func_FastFail },
     { "FatStress",                   func_FatStress },
+    { "FiberFpu",                    func_FiberFpu },
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
     { "FindFiles",                   func_FindFiles },
     { "FindFirstFileEx", func_FindFirstFileEx },

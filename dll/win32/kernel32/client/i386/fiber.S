@@ -98,9 +98,16 @@ NoFpuStateSave:
     mov esi, [ecx+FIBER_ACTIVATION_CONTEXT_STACK]
     mov [edx+TEB_ACTIVATION_CONTEXT_STACK_POINTER], esi
 
-    /* Restore FPU State */
-    cmp dword ptr [eax+FIBER_CONTEXT_FLAGS], CONTEXT_FULL OR CONTEXT_FLOATING_POINT
+    /* Restore FPU State, if the new fiber has one (a fiber created without
+       FIBER_FLAG_FLOAT_SWITCH has none: loading its empty one would unmask
+       every floating point exception) */
+    cmp dword ptr [ecx+FIBER_CONTEXT_FLAGS], CONTEXT_FULL OR CONTEXT_FLOATING_POINT
     jnz NoFpuStateRestore
+
+    /* The load is skipped below when the old fiber saved the same words:
+       only if it saved them at all */
+    cmp dword ptr [eax+FIBER_CONTEXT_FLAGS], CONTEXT_FULL OR CONTEXT_FLOATING_POINT
+    jnz StatusWordChanged
 
     /* Check if the Status Word Changed */
     mov esi, [eax+FIBER_CONTEXT_FLOAT_SAVE_STATUS_WORD]
