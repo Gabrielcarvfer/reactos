@@ -58,7 +58,42 @@ static void TEST_LCMapStringW(void)
     ok_wstr(results,L"\x0105");
 }
 
+/* The size of a sort key asked first (no buffer) is the size then written.
+ * .NET's NLS mode hashes strings this way and throws if they differ. */
+static void TEST_SortKeyLength(void)
+{
+    static const WCHAR *strings[] = { L"a", L"HandleDispatcherRequestProcessingFailure", L"Ab-1 c", L"\x00e9t\x00e9" };
+    static const DWORD flags[] = { 0, NORM_IGNORECASE, NORM_IGNORECASE | 0x08000000 /* NORM_LINGUISTIC_CASING */,
+                                   NORM_IGNORESYMBOLS, SORT_STRINGSORT };
+    BYTE key[256];
+    UINT i, j;
+    INT len, written;
+
+    for (i = 0; i < _countof(strings); i++)
+    {
+        for (j = 0; j < _countof(flags); j++)
+        {
+            len = LCMapStringEx(L"", LCMAP_SORTKEY | flags[j], strings[i], (INT)wcslen(strings[i]), NULL, 0, NULL, NULL, 0);
+            ok(len > 0, "%u/%u: size %d, error %lu\n", i, j, len, GetLastError());
+            memset(key, 0xcc, sizeof(key));
+            written = LCMapStringEx(L"", LCMAP_SORTKEY | flags[j], strings[i], (INT)wcslen(strings[i]), (LPWSTR)key, len, NULL, NULL, 0);
+            ok(written == len, "%u/%u: asked %d, wrote %d\n", i, j, len, written);
+            ok(written > 0 && key[written - 1] == 0, "%u/%u: no terminating 0\n", i, j);
+            ok(key[len] == 0xcc, "%u/%u: wrote past the size\n", i, j);
+
+            len = LCMapStringW(LOCALE_INVARIANT, LCMAP_SORTKEY | flags[j], strings[i], -1, NULL, 0);
+            written = LCMapStringW(LOCALE_INVARIANT, LCMAP_SORTKEY | flags[j], strings[i], -1, (LPWSTR)key, len);
+            ok(written == len, "%u/%u: LCMapStringW asked %d, wrote %d\n", i, j, len, written);
+        }
+    }
+
+    len = LCMapStringA(LOCALE_INVARIANT, LCMAP_SORTKEY, "Abc", -1, NULL, 0);
+    written = LCMapStringA(LOCALE_INVARIANT, LCMAP_SORTKEY, "Abc", -1, (LPSTR)key, len);
+    ok(len > 0 && written == len, "LCMapStringA asked %d, wrote %d\n", len, written);
+}
+
 START_TEST(LCMapString)
 {
     TEST_LCMapStringW();
+    TEST_SortKeyLength();
 }

@@ -82,8 +82,11 @@ int wine_get_sortkey(int flags, const WCHAR *src, int srclen, char *dst, int dst
     }
 
     if (!dstlen) /* compute length */
-        /* 4 * '\1' + 1 * '\0' + key length */
-        return key_len[0] + key_len[1] + key_len[2] + key_len[3] + 4 + 1;
+        /* 4 * '\1' + key length: as the length returned below, without the
+         * '\0' (the callers add it). It used to count the '\0' too, and the
+         * size asked first was one more than what was then written: .NET
+         * checks they match (ArgumentException, HandBrake/WPF startup) */
+        return key_len[0] + key_len[1] + key_len[2] + key_len[3] + 4;
 
     if (dstlen < key_len[0] + key_len[1] + key_len[2] + key_len[3] + 4 + 1)
         return 0; /* overflow */
