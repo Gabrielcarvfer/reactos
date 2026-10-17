@@ -383,6 +383,10 @@ IntMsqSetWakeMask(DWORD WakeMask)
       }
    }
 
+   /* (MsgWaitForMultipleObjects waits for these: not hung while it does) */
+   if (Win32Thread->pcti)
+      Win32Thread->pcti->fsWakeMask = LOWORD(WakeMask);
+
    IdlePing();
 
    return MessageEventHandle;
@@ -398,6 +402,7 @@ IntMsqClearWakeMask(VOID)
       return FALSE;
    // Very hacky, but that is what they do.
    Win32Thread->pcti->fsWakeBits = 0;
+   Win32Thread->pcti->fsWakeMask = 0;
 
    IdlePong();
 
@@ -2146,6 +2151,9 @@ co_MsqWaitForNewMessages(PTHREADINFO pti, PWND WndFilter,
       IntCoalesceMouseMove(pti);
    }
 
+   /* The thread now waits for these messages: it isn't hung (MsqIsHung) */
+   pti->pcti->fsWakeMask = GetWakeMask(MsgFilterMin, MsgFilterMax);
+
    UserLeaveCo();
 
    ZwYieldExecution(); // Let someone else run!
@@ -2156,6 +2164,7 @@ co_MsqWaitForNewMessages(PTHREADINFO pti, PWND WndFilter,
                                 FALSE,
                                 NULL );
    UserEnterCo();
+   pti->pcti->fsWakeMask = 0;
    if ( ret == STATUS_USER_APC )
    {
       TRACE("MWFNW User APC\n");
