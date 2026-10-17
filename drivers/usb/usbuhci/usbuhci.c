@@ -824,13 +824,16 @@ UhciInterruptService(IN PVOID uhciExtension)
     InterruptEnableReg = &BaseRegister->HcInterruptEnable.AsUSHORT;
     CommandReg = &BaseRegister->HcCommand.AsUSHORT;
 
-    if (!UhciHardwarePresent(UhciExtension))
+    /* One read of the status: the interrupt line is often shared (a network
+     * card's), and every port read is a VM exit when virtualized */
+    HcStatus.AsUSHORT = READ_PORT_USHORT(StatusReg);
+    if (HcStatus.AsUSHORT == MAXUSHORT)
     {
         DPRINT1("UhciInterruptService: return FALSE\n");
         return FALSE;
     }
 
-    HcStatus.AsUSHORT = READ_PORT_USHORT(StatusReg) & UHCI_USB_STATUS_MASK;
+    HcStatus.AsUSHORT &= UHCI_USB_STATUS_MASK;
 
     if (HcStatus.HostSystemError || HcStatus.HcProcessError)
     {
