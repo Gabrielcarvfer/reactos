@@ -1,5 +1,5 @@
 
-add_executable(combase_apitest JsonStringify.c UISettings.c UriRuntimeClass.c testlist.c)
+add_executable(combase_apitest JsonStringify.c PackageManager.c UISettings.c UriRuntimeClass.c testlist.c)
 target_link_libraries(combase_apitest wine uuid)
 set_module_type(combase_apitest win32cui)
 add_importlibs(combase_apitest combase user32 msvcrt kernel32 ntdll)
