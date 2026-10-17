@@ -1154,6 +1154,15 @@ PspTerminateProcessCallback(
         return STATUS_SUCCESS;
     }
 
+    /* A process already exiting dies anyway. It can be the current one: its
+       exit closes its handles, and the last handle of a kill-on-close job
+       terminates the job's processes. Terminating our own thread again from
+       there re-entered PspExitThread (bugcheck 0x20 when node.exe exited). */
+    if (Process->Flags & PSF_PROCESS_EXITING_BIT)
+    {
+        return STATUS_SUCCESS;
+    }
+
     /* Terminate the process */
     Status = PsTerminateProcess(Process, ExitStatus);
 
