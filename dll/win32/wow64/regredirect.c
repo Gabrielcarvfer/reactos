@@ -67,13 +67,13 @@ BOOL get_key_redirect(OBJECT_ATTRIBUTES *attr, ACCESS_MASK access, WCHAR *Buffer
         memcpy(Path, Root.Info.Name, Length * sizeof(WCHAR));
 
         /* A root key that is in the 64-bit view (opened with KEY_WOW64_64KEY,
-         * e.g. HKLM\SOFTWARE\Vendor) keeps its subkeys in that view, as on
-         * Windows: a relative name is only redirected when the root is
-         * HKLM\SOFTWARE itself or a key of the 32-bit view. (TeamViewer's
-         * installer creates SOFTWARE\TVInstallTemp in the 64-bit view, then
-         * opens RestoreInfo below that handle without the flag.) */
-        if ((Length != ARRAY_SIZE(SoftwarePath) - 1 || _wcsnicmp(Path, SoftwarePath, Length)) &&
-            GetKeyView32(Path, Length, Buffer, BufferSize))
+         * e.g. HKLM\SOFTWARE or HKLM\SOFTWARE\Vendor) keeps its subkeys in
+         * that view, as on Windows (checked on Windows 11): a relative name
+         * is only redirected when the root is a key of the 32-bit view.
+         * (TeamViewer's installer creates SOFTWARE\TVInstallTemp in the
+         * 64-bit view, then opens RestoreInfo below that handle without the
+         * flag.) */
+        if (GetKeyView32(Path, Length, Buffer, BufferSize))
         {
             RtlFreeHeap(GetProcessHeap(), 0, Path);
             return FALSE;
