@@ -142,6 +142,7 @@ extern void func_RtlxUnicodeStringToAnsiSize(void);
 extern void func_RtlxUnicodeStringToOemSize(void);
 extern void func_ProcessHandleTable(void);
 extern void func_StackOverflow(void);
+extern void func_RtlUnwindEx(void);
 extern void func_SyscallReturn(void);
 extern void func_x87Exception(void);
 extern void func_TimerResolution(void);
@@ -296,6 +297,7 @@ const struct test winetest_testlist[] =
 #endif
 #ifdef _M_AMD64
     { "RtlCaptureContext",              func_RtlCaptureContext },
+    { "RtlUnwindEx",                    func_RtlUnwindEx },
     { "RtlVirtualUnwind",               func_RtlVirtualUnwind },
 #endif
 

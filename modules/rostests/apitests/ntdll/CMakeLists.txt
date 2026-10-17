@@ -148,6 +148,7 @@ list(APPEND SOURCE
     RtlUnicodeStringToAnsiString.c
     RtlUnicodeStringToCountedOemString.c
     RtlUnicodeToOemN.c
+    RtlUnwindEx.c
     RtlUpcaseUnicodeStringToCountedOemString.c
     RtlValidateUnicodeString.c
     RtlxUnicodeStringToAnsiSize.c
@@ -171,6 +172,7 @@ elseif(ARCH STREQUAL "amd64")
         ../crt/amd64/setjmp_helper.s
         amd64/NtContinue.S
         amd64/NtCreateThread.S
+        amd64/RtlUnwindEx.S
     )
 endif()
 
