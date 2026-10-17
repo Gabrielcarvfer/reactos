@@ -1,7 +1,7 @@
 /*
  * PROJECT:     ReactOS api tests
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     KernelBase.dll by name, VirtualAlloc2 and MapViewOfFile3 with
+ * PURPOSE:     KernelBase.dll by name and path, VirtualAlloc2 and MapViewOfFile3 with
  *              MEM_ADDRESS_REQUIREMENTS
  *
  * Cygwin/MSYS2 (Git for Windows' bash.exe) load KernelBase.dll by name and
@@ -15,8 +15,40 @@
 typedef PVOID (WINAPI *PVIRTUALALLOC2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER *, ULONG);
 typedef PVOID (WINAPI *PMAPVIEWOFFILE3)(HANDLE, HANDLE, PVOID, ULONG64, SIZE_T, ULONG, ULONG, MEM_EXTENDED_PARAMETER *, ULONG);
 
+/* KernelBase.dll by its full path in the system directory (Git for Windows'
+   post-install): the same module as by name */
+static
+VOID
+TestFullPath(VOID)
+{
+    WCHAR Path[MAX_PATH];
+    HMODULE ByName, ByPath, ByLowerPath;
+    UINT Length;
+
+    Length = GetSystemDirectoryW(Path, MAX_PATH - 20);
+    ok(Length != 0, "GetSystemDirectoryW failed: %lu\n", GetLastError());
+    if (!Length)
+        return;
+
+    ByName = LoadLibraryW(L"kernelbase.dll");
+    wcscat(Path, L"\\KernelBase.dll");
+    ByPath = LoadLibraryW(Path);
+    ok(ByPath != NULL, "%ls not loaded: %lu\n", Path, GetLastError());
+    ok(ByPath == ByName, "%ls: %p, by name %p\n", Path, ByPath, ByName);
+    _wcslwr(Path);
+    ByLowerPath = LoadLibraryExW(Path, NULL, 0);
+    ok(ByLowerPath == ByName, "%ls: %p, by name %p\n", Path, ByLowerPath, ByName);
+    if (ByPath)
+        ok(GetProcAddress(ByPath, "VirtualAlloc2") != NULL, "no VirtualAlloc2\n");
+
+    if (ByLowerPath) FreeLibrary(ByLowerPath);
+    if (ByPath) FreeLibrary(ByPath);
+    if (ByName) FreeLibrary(ByName);
+}
+
 START_TEST(VirtualAlloc2)
 {
+    TestFullPath();
 #ifdef _WIN64
     const ULONG_PTR Low = 0x6000000000ULL, High = 0x7000000000ULL - 1;
     MEM_ADDRESS_REQUIREMENTS Requirements = { (PVOID)Low, (PVOID)High, 0x100000 };

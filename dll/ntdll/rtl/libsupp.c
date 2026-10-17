@@ -1111,6 +1111,46 @@ LdrpApisetVersion(VOID)
     return CachedApisetVersion;
 }
 
+/* A full path to KernelBase.dll in the system directory (Git for Windows'
+   post-install loads <system root>\System32\KernelBase.dll): ReactOS has none
+   there, it is kernelbase_ros.dll */
+static
+BOOLEAN
+LdrpIsSystemKernelBasePath(
+    _In_ PCUNICODE_STRING Name)
+{
+    static const PCWSTR Dirs[] = { L"\\System32\\", L"\\SysWOW64\\" };
+    static const UNICODE_STRING File = RTL_CONSTANT_STRING(L"kernelbase.dll");
+    UNICODE_STRING Root, Part;
+    SIZE_T DirLength;
+    ULONG i;
+
+    RtlInitUnicodeString(&Root, SharedUserData->NtSystemRoot);
+    for (i = 0; i < RTL_NUMBER_OF(Dirs); i++)
+    {
+        DirLength = wcslen(Dirs[i]) * sizeof(WCHAR);
+        if (Name->Length != Root.Length + DirLength + File.Length)
+            continue;
+
+        /* <system root> */
+        Part.Buffer = Name->Buffer;
+        Part.Length = Part.MaximumLength = Root.Length;
+        if (!RtlEqualUnicodeString(&Part, &Root, TRUE))
+            continue;
+
+        /* \System32\ or \SysWOW64\ */
+        if (_wcsnicmp(Name->Buffer + Root.Length / sizeof(WCHAR), Dirs[i], DirLength / sizeof(WCHAR)))
+            continue;
+
+        /* kernelbase.dll */
+        Part.Buffer = Name->Buffer + (Root.Length + DirLength) / sizeof(WCHAR);
+        Part.Length = Part.MaximumLength = File.Length;
+        if (RtlEqualUnicodeString(&Part, &File, TRUE))
+            return TRUE;
+    }
+    return FALSE;
+}
+
 NTSYSAPI
 NTSTATUS
 NTAPI
@@ -1183,7 +1223,8 @@ LdrpApplyFileNameRedirection(
         static const UNICODE_STRING KernelBaseNoExt = RTL_CONSTANT_STRING(L"kernelbase");
 
         if (RtlEqualUnicodeString(OriginalName, &KernelBase, TRUE) ||
-            RtlEqualUnicodeString(OriginalName, &KernelBaseNoExt, TRUE))
+            RtlEqualUnicodeString(OriginalName, &KernelBaseNoExt, TRUE) ||
+            LdrpIsSystemKernelBasePath(OriginalName))
         {
             RtlInitUnicodeString(&ApisetName, L"kernelbase_ros.dll");
             *RedirectedDll = TRUE;
