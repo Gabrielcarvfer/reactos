@@ -98,11 +98,11 @@ typedef struct IPADDR_ENTRY {
 					   * for ancillary data on packet
 					   * requests. */
 
-/* XXX This is a hack we should clean up later
- * We do this in order to get some storage for the locked handle table
- * Maybe I'll use some tail item in the irp instead */
-#define AFD_HANDLES(x) ((PAFD_HANDLE)(x)->Exclusive)
-#define SET_AFD_HANDLES(x,y) (((x)->Exclusive) = (ULONG_PTR)(y))
+/* The locked handle table of a select IRP (a buffered request: nothing else
+ * uses its driver context). It used to live in AFD_POLL_INFO's Exclusive
+ * field, which made that structure bigger than Windows' on 64-bit. */
+#define AFD_HANDLES(Irp) ((PAFD_HANDLE)(Irp)->Tail.Overlay.DriverContext[0])
+#define SET_AFD_HANDLES(Irp,y) ((Irp)->Tail.Overlay.DriverContext[0] = (PVOID)(y))
 
 #ifdef _WIN64
 /* What 32-bit programs (WoW64) pass: the same structures with 32-bit

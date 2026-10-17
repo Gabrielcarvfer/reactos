@@ -55,7 +55,8 @@ typedef struct _AFD_HANDLE_ {
 typedef struct _AFD_POLL_INFO {
     LARGE_INTEGER		        Timeout;
     ULONG				HandleCount;
-    ULONG_PTR                               Exclusive;
+    ULONG				Exclusive; /* (ULONG on 64-bit Windows too: programs
+                                    * like mio/tokio, libuv build this themselves) */
     AFD_HANDLE			        Handles[1];
 } AFD_POLL_INFO, *PAFD_POLL_INFO;
 

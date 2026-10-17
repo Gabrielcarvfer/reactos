@@ -2889,6 +2889,23 @@ WSPIoctl(IN  SOCKET Handle,
             Errno = NO_ERROR;
             Ret = NO_ERROR;
             break;
+        case SIO_BASE_HANDLE:
+        case SIO_BSP_HANDLE:
+        case SIO_BSP_HANDLE_SELECT:
+        case SIO_BSP_HANDLE_POLL:
+            /* We are the base provider: the socket is its own AFD handle.
+             * (Rust's mio/tokio, libuv and wepoll ask for it, then poll the
+             * socket through \Device\Afd themselves) */
+            if (IS_INTRESOURCE(lpvOutBuffer) || cbOutBuffer < sizeof(SOCKET))
+            {
+                Errno = WSAEFAULT;
+                break;
+            }
+            *(SOCKET*)lpvOutBuffer = Handle;
+            cbRet = sizeof(SOCKET);
+            Errno = NO_ERROR;
+            Ret = NO_ERROR;
+            break;
         default:
             Errno = Socket->HelperData->WSHIoctl(Socket->HelperContext,
                                                  Handle,

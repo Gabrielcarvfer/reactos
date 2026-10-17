@@ -29,6 +29,14 @@
 #include <afd/shared.h>
 #include <mswsock.h>
 
+/* (mswsock.h has these for Vista+ only; we answer them on every version) */
+#ifndef SIO_BASE_HANDLE
+#define SIO_BSP_HANDLE          _WSAIOR(IOC_WS2,27)
+#define SIO_BSP_HANDLE_SELECT   _WSAIOR(IOC_WS2,28)
+#define SIO_BSP_HANDLE_POLL     _WSAIOR(IOC_WS2,29)
+#define SIO_BASE_HANDLE         _WSAIOR(IOC_WS2,34)
+#endif
+
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(msafd);
 
