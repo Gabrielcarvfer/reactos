@@ -10,7 +10,198 @@
 
 #include "afd.h"
 
+/* A stream send IRP in FCB->PendingIrpList[FUNCTION_SEND] keeps
+ *   IoStatus.Information: how many of its bytes were copied to the send window
+ *   DriverContext[3]: how many of those are in the window and not sent yet
+ *   DriverContext[2]: how many are still to be copied.
+ * A blocking send bigger than the send window is copied piece by piece as the
+ * window drains and completes once all of it is sent, as on Windows (it used
+ * to complete with a short count: a 1 MB send() returned 8192) */
+#define SEND_IN_WINDOW(Irp) ((Irp)->Tail.Overlay.DriverContext[3])
+#define SEND_TO_COPY(Irp) ((Irp)->Tail.Overlay.DriverContext[2])
+
+static BOOLEAN IsBlockingSend(PAFD_FCB FCB, PAFD_SEND_INFO SendReq)
+{
+    return !((SendReq->AfdFlags & AFD_IMMEDIATE) || FCB->NonBlocking);
+}
+
+static UINT SendRequestLength(PAFD_SEND_INFO SendReq)
+{
+    UINT i, Length = 0;
+
+    for (i = 0; i < SendReq->BufferCount; i++)
+        Length += SendReq->BufferArray[i].len;
+
+    return Length;
+}
+
+/* Append up to SpaceAvail bytes of a send request, from Offset bytes into it,
+ * to the send window. UserVa: in the caller's context, read its buffers
+ * directly; otherwise through their locked MDLs */
+static UINT CopySendData(PAFD_FCB FCB, PAFD_SEND_INFO SendReq, UINT Offset,
+                         UINT SpaceAvail, BOOLEAN UserVa)
+{
+    PAFD_MAPBUF Map = (PAFD_MAPBUF)(SendReq->BufferArray + SendReq->BufferCount);
+    UINT i, Length, Copied = 0;
+    PCHAR Source;
+
+    for (i = 0; i < SendReq->BufferCount && SpaceAvail > 0; i++)
+    {
+        Length = SendReq->BufferArray[i].len;
+        if (Offset >= Length)
+        {
+            Offset -= Length;
+            continue;
+        }
+
+        if (UserVa)
+        {
+            Source = SendReq->BufferArray[i].buf;
+        }
+        else
+        {
+            if (!Map[i].Mdl)
+                break;
+            /* (the mapping stays until UnlockBuffers unlocks the pages) */
+            Source = MmGetSystemAddressForMdlSafe(Map[i].Mdl, NormalPagePriority);
+            if (!Source)
+                break;
+        }
+
+        Length = MIN(Length - Offset, SpaceAvail);
+        RtlCopyMemory(FCB->Send.Window + FCB->Send.BytesUsed, Source + Offset, Length);
+        Offset = 0;
+
+        FCB->Send.BytesUsed += Length;
+        SpaceAvail -= Length;
+        Copied += Length;
+    }
+
+    return Copied;
+}
+
+/* Some queued send has bytes that are not in the window yet: a new send must
+ * wait behind it, or the stream would be reordered. (The requests in the
+ * window come first in the queue, so the last one tells) */
+static BOOLEAN SendQueueWaiting(PAFD_FCB FCB)
+{
+    PIRP LastIrp;
+
+    if (IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND]))
+        return FALSE;
+
+    LastIrp = CONTAINING_RECORD(FCB->PendingIrpList[FUNCTION_SEND].Blink, IRP, Tail.Overlay.ListEntry);
+    return LastIrp->IoStatus.Information == 0 || SEND_TO_COPY(LastIrp) != NULL;
+}
+
+/* Copy queued sends into the free part of the send window, in order */
+static VOID FillSendWindow(PAFD_FCB FCB)
+{
+    PLIST_ENTRY Entry;
+    PIRP NextIrp;
+    PAFD_SEND_INFO SendReq;
+    UINT SpaceAvail, Length, Remaining, Copied;
+
+    for (Entry = FCB->PendingIrpList[FUNCTION_SEND].Flink;
+         Entry != &FCB->PendingIrpList[FUNCTION_SEND];
+         Entry = Entry->Flink)
+    {
+        NextIrp = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
+
+        /* All of this one is in the window already */
+        if (NextIrp->IoStatus.Information != 0 && SEND_TO_COPY(NextIrp) == NULL)
+            continue;
+
+        SpaceAvail = FCB->Send.Size - FCB->Send.BytesUsed;
+        if (SpaceAvail == 0)
+            break;
+
+        SendReq = GetLockedData(NextIrp, IoGetCurrentIrpStackLocation(NextIrp));
+        Length = SendRequestLength(SendReq);
+        Remaining = Length - (UINT)NextIrp->IoStatus.Information;
+
+        /* A blocking send that fits in the window is copied all at once */
+        if (NextIrp->IoStatus.Information == 0 && IsBlockingSend(FCB, SendReq) &&
+            Length <= FCB->Send.Size && Length > SpaceAvail)
+        {
+            break;
+        }
+
+        Copied = CopySendData(FCB, SendReq, (UINT)NextIrp->IoStatus.Information, SpaceAvail, FALSE);
+        NextIrp->IoStatus.Information += Copied;
+        SEND_IN_WINDOW(NextIrp) = (PVOID)((ULONG_PTR)SEND_IN_WINDOW(NextIrp) + Copied);
+
+        if (Copied < Remaining)
+        {
+            /* Blocking: the rest follows later. Non-blocking: it completes
+             * with what was copied */
+            SEND_TO_COPY(NextIrp) = IsBlockingSend(FCB, SendReq) ?
+                (PVOID)(ULONG_PTR)(Remaining - Copied) : NULL;
+            break;
+        }
+
+        SEND_TO_COPY(NextIrp) = NULL;
+    }
+}
+
 static IO_COMPLETION_ROUTINE SendComplete;
+
+/* tcpip completes a send it could queue at once inside TdiSend, so sending
+ * the next part of the window from SendComplete nests one more TdiSend ->
+ * SendComplete level each time: a big blocking send would run out of kernel
+ * stack. When the stack runs low, the next TdiSend is issued from a worker */
+#define AFD_SEND_STACK_RESERVE (8 * 1024)
+#define TAG_AFD_SEND_WORK 'wsfA'
+
+typedef struct _AFD_SEND_WORK
+{
+    WORK_QUEUE_ITEM WorkItem;
+    PFILE_OBJECT FileObject;
+} AFD_SEND_WORK, *PAFD_SEND_WORK;
+
+static VOID NTAPI DeferredSendWorker(PVOID Context)
+{
+    PAFD_SEND_WORK Work = Context;
+    PAFD_FCB FCB = Work->FileObject->FsContext;
+
+    if (SocketAcquireStateLock(FCB))
+    {
+        if (FCB->SharedData.State != SOCKET_STATE_CLOSED &&
+            !FCB->SendIrp.InFlightRequest && FCB->Send.BytesUsed)
+        {
+            TdiSend(&FCB->SendIrp.InFlightRequest,
+                    FCB->Connection.Object,
+                    0,
+                    FCB->Send.Window,
+                    FCB->Send.BytesUsed,
+                    SendComplete,
+                    FCB);
+        }
+        SocketStateUnlock(FCB);
+    }
+
+    ObDereferenceObject(Work->FileObject);
+    ExFreePoolWithTag(Work, TAG_AFD_SEND_WORK);
+}
+
+static BOOLEAN DeferSend(PAFD_FCB FCB)
+{
+    PAFD_SEND_WORK Work;
+
+    if (IoGetRemainingStackSize() >= AFD_SEND_STACK_RESERVE)
+        return FALSE;
+
+    Work = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Work), TAG_AFD_SEND_WORK);
+    if (!Work)
+        return FALSE;
+
+    ObReferenceObject(FCB->FileObject);
+    Work->FileObject = FCB->FileObject;
+    ExInitializeWorkItem(&Work->WorkItem, DeferredSendWorker, Work);
+    ExQueueWorkItem(&Work->WorkItem, CriticalWorkQueue);
+    return TRUE;
+}
+
 static NTSTATUS NTAPI SendComplete
 ( PDEVICE_OBJECT DeviceObject,
   PIRP Irp,
@@ -21,10 +212,8 @@ static NTSTATUS NTAPI SendComplete
     PIRP NextIrp = NULL;
     PIO_STACK_LOCATION NextIrpSp;
     PAFD_SEND_INFO SendReq = NULL;
-    PAFD_MAPBUF Map;
-    SIZE_T TotalBytesCopied = 0, TotalBytesProcessed = 0, SpaceAvail, i;
-    UINT SendLength, BytesCopied;
-    BOOLEAN HaltSendQueue;
+    SIZE_T TotalBytesCopied = 0, TotalBytesProcessed = 0;
+    UINT SendLength;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -105,15 +294,13 @@ static NTSTATUS NTAPI SendComplete
 
     TotalBytesProcessed = 0;
     SendLength = Irp->IoStatus.Information;
-    HaltSendQueue = FALSE;
     while (!IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND]) && SendLength > 0) {
         NextIrpEntry = RemoveHeadList(&FCB->PendingIrpList[FUNCTION_SEND]);
         NextIrp = CONTAINING_RECORD(NextIrpEntry, IRP, Tail.Overlay.ListEntry);
         NextIrpSp = IoGetCurrentIrpStackLocation( NextIrp );
         SendReq = GetLockedData(NextIrp, NextIrpSp);
-        Map = (PAFD_MAPBUF)(SendReq->BufferArray + SendReq->BufferCount);
 
-        TotalBytesCopied = (ULONG_PTR)NextIrp->Tail.Overlay.DriverContext[3];
+        TotalBytesCopied = (ULONG_PTR)SEND_IN_WINDOW(NextIrp);
         ASSERT(TotalBytesCopied != 0);
 
         /* If we didn't get enough, keep waiting */
@@ -121,7 +308,7 @@ static NTSTATUS NTAPI SendComplete
         {
             /* Update the bytes left to copy */
             TotalBytesCopied -= SendLength;
-            NextIrp->Tail.Overlay.DriverContext[3] = (PVOID)TotalBytesCopied;
+            SEND_IN_WINDOW(NextIrp) = (PVOID)TotalBytesCopied;
 
             /* Update the state variables */
             FCB->Send.BytesUsed -= SendLength;
@@ -131,17 +318,25 @@ static NTSTATUS NTAPI SendComplete
             /* Pend the IRP */
             InsertHeadList(&FCB->PendingIrpList[FUNCTION_SEND],
                            &NextIrp->Tail.Overlay.ListEntry);
-            HaltSendQueue = TRUE;
             break;
         }
 
         ASSERT(NextIrp->IoStatus.Information != 0);
 
-        NextIrp->IoStatus.Status = Irp->IoStatus.Status;
-
         FCB->Send.BytesUsed -= TotalBytesCopied;
         TotalBytesProcessed += TotalBytesCopied;
         SendLength -= TotalBytesCopied;
+
+        /* What was copied of it is sent, but more of it is still to copy */
+        if (SEND_TO_COPY(NextIrp) != NULL)
+        {
+            SEND_IN_WINDOW(NextIrp) = NULL;
+            InsertHeadList(&FCB->PendingIrpList[FUNCTION_SEND],
+                           &NextIrp->Tail.Overlay.ListEntry);
+            break;
+        }
+
+        NextIrp->IoStatus.Status = Irp->IoStatus.Status;
 
         (void)IoSetCancelRoutine(NextIrp, NULL);
 
@@ -156,71 +351,9 @@ static NTSTATUS NTAPI SendComplete
 
     ASSERT(SendLength == 0);
 
-   if ( !HaltSendQueue && !IsListEmpty( &FCB->PendingIrpList[FUNCTION_SEND] ) ) {
-        NextIrpEntry = FCB->PendingIrpList[FUNCTION_SEND].Flink;
-        NextIrp = CONTAINING_RECORD(NextIrpEntry, IRP, Tail.Overlay.ListEntry);
-        NextIrpSp = IoGetCurrentIrpStackLocation( NextIrp );
-        SendReq = GetLockedData(NextIrp, NextIrpSp);
-        Map = (PAFD_MAPBUF)(SendReq->BufferArray + SendReq->BufferCount);
-
-        AFD_DbgPrint(MID_TRACE,("SendReq @ %p\n", SendReq));
-
-        SpaceAvail = FCB->Send.Size - FCB->Send.BytesUsed;
-        TotalBytesCopied = 0;
-
-        /* Count the total transfer size */
-        SendLength = 0;
-        for (i = 0; i < SendReq->BufferCount; i++)
-        {
-            SendLength += SendReq->BufferArray[i].len;
-        }
-
-        /* Make sure we've got the space */
-        if (SendLength > SpaceAvail)
-        {
-           /* Blocking sockets have to wait here */
-           if (SendLength <= FCB->Send.Size && !((SendReq->AfdFlags & AFD_IMMEDIATE) || (FCB->NonBlocking)))
-           {
-               FCB->PollState &= ~AFD_EVENT_SEND;
-
-               NextIrp = NULL;
-           }
-
-           /* Check if we can send anything */
-           if (SpaceAvail == 0)
-           {
-               FCB->PollState &= ~AFD_EVENT_SEND;
-
-               /* We should never be non-overlapped and get to this point */
-               ASSERT(SendReq->AfdFlags & AFD_OVERLAPPED);
-
-               NextIrp = NULL;
-           }
-        }
-
-        if (NextIrp != NULL)
-        {
-            for( i = 0; i < SendReq->BufferCount; i++ ) {
-                BytesCopied = MIN(SendReq->BufferArray[i].len, SpaceAvail);
-
-                Map[i].BufferAddress =
-                   MmMapLockedPages( Map[i].Mdl, KernelMode );
-
-                RtlCopyMemory( FCB->Send.Window + FCB->Send.BytesUsed,
-                               Map[i].BufferAddress,
-                               BytesCopied );
-
-                MmUnmapLockedPages( Map[i].BufferAddress, Map[i].Mdl );
-
-                TotalBytesCopied += BytesCopied;
-                SpaceAvail -= BytesCopied;
-                FCB->Send.BytesUsed += BytesCopied;
-            }
-
-            NextIrp->IoStatus.Information = TotalBytesCopied;
-            NextIrp->Tail.Overlay.DriverContext[3] = (PVOID)NextIrp->IoStatus.Information;
-        }
-    }
+    /* Refill the window from the queued sends (also the rest of a partly
+     * sent one: the copied requests are skipped) */
+    FillSendWindow(FCB);
 
     if (FCB->Send.Size - FCB->Send.BytesUsed != 0 && !FCB->SendClosed &&
         IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND]))
@@ -238,13 +371,16 @@ static NTSTATUS NTAPI SendComplete
     /* Some data is still waiting */
     if( FCB->Send.BytesUsed )
     {
-        Status = TdiSend( &FCB->SendIrp.InFlightRequest,
-                          FCB->Connection.Object,
-                          0,
-                          FCB->Send.Window,
-                          FCB->Send.BytesUsed,
-                          SendComplete,
-                          FCB );
+        if (!DeferSend(FCB))
+        {
+            Status = TdiSend( &FCB->SendIrp.InFlightRequest,
+                              FCB->Connection.Object,
+                              0,
+                              FCB->Send.Window,
+                              FCB->Send.BytesUsed,
+                              SendComplete,
+                              FCB );
+        }
     }
     else
     {
@@ -332,7 +468,8 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PFILE_OBJECT FileObject = IrpSp->FileObject;
     PAFD_FCB FCB = FileObject->FsContext;
     PAFD_SEND_INFO SendReq;
-    UINT TotalBytesCopied = 0, i, SpaceAvail = 0, BytesCopied, SendLength;
+    UINT TotalBytesCopied = 0, SpaceAvail = 0, SendLength;
+    BOOLEAN Blocking;
     KPROCESSOR_MODE LockMode;
 
     UNREFERENCED_PARAMETER(DeviceObject);
@@ -470,24 +607,33 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
                             SpaceAvail));
 
     /* Count the total transfer size */
-    SendLength = 0;
-    for (i = 0; i < SendReq->BufferCount; i++)
+    SendLength = SendRequestLength(SendReq);
+    Blocking = IsBlockingSend(FCB, SendReq);
+
+    Irp->IoStatus.Information = 0;
+    SEND_IN_WINDOW(Irp) = NULL;
+    SEND_TO_COPY(Irp) = NULL;
+
+    if (SendLength == 0)
     {
-        SendLength += SendReq->BufferArray[i].len;
+        AFD_DbgPrint(MID_TRACE,("Empty send\n"));
+        UnlockBuffers( SendReq->BufferArray, SendReq->BufferCount, FALSE );
+        return UnlockAndMaybeComplete( FCB, STATUS_SUCCESS, Irp, 0 );
     }
 
-    /* Make sure we've got the space */
-    if (SendLength > SpaceAvail)
+    /* Make sure we've got the space (and no earlier send is still waiting for it) */
+    if (SendLength > SpaceAvail || SendQueueWaiting(FCB))
     {
-        /* Blocking sockets have to wait here */
-        if (SendLength <= FCB->Send.Size && !((SendReq->AfdFlags & AFD_IMMEDIATE) || (FCB->NonBlocking)))
+        /* Blocking sockets have to wait here (a send bigger than the window
+         * is copied in pieces, from SendComplete if nothing fits now) */
+        if (Blocking && (SendLength <= FCB->Send.Size || SpaceAvail == 0 || SendQueueWaiting(FCB)))
         {
             FCB->PollState &= ~AFD_EVENT_SEND;
             return LeaveIrpUntilLater(FCB, Irp, FUNCTION_SEND);
         }
 
         /* Check if we can send anything */
-        if (SpaceAvail == 0)
+        if (SpaceAvail == 0 || SendQueueWaiting(FCB))
         {
             FCB->PollState &= ~AFD_EVENT_SEND;
 
@@ -505,33 +651,14 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         }
     }
 
-    for ( i = 0; SpaceAvail > 0 && i < SendReq->BufferCount; i++ )
-    {
-        BytesCopied = MIN(SendReq->BufferArray[i].len, SpaceAvail);
-
-        AFD_DbgPrint(MID_TRACE,("Copying Buffer %u, %p:%u to %p\n",
-                                i,
-                                SendReq->BufferArray[i].buf,
-                                BytesCopied,
-                                FCB->Send.Window + FCB->Send.BytesUsed));
-
-        RtlCopyMemory(FCB->Send.Window + FCB->Send.BytesUsed,
-                      SendReq->BufferArray[i].buf,
-                      BytesCopied);
-
-        TotalBytesCopied += BytesCopied;
-        SpaceAvail -= BytesCopied;
-        FCB->Send.BytesUsed += BytesCopied;
-    }
+    TotalBytesCopied = CopySendData(FCB, SendReq, 0, SpaceAvail, TRUE);
+    SpaceAvail -= TotalBytesCopied;
 
     Irp->IoStatus.Information = TotalBytesCopied;
 
-    if( TotalBytesCopied == 0 ) {
-        AFD_DbgPrint(MID_TRACE,("Empty send\n"));
-        UnlockBuffers( SendReq->BufferArray, SendReq->BufferCount, FALSE );
-        return UnlockAndMaybeComplete
-        ( FCB, STATUS_SUCCESS, Irp, TotalBytesCopied );
-    }
+    /* A blocking send bigger than the window: the rest follows as it drains */
+    if (Blocking && TotalBytesCopied < SendLength)
+        SEND_TO_COPY(Irp) = (PVOID)(ULONG_PTR)(SendLength - TotalBytesCopied);
 
     if (SpaceAvail)
     {
@@ -545,7 +672,7 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     }
 
     /* We use the IRP tail for some temporary storage here */
-    Irp->Tail.Overlay.DriverContext[3] = (PVOID)Irp->IoStatus.Information;
+    SEND_IN_WINDOW(Irp) = (PVOID)Irp->IoStatus.Information;
 
     Status = QueueUserModeIrp(FCB, Irp, FUNCTION_SEND);
     if (Status == STATUS_PENDING && !FCB->SendIrp.InFlightRequest)
