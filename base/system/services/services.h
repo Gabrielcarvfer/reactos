@@ -76,6 +76,7 @@ typedef struct _SERVICE
 
     DWORD dwServiceBits;
     DWORD dwServiceTag;
+    DWORD dwStatusHandle;   /* the SERVICE_STATUS_HANDLE the service gets */
 
     ULONG Flags;
 
@@ -191,6 +192,9 @@ DWORD ScmStartService(PSERVICE Service,
 DWORD ScmReferenceService(PSERVICE lpService);
 DWORD ScmDereferenceService(PSERVICE lpService);
 
+PSERVICE
+ScmGetServiceEntryByStatusHandle(DWORD dwStatusHandle);
+
 VOID ScmRemoveServiceImage(PSERVICE_IMAGE pServiceImage);
 PSERVICE ScmGetServiceEntryByName(LPCWSTR lpServiceName);
 PSERVICE ScmGetServiceEntryByDisplayName(LPCWSTR lpDisplayName);
@@ -215,7 +219,7 @@ ScmControlServiceEx(
     _In_ HANDLE hControlPipe,
     _In_ PCWSTR pServiceName,
     _In_ DWORD dwControl,
-    _In_ SERVICE_STATUS_HANDLE hServiceStatus,
+    _In_ DWORD hServiceStatus,
     _In_opt_ DWORD dwServiceTag,
     _In_opt_ DWORD argc,
     _In_reads_opt_(argc) const PCWSTR* argv);
@@ -225,7 +229,7 @@ ScmControlService(
     _In_ HANDLE hControlPipe,
     _In_ PCWSTR pServiceName,
     _In_ DWORD dwControl,
-    _In_ SERVICE_STATUS_HANDLE hServiceStatus);
+    _In_ DWORD hServiceStatus);
 
 BOOL ScmLockDatabaseExclusive(VOID);
 BOOL ScmLockDatabaseShared(VOID);

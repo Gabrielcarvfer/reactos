@@ -1188,7 +1188,7 @@ RControlService(
         dwError = ScmControlService(lpService->lpImage->hControlPipe,
                                     lpService->lpServiceName,
                                     dwControl,
-                                    (SERVICE_STATUS_HANDLE)lpService);
+                                    lpService->dwStatusHandle);
 
         /* Return service status information */
         RtlCopyMemory(lpServiceStatus,
@@ -1627,7 +1627,7 @@ ScmStopThread(PVOID pParam)
         ScmControlService(lpService->lpImage->hControlPipe,
                           L"",
                           SERVICE_CONTROL_STOP,
-                          (SERVICE_STATUS_HANDLE)lpService);
+                          lpService->dwStatusHandle);
     }
 
     /* Lock the service database exclusively */
@@ -1714,7 +1714,9 @@ RSetServiceStatus(
         return ERROR_INVALID_HANDLE;
     }
 
-    lpService = (PSERVICE)hServiceStatus;
+    lpService = ScmGetServiceEntryByStatusHandle(hServiceStatus);
+    if (lpService == NULL)
+        return ERROR_INVALID_HANDLE;
 
     /* Check current state */
     if (!ScmIsValidServiceState(lpServiceStatus->dwCurrentState))
@@ -1904,7 +1906,9 @@ RI_ScSetServiceBitsW(
     }
 
     // FIXME: Validate the status handle
-    pService = (PSERVICE)hServiceStatus;
+    pService = ScmGetServiceEntryByStatusHandle(hServiceStatus);
+    if (pService == NULL)
+        return ERROR_INVALID_HANDLE;
 
     if (bSetBitsOn)
     {
@@ -6733,7 +6737,9 @@ RI_ScSendPnPMessage(
            hServiceStatus, dwControl, dwEventType, dwEventSize, pEventData);
 
     /* FIXME: Verify the status handle */
-    pService = (PSERVICE)hServiceStatus;
+    pService = ScmGetServiceEntryByStatusHandle(hServiceStatus);
+    if (pService == NULL)
+        return ERROR_INVALID_HANDLE;
 
     /* Fail, if the service is a driver */
     if (pService->Status.dwServiceType & SERVICE_DRIVER)
@@ -6846,7 +6852,7 @@ RI_ScValidatePnPService(
     if (pService == NULL)
         return ERROR_SERVICE_DOES_NOT_EXIST;
 
-    *phServiceStatus = (RPC_SERVICE_STATUS_HANDLE)pService;
+    *phServiceStatus = pService->dwStatusHandle;
 
     return ERROR_SUCCESS;
 }

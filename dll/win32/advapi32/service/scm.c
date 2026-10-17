@@ -1639,7 +1639,7 @@ I_ScSendPnPMessage(
 
     RpcTryExcept
     {
-        bResult = RI_ScSendPnPMessage((RPC_SERVICE_STATUS_HANDLE)hServiceStatus,
+        bResult = RI_ScSendPnPMessage((RPC_SERVICE_STATUS_HANDLE)(ULONG_PTR)hServiceStatus,
                                        dwControlCode,
                                        dwEventType,
                                        ((PDEV_BROADCAST_HDR)pEventData)->dbch_size,
@@ -1952,6 +1952,7 @@ I_ScValidatePnpService(
 {
     SC_RPC_HANDLE hSCManager = NULL;
     SERVICE_STATUS_HANDLE hServiceStatus = NULL;
+    RPC_SERVICE_STATUS_HANDLE dwStatusHandle = 0;
     DWORD dwError;
 
     TRACE("I_ScValidatePnpService(%S %S %p)\n",
@@ -1970,7 +1971,7 @@ I_ScValidatePnpService(
     {
         dwError = RI_ScValidatePnPService(hSCManager,
                                           (LPWSTR)pszServiceName,
-                                          (RPC_SERVICE_STATUS_HANDLE *)&hServiceStatus);
+                                          &dwStatusHandle);
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -1978,6 +1979,7 @@ I_ScValidatePnpService(
     }
     RpcEndExcept
 
+    hServiceStatus = (SERVICE_STATUS_HANDLE)(ULONG_PTR)dwStatusHandle;
     *phServiceStatus = hServiceStatus;
 
 done:

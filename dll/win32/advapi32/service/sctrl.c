@@ -468,7 +468,7 @@ ScStartService(PACTIVE_SERVICE lpService,
     TRACE("Service: %S\n", (PWSTR)((ULONG_PTR)ControlPacket + ControlPacket->dwServiceNameOffset));
 
     /* Set the service status handle */
-    lpService->hServiceStatus = ControlPacket->hServiceStatus;
+    lpService->hServiceStatus = (SERVICE_STATUS_HANDLE)(ULONG_PTR)ControlPacket->hServiceStatus;
     /* Set the service tag */
     lpService->dwServiceTag = ControlPacket->dwServiceTag;
 
@@ -929,7 +929,7 @@ I_ScSetServiceBitsA(SERVICE_STATUS_HANDLE hServiceStatus,
 
     RpcTryExcept
     {
-        bResult = RI_ScSetServiceBitsA((RPC_SERVICE_STATUS_HANDLE)hServiceStatus,
+        bResult = RI_ScSetServiceBitsA((RPC_SERVICE_STATUS_HANDLE)(ULONG_PTR)hServiceStatus,
                                        dwServiceBits,
                                        bSetBitsOn,
                                        bUpdateImmediately,
@@ -968,7 +968,7 @@ I_ScSetServiceBitsW(SERVICE_STATUS_HANDLE hServiceStatus,
 
     RpcTryExcept
     {
-        bResult = RI_ScSetServiceBitsW((RPC_SERVICE_STATUS_HANDLE)hServiceStatus,
+        bResult = RI_ScSetServiceBitsW((RPC_SERVICE_STATUS_HANDLE)(ULONG_PTR)hServiceStatus,
                                        dwServiceBits,
                                        bSetBitsOn,
                                        bUpdateImmediately,
@@ -1023,7 +1023,7 @@ SetServiceStatus(SERVICE_STATUS_HANDLE hServiceStatus,
 
     RpcTryExcept
     {
-        dwError = RSetServiceStatus((RPC_SERVICE_STATUS_HANDLE)hServiceStatus,
+        dwError = RSetServiceStatus((RPC_SERVICE_STATUS_HANDLE)(ULONG_PTR)hServiceStatus,
                                     lpServiceStatus);
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)

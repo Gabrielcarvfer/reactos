@@ -31,7 +31,7 @@ typedef struct _SCM_CONTROL_PACKET
     DWORD dwControl;
     DWORD dwArgumentsCount;
     DWORD dwServiceTag;
-    SERVICE_STATUS_HANDLE hServiceStatus;
+    DWORD hServiceStatus;   /* fixed size: 32-bit (WoW64) services read this packet too */
     DWORD dwServiceNameOffset;
     DWORD dwArgumentsOffset;
 } SCM_CONTROL_PACKET, *PSCM_CONTROL_PACKET;

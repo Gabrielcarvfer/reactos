@@ -762,6 +762,30 @@ ScmGenerateServiceTag(PSERVICE lpServiceRecord)
 }
 
 
+static DWORD StatusHandleCount = 0;
+
+PSERVICE
+ScmGetServiceEntryByStatusHandle(DWORD dwStatusHandle)
+{
+    PLIST_ENTRY ServiceEntry;
+    PSERVICE CurrentService;
+
+    if (dwStatusHandle == 0)
+        return NULL;
+
+    for (ServiceEntry = ServiceListHead.Flink;
+         ServiceEntry != &ServiceListHead;
+         ServiceEntry = ServiceEntry->Flink)
+    {
+        CurrentService = CONTAINING_RECORD(ServiceEntry, SERVICE, ServiceListEntry);
+        if (CurrentService->dwStatusHandle == dwStatusHandle)
+            return CurrentService;
+    }
+
+    return NULL;
+}
+
+
 DWORD
 ScmCreateNewServiceRecord(LPCWSTR lpServiceName,
                           PSERVICE *lpServiceRecord,
@@ -791,6 +815,9 @@ ScmCreateNewServiceRecord(LPCWSTR lpServiceName,
 
     /* Set the resume count */
     lpService->dwResumeCount = ResumeCount++;
+
+    /* Its status handle: a number, never 0 */
+    lpService->dwStatusHandle = ++StatusHandleCount;
 
     /* Append service record */
     InsertTailList(&ServiceListHead,
@@ -1493,7 +1520,7 @@ ScmControlServiceEx(
     _In_ HANDLE hControlPipe,
     _In_ PCWSTR pServiceName,
     _In_ DWORD dwControl,
-    _In_ SERVICE_STATUS_HANDLE hServiceStatus,
+    _In_ DWORD hServiceStatus,
     _In_opt_ DWORD dwServiceTag,
     _In_opt_ DWORD argc,
     _In_reads_opt_(argc) const PCWSTR* argv)
@@ -1593,7 +1620,7 @@ ScmControlService(
     _In_ HANDLE hControlPipe,
     _In_ PCWSTR pServiceName,
     _In_ DWORD dwControl,
-    _In_ SERVICE_STATUS_HANDLE hServiceStatus)
+    _In_ DWORD hServiceStatus)
 {
     DWORD dwError = ERROR_SUCCESS;
     PSCM_CONTROL_PACKET ControlPacket;
@@ -1957,7 +1984,7 @@ Quit:
                                Service->lpServiceName,
                                (Service->Status.dwServiceType & SERVICE_WIN32_OWN_PROCESS)
                                   ? SERVICE_CONTROL_START_OWN : SERVICE_CONTROL_START_SHARE,
-                               (SERVICE_STATUS_HANDLE)Service,
+                               Service->dwStatusHandle,
                                Service->dwServiceTag,
                                argc, argv);
 }
@@ -2353,7 +2380,7 @@ ScmAutoShutdownServices(VOID)
             ScmControlService(CurrentService->lpImage->hControlPipe,
                               CurrentService->lpServiceName,
                               SERVICE_CONTROL_SHUTDOWN,
-                              (SERVICE_STATUS_HANDLE)CurrentService);
+                              CurrentService->dwStatusHandle);
         }
 
         ServiceEntry = ServiceEntry->Flink;
