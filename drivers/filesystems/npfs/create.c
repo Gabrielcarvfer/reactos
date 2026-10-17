@@ -432,7 +432,8 @@ NpFsdCreate(IN PDEVICE_OBJECT DeviceObject,
     {
         if (Type == NPFS_NTC_ROOT_DCB)
         {
-            Dcb = (PNP_DCB)Ccb;
+            /* The DCB is the primary context; Ccb is the root directory's CCB */
+            Dcb = (PNP_DCB)Fcb;
             IoStatus.Status = NpFindRelativePrefix(Dcb,
                                                    &FileName,
                                                    1,

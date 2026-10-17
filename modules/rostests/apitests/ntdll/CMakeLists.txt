@@ -43,6 +43,7 @@ list(APPEND SOURCE
     load_notifications.c
     LoaderLock.c
     locale.c
+    NamedPipeRelativeOpen.c
     NtAcceptConnectPort.c
     NtAccessCheck.c
     NtAccessCheckByType.c
@@ -159,7 +160,6 @@ list(APPEND SOURCE
     SetContextInSyscall.c
     SyscallReturn.c
     x87Exception.c
-    FpuContext.c
     SystemInfo.c
     UserModeException.c
     Timer.c

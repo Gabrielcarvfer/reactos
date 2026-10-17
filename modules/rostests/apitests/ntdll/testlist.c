@@ -32,6 +32,7 @@ extern void func_LdrFindResource_U(void);
 extern void func_LdrLoadDll(void);
 extern void func_load_notifications(void);
 extern void func_LoaderLock(void);
+extern void func_NamedPipeRelativeOpen(void);
 extern void func_NtAcceptConnectPort(void);
 extern void func_NtAccessCheck(void);
 extern void func_NtAccessCheckByType(void);
@@ -148,7 +149,6 @@ extern void func_RtlUnwindEx(void);
 extern void func_SetContextInSyscall(void);
 extern void func_SyscallReturn(void);
 extern void func_x87Exception(void);
-extern void func_FpuContext(void);
 extern void func_TimerResolution(void);
 extern void func_UserModeException(void);
 
@@ -185,6 +185,7 @@ const struct test winetest_testlist[] =
     { "LdrLoadDll",                     func_LdrLoadDll },
     { "load_notifications",             func_load_notifications },
     { "LoaderLock",                     func_LoaderLock },
+    { "NamedPipeRelativeOpen",          func_NamedPipeRelativeOpen },
     { "NtAcceptConnectPort",            func_NtAcceptConnectPort },
     { "NtAccessCheck",                  func_NtAccessCheck },
     { "NtAccessCheckByType",            func_NtAccessCheckByType },
@@ -297,7 +298,6 @@ const struct test winetest_testlist[] =
     { "SetContextInSyscall",            func_SetContextInSyscall },
     { "SyscallReturn",                  func_SyscallReturn },
     { "x87Exception",                   func_x87Exception },
-    { "FpuContext",                     func_FpuContext },
     { "TimerResolution",                func_TimerResolution },
     { "UserModeException",              func_UserModeException },
 #ifdef _M_IX86
