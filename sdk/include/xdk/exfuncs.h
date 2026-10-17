@@ -1,3 +1,14 @@
+/* Lookaside statistics: updated without a lock on purpose (only reported by
+ * NtQuerySystemInformation, never used for a decision). Under the kernel
+ * concurrency sanitizer (KCSAN builds) say so with a relaxed atomic add */
+#ifndef _EX_STAT_INC
+#ifdef KCSAN_INSTRUMENTED
+#define _EX_STAT_INC(x) ((void)__atomic_fetch_add(&(x), 1, __ATOMIC_RELAXED))
+#else
+#define _EX_STAT_INC(x) ((x)++)
+#endif
+#endif
+
 /******************************************************************************
  *                          Executive Functions                               *
  ******************************************************************************/
@@ -191,6 +202,7 @@ ExFreeToPagedLookasideList(
 
 #else /* !_WIN2K_COMPAT_SLIST_USAGE */
 
+
 _IRQL_requires_max_(APC_LEVEL)
 static __inline
 PVOID
@@ -199,7 +211,7 @@ ExAllocateFromPagedLookasideList(
 {
   PVOID Entry;
 
-  Lookaside->L.TotalAllocates++;
+  _EX_STAT_INC(Lookaside->L.TotalAllocates);
 #ifdef NONAMELESSUNION
   Entry = InterlockedPopEntrySList(&Lookaside->L.u.ListHead);
   if (Entry == NULL) {
@@ -211,7 +223,7 @@ ExAllocateFromPagedLookasideList(
 #else /* NONAMELESSUNION */
   Entry = InterlockedPopEntrySList(&Lookaside->L.ListHead);
   if (Entry == NULL) {
-    Lookaside->L.AllocateMisses++;
+    _EX_STAT_INC(Lookaside->L.AllocateMisses);
     Entry = (Lookaside->L.Allocate)(Lookaside->L.Type,
                                     Lookaside->L.Size,
                                     Lookaside->L.Tag);
@@ -227,7 +239,7 @@ ExFreeToPagedLookasideList(
   _Inout_ PPAGED_LOOKASIDE_LIST Lookaside,
   _In_ PVOID Entry)
 {
-  Lookaside->L.TotalFrees++;
+  _EX_STAT_INC(Lookaside->L.TotalFrees);
 #ifdef NONAMELESSUNION
   if (ExQueryDepthSList(&Lookaside->L.u.ListHead) >= Lookaside->L.Depth) {
     Lookaside->L.u3.FreeMisses++;
@@ -237,7 +249,7 @@ ExFreeToPagedLookasideList(
   }
 #else /* NONAMELESSUNION */
   if (ExQueryDepthSList(&Lookaside->L.ListHead) >= Lookaside->L.Depth) {
-    Lookaside->L.FreeMisses++;
+    _EX_STAT_INC(Lookaside->L.FreeMisses);
     (Lookaside->L.Free)(Entry);
   } else {
     InterlockedPushEntrySList(&Lookaside->L.ListHead, (PSLIST_ENTRY)Entry);
@@ -1484,7 +1496,7 @@ ExAllocateFromNPagedLookasideList(
 {
   PVOID Entry;
 
-  Lookaside->L.TotalAllocates++;
+  _EX_STAT_INC(Lookaside->L.TotalAllocates);
 #ifdef NONAMELESSUNION
 #if defined(_WIN2K_COMPAT_SLIST_USAGE) && defined(_X86_)
   Entry = ExInterlockedPopEntrySList(&Lookaside->L.u.ListHead,
@@ -1506,7 +1518,7 @@ ExAllocateFromNPagedLookasideList(
   Entry = InterlockedPopEntrySList(&Lookaside->L.ListHead);
 #endif
   if (Entry == NULL) {
-    Lookaside->L.AllocateMisses++;
+    _EX_STAT_INC(Lookaside->L.AllocateMisses);
     Entry = (Lookaside->L.Allocate)(Lookaside->L.Type,
                                     Lookaside->L.Size,
                                     Lookaside->L.Tag);
@@ -1522,7 +1534,7 @@ ExFreeToNPagedLookasideList(
   _Inout_ PNPAGED_LOOKASIDE_LIST Lookaside,
   _In_ __drv_freesMem(Mem) PVOID Entry)
 {
-  Lookaside->L.TotalFrees++;
+  _EX_STAT_INC(Lookaside->L.TotalFrees);
 #ifdef NONAMELESSUNION
   if (ExQueryDepthSList(&Lookaside->L.u.ListHead) >= Lookaside->L.Depth) {
     Lookaside->L.u3.FreeMisses++;
@@ -1538,7 +1550,7 @@ ExFreeToNPagedLookasideList(
    }
 #else /* NONAMELESSUNION */
   if (ExQueryDepthSList(&Lookaside->L.ListHead) >= Lookaside->L.Depth) {
-    Lookaside->L.FreeMisses++;
+    _EX_STAT_INC(Lookaside->L.FreeMisses);
     (Lookaside->L.Free)(Entry);
   } else {
 #if defined(_WIN2K_COMPAT_SLIST_USAGE) && defined(_X86_)

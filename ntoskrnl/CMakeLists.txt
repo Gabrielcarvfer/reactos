@@ -8,6 +8,20 @@ endif()
 
 include(ntos.cmake)
 
+if(KCSAN_PROTOTYPE)
+    # The lock tables of fsrtl/filelock.c are RTL generic tables (splay trees):
+    # an instrumented copy of that code, linked before rtl so it is the one used
+    add_library(rtl_kcsan
+        ${REACTOS_SOURCE_DIR}/sdk/lib/rtl/generictable.c
+        ${REACTOS_SOURCE_DIR}/sdk/lib/rtl/splaytree.c)
+    target_include_directories(rtl_kcsan PRIVATE ${REACTOS_SOURCE_DIR}/sdk/lib/rtl)
+    target_compile_options(rtl_kcsan PRIVATE -fsanitize=thread)
+    target_compile_definitions(rtl_kcsan PRIVATE KCSAN_INSTRUMENTED)
+    target_link_libraries(rtl_kcsan PRIVATE pseh)
+    add_dependencies(rtl_kcsan psdk asm)
+    set(KCSAN_RTL_LIB rtl_kcsan)
+endif()
+
 set(NTOSKRNL_SOURCE ${SOURCE})
 set(NTOSKRNL_ASM_SOURCE ${ASM_SOURCE})
 
@@ -46,7 +60,7 @@ set_module_type(ntoskrnl kernel)
 
 source_group(TREE ${REACTOS_SOURCE_DIR}/ntoskrnl PREFIX "Source Files" FILES ${NTOSKRNL_SOURCE})
 
-target_link_libraries(ntoskrnl ntoskrnl_vista cportlib csq ${PSEH_LIB} arbiter cmlib ntlsalib rtl rtl_vista ${ROSSYM_LIB} libcntpr setjmp wdmguid poguid ioevent)
+target_link_libraries(ntoskrnl ntoskrnl_vista cportlib csq ${PSEH_LIB} arbiter cmlib ntlsalib ${KCSAN_RTL_LIB} rtl rtl_vista ${ROSSYM_LIB} libcntpr setjmp wdmguid poguid ioevent)
 
 if(STACK_PROTECTOR)
     target_link_libraries(ntoskrnl gcc_ssp_nt)

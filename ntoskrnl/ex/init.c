@@ -1416,6 +1416,21 @@ Phase1InitializationDiscard(IN PVOID Context)
         KasanInitialize();
     }
 
+#ifdef KCSAN_PROTOTYPE
+    /* The kernel concurrency sanitizer prototype (kcsan/kcsan.c) */
+    if (CommandLine && strstr(CommandLine, "KCSAN") != NULL)
+    {
+        VOID NTAPI KcsanInitialize(VOID);
+        KcsanInitialize();
+    }
+    if (CommandLine && strstr(CommandLine, "KCSANNOFLOCK") != NULL)
+    {
+        extern BOOLEAN FsRtlpKcsanNoFileLockResource;
+        FsRtlpKcsanNoFileLockResource = TRUE;
+        DbgPrint("KCSAN: self-test, the file lock tables are NOT locked (KCSANNOFLOCK)\n");
+    }
+#endif
+
     /* Setup the boot video driver */
     InbvEnableBootDriver(!NoGuiBoot);
     InbvDriverInitialize(LoaderBlock, IDB_MAX_RESOURCES);

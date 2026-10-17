@@ -433,3 +433,20 @@ if(NOT _WINKD_)
 else()
     add_definitions(-D_WINKD_)
 endif()
+
+# Kernel Concurrency Sanitizer prototype (ntoskrnl/kcsan/kcsan.c): these files
+# are built with -fsanitize=thread, every memory access calls the watchpoint
+# runtime. Reports with the boot option KCSAN. amd64 + GCC only.
+option(KCSAN_PROTOTYPE "Build selected kernel files with KCSAN data race checks" OFF)
+if(KCSAN_PROTOTYPE)
+    set(KCSAN_FILES
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/fsrtl/filelock.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/cc/pin.c
+        CACHE STRING "Kernel source files built with KCSAN checks")
+    set_source_files_properties(${KCSAN_FILES} PROPERTIES
+        COMPILE_OPTIONS "-fsanitize=thread"
+        COMPILE_DEFINITIONS "KCSAN_INSTRUMENTED"
+        SKIP_PRECOMPILE_HEADERS ON)
+    list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kcsan/kcsan.c)
+    add_definitions(-DKCSAN_PROTOTYPE)
+endif()

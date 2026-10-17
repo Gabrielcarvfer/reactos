@@ -510,13 +510,14 @@ CcPinRead (
         return FALSE;
     }
 
+    /* (Statistics, only reported: unlocked on purpose, see _EX_STAT_INC) */
     if (Flags & PIN_WAIT)
     {
-        ++CcPinReadWait;
+        _EX_STAT_INC(CcPinReadWait);
     }
     else
     {
-        ++CcPinReadNoWait;
+        _EX_STAT_INC(CcPinReadNoWait);
     }
 
     return CcpPinData(SharedCacheMap, FileOffset, Length, Flags, Bcb, Buffer);

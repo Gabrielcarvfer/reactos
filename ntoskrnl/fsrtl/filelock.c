@@ -68,14 +68,26 @@ FsRtlpInitializeFileLocks(VOID)
     ExInitializeResourceLite(&FsRtlpFileLockResource);
 }
 
+#ifdef KCSAN_PROTOTYPE
+/* KCSAN self-test: the boot option KCSANNOFLOCK takes the fix above out
+ * again, so KCSAN must report the races on the lock tables */
+BOOLEAN FsRtlpKcsanNoFileLockResource = FALSE;
+#endif
+
 static VOID FsRtlpAcquireFileLocks(VOID)
 {
+#ifdef KCSAN_PROTOTYPE
+    if (FsRtlpKcsanNoFileLockResource) return;
+#endif
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&FsRtlpFileLockResource, TRUE);
 }
 
 static VOID FsRtlpReleaseFileLocks(VOID)
 {
+#ifdef KCSAN_PROTOTYPE
+    if (FsRtlpKcsanNoFileLockResource) return;
+#endif
     ExReleaseResourceLite(&FsRtlpFileLockResource);
     KeLeaveCriticalRegion();
 }
