@@ -919,9 +919,15 @@ BOOL WINAPI wglShareLists(HGLRC hglrcSrc, HGLRC hglrcDst)
         return FALSE;
     }
 
-    /* Check this is the same pixel format */
+    /* Both must come from the same implementation. Whether contexts of
+     * different pixel formats can share is up to the ICD, like on Windows:
+     * Mesa can. Blender shares its offscreen contexts (format of a legacy
+     * ChoosePixelFormat) with its window's one (a wglChoosePixelFormatARB
+     * format): refusing that made every offscreen context fail with
+     * ERROR_INVALID_PIXEL_FORMAT. The software implementation keeps
+     * requiring the same format. */
     if((ctx_dst->icd_data != ctx_src->icd_data) ||
-        (ctx_dst->pixelformat != ctx_src->pixelformat))
+        (!ctx_src->icd_data && ctx_dst->pixelformat != ctx_src->pixelformat))
     {
         SetLastError(ERROR_INVALID_PIXEL_FORMAT);
         return FALSE;
