@@ -2071,6 +2071,10 @@ HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Data.Json.Jso
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Data.Json.JsonValue","ActivationType",0x00010001,0
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Data.Json.JsonValue","Threading",0x00010001,0
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Data.Json.JsonValue","TrustLevel",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Foundation.Uri","DllPath",0x00020000,"%SystemRoot%\system32\iertutil.dll"
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Foundation.Uri","ActivationType",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Foundation.Uri","Threading",0x00010001,0
+HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.Foundation.Uri","TrustLevel",0x00010001,0
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.UserProfile.GlobalizationPreferences","DllPath",0x00020000,"%SystemRoot%\system32\Windows.Globalization.dll"
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.UserProfile.GlobalizationPreferences","ActivationType",0x00010001,0
 HKLM,"SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\Windows.System.UserProfile.GlobalizationPreferences","Threading",0x00010001,0

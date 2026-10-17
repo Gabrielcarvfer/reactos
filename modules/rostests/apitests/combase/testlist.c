@@ -10,11 +10,13 @@
 
 extern void func_JsonStringify(void);
 extern void func_UISettings(void);
+extern void func_UriRuntimeClass(void);
 
 const struct test winetest_testlist[] =
 {
     { "JsonStringify", func_JsonStringify },
     { "UISettings", func_UISettings },
+    { "UriRuntimeClass", func_UriRuntimeClass },
 
     { 0, 0 }
 };
