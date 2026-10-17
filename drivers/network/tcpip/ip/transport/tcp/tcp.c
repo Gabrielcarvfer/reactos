@@ -646,7 +646,22 @@ UINT TCPAllocatePort(const UINT HintPort)
         }
     }
     else
-        return AllocatePortFromRange( &TCPPorts, 1024, 5000 );
+    {
+        /* An ephemeral port, from the dynamic range of Windows (49152-65535).
+         * Go round the range instead of taking the lowest free port: a port
+         * that was just closed may still be in TIME_WAIT in lwIP. */
+        static LONG NextPort = 0;
+        const ULONG First = 49152, Count = 65536 - 49152;
+        ULONG i, Port;
+
+        for (i = 0; i < Count; i++)
+        {
+            Port = First + ((ULONG)InterlockedIncrement(&NextPort) % Count);
+            if (AllocatePort(&TCPPorts, htons((USHORT)Port)))
+                return htons((USHORT)Port);
+        }
+        return (UINT)-1;
+    }
 }
 
 VOID TCPFreePort(const UINT Port)

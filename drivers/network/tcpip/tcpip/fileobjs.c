@@ -486,9 +486,11 @@ NTSTATUS FileOpenAddress(
           /* Sanity check */
           ASSERT(Address->Address[0].Address[0].sin_port == AddrFile->Port);
       }
-      else if (!AddrIsUnspecified(&AddrFile->Address))
+      else
       {
-          /* The client is trying to bind to a local address so allocate a port now too */
+          /* Port 0: pick the ephemeral port now, as Windows does, so that
+           * getsockname() after bind() reports it (also with the
+           * unspecified address) */
           AllocatedPort = TCPAllocatePort(0);
 
           /* Check for bind success */
@@ -498,11 +500,6 @@ NTSTATUS FileOpenAddress(
               return STATUS_ADDRESS_ALREADY_EXISTS;
           }
           AddrFile->Port = AllocatedPort;
-      }
-      else
-      {
-          /* The client wants an unspecified port with an unspecified address so we wait to see what the TCP library gives us */
-          AddrFile->Port = 0;
       }
 
       AddEntity(CO_TL_ENTITY, AddrFile, CO_TL_TCP);
