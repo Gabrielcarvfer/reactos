@@ -184,6 +184,7 @@ list(APPEND SOURCE
     txdtc.idl
     uiautomationclient.idl
     uiautomationcore.idl
+    uianimation.idl
     unknwn.idl
     urlhist.idl
     urlmon.idl
