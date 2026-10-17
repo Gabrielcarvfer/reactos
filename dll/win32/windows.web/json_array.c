@@ -25,6 +25,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(web);
 struct json_array
 {
     IJsonArray IJsonArray_iface;
+    IJsonValue IJsonValue_iface;
     LONG ref;
     IJsonValue **elements;
     ULONG capacity;
@@ -68,6 +69,14 @@ static HRESULT WINAPI json_array_QueryInterface( IJsonArray *iface, REFIID iid, 
         IsEqualGUID( iid, &IID_IJsonArray ))
     {
         *out = &impl->IJsonArray_iface;
+        IInspectable_AddRef( *out );
+        return S_OK;
+    }
+
+    /* a JsonArray is also a JsonValue */
+    if (IsEqualGUID( iid, &IID_IJsonValue ))
+    {
+        *out = &impl->IJsonValue_iface;
         IInspectable_AddRef( *out );
         return S_OK;
     }
@@ -198,6 +207,95 @@ static const struct IJsonArrayVtbl json_array_vtbl =
     json_array_GetBooleanAt,
 };
 
+HRESULT json_write_array( struct json_writer *writer, IJsonArray *iface )
+{
+    struct json_array *impl = impl_from_IJsonArray( iface );
+    HRESULT hr;
+    UINT32 i;
+
+    if (FAILED(hr = json_writer_append( writer, L"[", 1 ))) return hr;
+    for (i = 0; i < impl->length && SUCCEEDED(hr); i++)
+    {
+        if (i) hr = json_writer_append( writer, L",", 1 );
+        if (SUCCEEDED(hr)) hr = json_write_value( writer, impl->elements[i] );
+    }
+    if (SUCCEEDED(hr)) hr = json_writer_append( writer, L"]", 1 );
+    return hr;
+}
+
+DEFINE_IINSPECTABLE( json_array_value, IJsonValue, struct json_array, IJsonArray_iface )
+
+static HRESULT WINAPI json_array_value_get_ValueType( IJsonValue *iface, JsonValueType *value )
+{
+    TRACE( "iface %p, value %p\n", iface, value );
+
+    if (!value) return E_POINTER;
+    *value = JsonValueType_Array;
+    return S_OK;
+}
+
+static HRESULT WINAPI json_array_value_Stringify( IJsonValue *iface, HSTRING *value )
+{
+    struct json_array *impl = impl_from_IJsonValue( iface );
+    struct json_writer writer = {0};
+
+    TRACE( "iface %p, value %p\n", iface, value );
+
+    if (!value) return E_POINTER;
+    return json_writer_finish( &writer, json_write_array( &writer, &impl->IJsonArray_iface ), value );
+}
+
+static HRESULT WINAPI json_array_value_GetString( IJsonValue *iface, HSTRING *value )
+{
+    return E_ILLEGAL_METHOD_CALL;
+}
+
+static HRESULT WINAPI json_array_value_GetNumber( IJsonValue *iface, DOUBLE *value )
+{
+    return E_ILLEGAL_METHOD_CALL;
+}
+
+static HRESULT WINAPI json_array_value_GetBoolean( IJsonValue *iface, boolean *value )
+{
+    return E_ILLEGAL_METHOD_CALL;
+}
+
+static HRESULT WINAPI json_array_value_GetArray( IJsonValue *iface, IJsonArray **value )
+{
+    struct json_array *impl = impl_from_IJsonValue( iface );
+
+    TRACE( "iface %p, value %p\n", iface, value );
+
+    if (!value) return E_POINTER;
+    *value = &impl->IJsonArray_iface;
+    IJsonArray_AddRef( *value );
+    return S_OK;
+}
+
+static HRESULT WINAPI json_array_value_GetObject( IJsonValue *iface, IJsonObject **value )
+{
+    return E_ILLEGAL_METHOD_CALL;
+}
+
+static const struct IJsonValueVtbl json_array_value_vtbl =
+{
+    json_array_value_QueryInterface,
+    json_array_value_AddRef,
+    json_array_value_Release,
+    /* IInspectable methods */
+    json_array_value_GetIids,
+    json_array_value_GetRuntimeClassName,
+    json_array_value_GetTrustLevel,
+    /* IJsonValue methods */
+    json_array_value_get_ValueType,
+    json_array_value_Stringify,
+    json_array_value_GetString,
+    json_array_value_GetNumber,
+    json_array_value_GetBoolean,
+    json_array_value_GetArray,
+    json_array_value_GetObject,
+};
+
 struct json_array_statics
 {
     IActivationFactory IActivationFactory_iface;
@@ -274,6 +372,7 @@ static HRESULT WINAPI factory_ActivateInstance( IActivationFactory *iface, IInsp
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
 
     impl->IJsonArray_iface.lpVtbl = &json_array_vtbl;
+    impl->IJsonValue_iface.lpVtbl = &json_array_value_vtbl;
     impl->ref = 1;
 
     *instance = (IInspectable *)&impl->IJsonArray_iface;

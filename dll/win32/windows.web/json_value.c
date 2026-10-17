@@ -217,10 +217,122 @@ static HRESULT WINAPI json_value_get_ValueType( IJsonValue *iface, JsonValueType
     return S_OK;
 }
 
+HRESULT json_writer_append( struct json_writer *writer, const WCHAR *str, UINT32 len )
+{
+    if (writer->len + len + 1 > writer->size)
+    {
+        UINT32 size = max( 64, max( writer->size * 2, writer->len + len + 1 ) );
+        WCHAR *buf = realloc( writer->buf, size * sizeof(WCHAR) );
+        if (!buf) return E_OUTOFMEMORY;
+        writer->buf = buf;
+        writer->size = size;
+    }
+    memcpy( writer->buf + writer->len, str, len * sizeof(WCHAR) );
+    writer->len += len;
+    return S_OK;
+}
+
+/* A JSON string literal, with escapes */
+HRESULT json_writer_string( struct json_writer *writer, HSTRING str )
+{
+    UINT32 i, len;
+    const WCHAR *chars = WindowsGetStringRawBuffer( str, &len );
+    WCHAR escape[8] = {0};
+    HRESULT hr;
+
+    if (FAILED(hr = json_writer_append( writer, L"\"", 1 ))) return hr;
+    for (i = 0; i < len && SUCCEEDED(hr); i++)
+    {
+        switch (chars[i])
+        {
+        case '"': hr = json_writer_append( writer, L"\\\"", 2 ); break;
+        case '\\': hr = json_writer_append( writer, L"\\\\", 2 ); break;
+        case '\b': hr = json_writer_append( writer, L"\\b", 2 ); break;
+        case '\f': hr = json_writer_append( writer, L"\\f", 2 ); break;
+        case '\n': hr = json_writer_append( writer, L"\\n", 2 ); break;
+        case '\r': hr = json_writer_append( writer, L"\\r", 2 ); break;
+        case '\t': hr = json_writer_append( writer, L"\\t", 2 ); break;
+        default:
+            if (chars[i] < 0x20)
+            {
+                _snwprintf( escape, ARRAY_SIZE(escape) - 1, L"\\u%04x", chars[i] );
+                hr = json_writer_append( writer, escape, 6 );
+            }
+            else hr = json_writer_append( writer, chars + i, 1 );
+            break;
+        }
+    }
+    if (SUCCEEDED(hr)) hr = json_writer_append( writer, L"\"", 1 );
+    return hr;
+}
+
+HRESULT json_writer_finish( struct json_writer *writer, HRESULT hr, HSTRING *value )
+{
+    if (SUCCEEDED(hr)) hr = WindowsCreateString( writer->buf, writer->len, value );
+    free( writer->buf );
+    writer->buf = NULL;
+    writer->len = writer->size = 0;
+    return hr;
+}
+
+static HRESULT json_write_number( struct json_writer *writer, double number )
+{
+    WCHAR text[64] = {0};
+
+    /* the shortest form that reads back as the same number */
+    _snwprintf( text, ARRAY_SIZE(text) - 1, L"%.15g", number );
+    if (wcstod( text, NULL ) != number) _snwprintf( text, ARRAY_SIZE(text) - 1, L"%.17g", number );
+    return json_writer_append( writer, text, wcslen( text ) );
+}
+
+HRESULT json_write_value( struct json_writer *writer, IJsonValue *value )
+{
+    JsonValueType type;
+    IJsonObject *object;
+    IJsonArray *array;
+    boolean boolean_value;
+    double number;
+    HSTRING string;
+    HRESULT hr;
+
+    if (FAILED(hr = IJsonValue_get_ValueType( value, &type ))) return hr;
+    switch (type)
+    {
+    case JsonValueType_Null:
+        return json_writer_append( writer, L"null", 4 );
+    case JsonValueType_Boolean:
+        if (FAILED(hr = IJsonValue_GetBoolean( value, &boolean_value ))) return hr;
+        return boolean_value ? json_writer_append( writer, L"true", 4 ) : json_writer_append( writer, L"false", 5 );
+    case JsonValueType_Number:
+        if (FAILED(hr = IJsonValue_GetNumber( value, &number ))) return hr;
+        return json_write_number( writer, number );
+    case JsonValueType_String:
+        if (FAILED(hr = IJsonValue_GetString( value, &string ))) return hr;
+        hr = json_writer_string( writer, string );
+        WindowsDeleteString( string );
+        return hr;
+    case JsonValueType_Array:
+        if (FAILED(hr = IJsonValue_GetArray( value, &array ))) return hr;
+        hr = json_write_array( writer, array );
+        IJsonArray_Release( array );
+        return hr;
+    case JsonValueType_Object:
+        if (FAILED(hr = IJsonValue_GetObject( value, &object ))) return hr;
+        hr = json_write_object( writer, object );
+        IJsonObject_Release( object );
+        return hr;
+    }
+    return E_UNEXPECTED;
+}
+
 static HRESULT WINAPI json_value_Stringify( IJsonValue *iface, HSTRING *value )
 {
-    FIXME( "iface %p, value %p stub!\n", iface, value );
-    return E_NOTIMPL;
+    struct json_writer writer = {0};
+
+    TRACE( "iface %p, value %p\n", iface, value );
+
+    if (!value) return E_POINTER;
+    return json_writer_finish( &writer, json_write_value( &writer, iface ), value );
 }
 
 static HRESULT WINAPI json_value_GetString( IJsonValue *iface, HSTRING *value )

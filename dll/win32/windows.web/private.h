@@ -43,6 +43,21 @@ extern IActivationFactory *json_value_factory;
 
 HRESULT json_array_push( IJsonArray *iface, IJsonValue *value );
 
+/* Stringify (json_value.c): the text of a value, object or array */
+struct json_writer
+{
+    WCHAR *buf;
+    UINT32 len;
+    UINT32 size;
+};
+
+HRESULT json_writer_append( struct json_writer *writer, const WCHAR *str, UINT32 len );
+HRESULT json_writer_string( struct json_writer *writer, HSTRING str );
+HRESULT json_writer_finish( struct json_writer *writer, HRESULT hr, HSTRING *value );
+HRESULT json_write_value( struct json_writer *writer, IJsonValue *value );
+HRESULT json_write_array( struct json_writer *writer, IJsonArray *array );
+HRESULT json_write_object( struct json_writer *writer, IJsonObject *object );
+
 #define DEFINE_IINSPECTABLE_( pfx, iface_type, impl_type, impl_from, iface_mem, expr )             \
     static inline impl_type *impl_from( iface_type *iface )                                        \
     {                                                                                              \

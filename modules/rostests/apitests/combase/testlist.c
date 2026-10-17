@@ -8,10 +8,12 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_JsonStringify(void);
 extern void func_UISettings(void);
 
 const struct test winetest_testlist[] =
 {
+    { "JsonStringify", func_JsonStringify },
     { "UISettings", func_UISettings },
 
     { 0, 0 }
