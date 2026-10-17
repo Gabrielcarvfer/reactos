@@ -167,6 +167,114 @@ test_sendto(void)
     FreeReadOnly(buffer);
 }
 
+typedef struct _LARGE_SEND_READER
+{
+    SOCKET Socket;
+    ULONG Received;
+    BOOL DataOk;
+} LARGE_SEND_READER, *PLARGE_SEND_READER;
+
+static
+DWORD
+WINAPI
+LargeSendReader(
+    _In_ PVOID Context)
+{
+    PLARGE_SEND_READER Reader = Context;
+    static UCHAR Buffer[64 * 1024];
+    int ret, i;
+
+    Reader->DataOk = TRUE;
+    while ((ret = recv(Reader->Socket, (char *)Buffer, sizeof(Buffer), 0)) > 0)
+    {
+        for (i = 0; i < ret; i++)
+        {
+            if (Buffer[i] != (UCHAR)((Reader->Received + i) * 7))
+                Reader->DataOk = FALSE;
+        }
+        Reader->Received += ret;
+    }
+    return 0;
+}
+
+/* A blocking send() on a connected stream socket sends all of the buffer,
+ * however much bigger than the socket's send buffer it is (ReactOS returned
+ * the size of its 8 KB send buffer) */
+static
+VOID
+test_send_large(void)
+{
+    const ULONG Size = 4 * 1024 * 1024;
+    SOCKET Listener, Client, Server;
+    struct sockaddr_in Address;
+    int AddressLength = sizeof(Address);
+    LARGE_SEND_READER Reader = { 0 };
+    HANDLE Thread;
+    PUCHAR Data;
+    ULONG i;
+    int ret;
+
+    Data = HeapAlloc(GetProcessHeap(), 0, Size);
+    if (!Data)
+    {
+        skip("No memory\n");
+        return;
+    }
+    for (i = 0; i < Size; i++)
+        Data[i] = (UCHAR)(i * 7);
+
+    Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Listener != INVALID_SOCKET, "socket failed: %d\n", WSAGetLastError());
+    memset(&Address, 0, sizeof(Address));
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = inet_addr("127.0.0.1");
+    ok(bind(Listener, (struct sockaddr *)&Address, sizeof(Address)) == 0, "bind failed: %d\n", WSAGetLastError());
+    ok(listen(Listener, 1) == 0, "listen failed: %d\n", WSAGetLastError());
+    ok(getsockname(Listener, (struct sockaddr *)&Address, &AddressLength) == 0, "getsockname failed: %d\n", WSAGetLastError());
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Client != INVALID_SOCKET, "socket failed: %d\n", WSAGetLastError());
+    ret = connect(Client, (struct sockaddr *)&Address, sizeof(Address));
+    ok(ret == 0, "connect failed: %d\n", WSAGetLastError());
+    Server = accept(Listener, NULL, NULL);
+    ok(Server != INVALID_SOCKET, "accept failed: %d\n", WSAGetLastError());
+    if (ret != 0 || Server == INVALID_SOCKET)
+    {
+        skip("No connection\n");
+        goto cleanup;
+    }
+
+    Reader.Socket = Server;
+    Thread = CreateThread(NULL, 0, LargeSendReader, &Reader, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (!Thread)
+        goto cleanup;
+
+    /* One call sends it all */
+    ret = send(Client, (const char *)Data, Size, 0);
+    ok(ret == (int)Size, "send returned %d (error %d), expected %lu\n", ret, WSAGetLastError(), Size);
+
+    /* Then the rest of a stream sent in pieces follows in order */
+    for (i = 0; i < 4; i++)
+    {
+        ret = send(Client, (const char *)Data + Size - Size / 4 * (4 - i), Size / 4, 0);
+        ok(ret == (int)(Size / 4), "send %lu returned %d (error %d)\n", i, ret, WSAGetLastError());
+    }
+
+    ok(shutdown(Client, SD_SEND) == 0, "shutdown failed: %d\n", WSAGetLastError());
+    ok(WaitForSingleObject(Thread, 60000) == WAIT_OBJECT_0, "reader did not finish\n");
+    CloseHandle(Thread);
+
+    ok(Reader.Received == 2 * Size, "received %lu bytes, expected %lu\n", Reader.Received, 2 * Size);
+    ok(Reader.DataOk, "received data differs from the data sent\n");
+
+cleanup:
+    if (Server != INVALID_SOCKET) closesocket(Server);
+    closesocket(Client);
+    closesocket(Listener);
+    HeapFree(GetProcessHeap(), 0, Data);
+}
+
 START_TEST(send)
 {
     int ret;
@@ -176,5 +284,6 @@ START_TEST(send)
     ok(ret == 0, "WSAStartup failed with %d\n", ret);
     test_send();
     test_sendto();
+    test_send_large();
     WSACleanup();
 }
