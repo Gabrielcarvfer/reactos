@@ -161,6 +161,7 @@
 388 stdcall -ordinal DSA_DestroyCallback(ptr ptr ptr)
 #389 CControl::v_OnNotify
 390 stdcall -noname ImageList_SetColorTable(ptr long long ptr)
+@ stdcall HIMAGELIST_QueryInterface(ptr ptr ptr)
 400 stdcall -ordinal CreateMRUListW(ptr)
 401 stdcall -ordinal AddMRUStringW(long wstr)
 402 stdcall -noname FindMRUStringW(long wstr ptr)
