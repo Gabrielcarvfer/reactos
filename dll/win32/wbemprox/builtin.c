@@ -179,6 +179,8 @@ static const WCHAR prop_bootableW[] =
     {'B','o','o','t','a','b','l','e',0};
 static const WCHAR prop_bootpartitionW[] =
     {'B','o','o','t','P','a','r','t','i','t','i','o','n',0};
+static const WCHAR prop_buildtypeW[] =
+    {'B','u','i','l','d','T','y','p','e',0};
 static const WCHAR prop_buildnumberW[] =
     {'B','u','i','l','d','N','u','m','b','e','r',0};
 static const WCHAR prop_capacityW[] =
@@ -393,6 +395,8 @@ static const WCHAR prop_processoridW[] =
     {'P','r','o','c','e','s','s','o','r','I','d',0};
 static const WCHAR prop_processortypeW[] =
     {'P','r','o','c','e','s','s','o','r','T','y','p','e',0};
+static const WCHAR prop_producttypeW[] =
+    {'P','r','o','d','u','c','t','T','y','p','e',0};
 static const WCHAR prop_productW[] =
     {'P','r','o','d','u','c','t',0};
 static const WCHAR prop_productnameW[] =
@@ -664,6 +668,7 @@ static const struct column col_networkadapterconfig[] =
 static const struct column col_operatingsystem[] =
 {
     { prop_buildnumberW,            CIM_STRING|COL_FLAG_DYNAMIC },
+    { prop_buildtypeW,              CIM_STRING },
     { prop_captionW,                CIM_STRING|COL_FLAG_DYNAMIC },
     { prop_codesetW,                CIM_STRING|COL_FLAG_DYNAMIC },
     { prop_countrycodeW,            CIM_STRING|COL_FLAG_DYNAMIC },
@@ -683,6 +688,7 @@ static const struct column col_operatingsystem[] =
     { prop_osproductsuiteW,         CIM_UINT32 },
     { prop_ostypeW,                 CIM_UINT16 },
     { prop_primaryW,                CIM_BOOLEAN },
+    { prop_producttypeW,            CIM_UINT32 },
     { prop_serialnumberW,           CIM_STRING },
     { prop_servicepackmajorW,       CIM_UINT16 },
     { prop_servicepackminorW,       CIM_UINT16 },
@@ -949,6 +955,8 @@ static const WCHAR os_32bitW[] =
     {'3','2','-','b','i','t',0};
 static const WCHAR os_64bitW[] =
     {'6','4','-','b','i','t',0};
+static const WCHAR os_buildtypeW[] =
+    {'M','u','l','t','i','p','r','o','c','e','s','s','o','r',' ','F','r','e','e',0};
 static const WCHAR os_installdateW[] =
     {'2','0','1','4','0','1','0','1','0','0','0','0','0','0','.','0','0','0','0','0','0','+','0','0','0',0};
 static const WCHAR os_serialnumberW[] =
@@ -1148,6 +1156,7 @@ struct record_networkadapterconfig
 struct record_operatingsystem
 {
     const WCHAR *buildnumber;
+    const WCHAR *buildtype;
     const WCHAR *caption;
     const WCHAR *codeset;
     const WCHAR *countrycode;
@@ -1167,6 +1176,7 @@ struct record_operatingsystem
     UINT32       osproductsuite;
     UINT16       ostype;
     int          primary;
+    UINT32       producttype;
     const WCHAR *serialnumber;
     UINT16       servicepackmajor;
     UINT16       servicepackminor;
@@ -4052,6 +4062,8 @@ static enum fill_status fill_operatingsystem( struct table *table, const struct 
 
     rec = (struct record_operatingsystem *)table->data;
     rec->buildnumber            = get_osbuildnumber( &ver );
+    /* Python 3.12+ platform.win32_ver() asks for these and fails without them */
+    rec->buildtype              = os_buildtypeW;
     rec->caption                = get_oscaption( &ver );
     rec->codeset                = get_codeset();
     rec->countrycode            = get_countrycode();
@@ -4073,6 +4085,7 @@ static enum fill_status fill_operatingsystem( struct table *table, const struct 
     rec->osproductsuite         = 2461140; /* Windows XP Professional  */
     rec->ostype                 = 18;      /* WINNT */
     rec->primary                = -1;
+    rec->producttype            = ver.wProductType;
     rec->serialnumber           = os_serialnumberW;
     rec->servicepackmajor       = ver.wServicePackMajor;
     rec->servicepackminor       = ver.wServicePackMinor;
