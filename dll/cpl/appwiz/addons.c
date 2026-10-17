@@ -27,11 +27,20 @@
 #include <msi.h>
 
 #define GECKO_VERSION "2.40"
+#define GECKO_VERSION_W L"2.40"
 
+/* WineHQ's Wine Gecko packages (the 64-bit system had no package at all:
+   "wine_gecko-2.40-.msi" with SHA-1 "???", so it could never be installed) */
 #ifdef __i386__
+#define ARCH_STRING_W L"x86"
 #define ARCH_STRING "x86"
-#define GECKO_SHA "8a3adedf3707973d1ed4ac3b2e791486abf814bd"
+#define GECKO_SHA "7001a6ed5b02d0ae4e73b14c92018d604b87f3ad"
+#elif defined(__x86_64__)
+#define ARCH_STRING_W L"x86_64"
+#define ARCH_STRING "x86_64"
+#define GECKO_SHA "356c414527b08b015b6dc53dbbf78d752320ae90"
 #else
+#define ARCH_STRING_W L""
 #define ARCH_STRING ""
 #define GECKO_SHA "???"
 #endif
@@ -62,7 +71,9 @@ static HWND install_dialog = NULL;
 static CRITICAL_SECTION csLock;
 static IBinding *download_binding = NULL;
 
-static WCHAR GeckoUrl[] = L"https://svn.reactos.org/amine/wine_gecko-2.40-x86.msi";
+/* (a file of this name in the GeckoCabDir folder, %SystemRoot% by default,
+   is installed without downloading) */
+static WCHAR GeckoUrl[] = L"https://dl.winehq.org/wine/wine-gecko/" GECKO_VERSION_W L"/wine_gecko-" GECKO_VERSION_W L"-" ARCH_STRING_W L".msi";
 
 /* SHA definitions are copied from advapi32. They aren't available in headers. */
 

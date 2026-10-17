@@ -1995,7 +1995,7 @@ HKCU,"SOFTWARE\ReactOS\Debug","SpyInclude",0x00020000,"INCLUDEALL"
 
 ; Internet Explorer
 HKCU,"SOFTWARE\Wine\MSHTML","GeckoUrl",,"http://source.winehq.org/winegecko.php"
-HKCU,"SOFTWARE\Wine\MSHTML","GeckoCabDir",0x00020000,"%SystemRoot%\"
+HKCU,"SOFTWARE\Wine\MSHTML","GeckoCabDir",0x00020000,"%SystemRoot%\3rdParty\"
 
 ; Sound Schemes
 HKCU,"AppEvents",,0x00000012

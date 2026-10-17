@@ -17,6 +17,8 @@ endif()
 
 # Mesa's OpenGL driver, when its DLLs were put in mesa/
 add_subdirectory(mesa)
+# Wine Gecko (MSHTML's HTML engine), installed at the first logon
+add_subdirectory(wine_gecko)
 
 # Wine Mono, the .NET Framework runtime (downloaded when configuring)
 add_subdirectory(winemono)

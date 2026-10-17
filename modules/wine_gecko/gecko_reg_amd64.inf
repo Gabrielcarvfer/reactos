@@ -1,0 +1,7 @@
+; Wine Gecko: installed on the first boot, after syssetup's Finalize (RunOnceEx
+; runs the subkeys by name and waits for each command): the 64-bit package,
+; then the 32-bit one for SysWOW64. (Plain RunOnce values were gone before
+; the first logon and never ran.) (The LiveCD has no MSI: "if exist")
+[AddReg]
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnceEx\WineGecko","1",,"||cmd.exe /c if exist %SystemRoot%\3rdParty\wine_gecko-2.40-x86_64.msi msiexec.exe /i %SystemRoot%\3rdParty\wine_gecko-2.40-x86_64.msi /qn"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnceEx\WineGecko","2",,"||cmd.exe /c if exist %SystemRoot%\3rdParty\wine_gecko-2.40-x86.msi %SystemRoot%\SysWOW64\msiexec.exe /i %SystemRoot%\3rdParty\wine_gecko-2.40-x86.msi /qn"

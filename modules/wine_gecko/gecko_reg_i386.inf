@@ -1,0 +1,4 @@
+; Wine Gecko: installed on the first boot, after syssetup's Finalize (RunOnceEx).
+; (The LiveCD has no MSI: "if exist")
+[AddReg]
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnceEx\WineGecko","1",,"||cmd.exe /c if exist %SystemRoot%\3rdParty\wine_gecko-2.40-x86.msi msiexec.exe /i %SystemRoot%\3rdParty\wine_gecko-2.40-x86.msi /qn"
