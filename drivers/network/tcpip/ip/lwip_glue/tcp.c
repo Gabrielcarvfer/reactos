@@ -533,6 +533,13 @@ LibTCPSendCallback(void *arg)
         SendFlags |= TCP_WRITE_FLAG_MORE;
     }
 
+    /* (tcp_write takes at most 64K - 1 at a time) */
+    if (SendLength > 0xFFFF)
+    {
+        SendLength = 0xFFFF;
+        SendFlags |= TCP_WRITE_FLAG_MORE;
+    }
+
     msg->Output.Send.Error = tcp_write(pcb,
                                        msg->Input.Send.Data,
                                        SendLength,
@@ -554,7 +561,7 @@ done:
 }
 
 err_t
-LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const u16_t len, ULONG *sent, const int safe)
+LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const ULONG len, ULONG *sent, const int safe)
 {
     err_t ret;
     struct lwip_callback_msg *msg;
