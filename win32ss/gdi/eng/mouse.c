@@ -189,6 +189,8 @@ IntHideMousePointer(
                  NULL,
                  NULL,
                  ROP4_FROM_INDEX(R3_OPINDEX_SRCCOPY));
+
+    PDEVOBJ_vAddDirtyRect(ppdev, &rclDest, 0);
 }
 
 VOID
@@ -231,6 +233,8 @@ IntShowMousePointer(
     rclPointer.top = rclSurf.top - pt.y;
     rclPointer.right = min(pgp->Size.cx, psoDest->sizlBitmap.cx - pt.x);
     rclPointer.bottom = min(pgp->Size.cy, psoDest->sizlBitmap.cy - pt.y);
+
+    PDEVOBJ_vAddDirtyRect(ppdev, &rclSurf, 0);
 
     /* Copy the pixels under the cursor to temporary surface. */
     IntEngBitBlt(&pgp->psurfSave->SurfObj,
@@ -596,6 +600,10 @@ EngMovePointer(
     if (x != -1)
     {
         IntShowMousePointer(ppdev, pso);
+
+        /* Show the pointer at once (and what was drawn meanwhile) */
+        PDEVOBJ_vFlushDirty(ppdev);
+
         if (prcl != NULL)
         {
             prcl->left = x - pgp->HotSpot.x;

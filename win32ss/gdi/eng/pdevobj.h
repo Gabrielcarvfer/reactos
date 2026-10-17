@@ -146,6 +146,10 @@ typedef struct _PDEVOBJ
                               0 for not removed */
     UINT SafetyRemoveCount;
     struct _EDD_DIRECTDRAW_GLOBAL * pEDDgpl;
+    /* What GDI drew and the driver didn't show yet (GCAPS2_SYNCFLUSH) */
+    RECTL arclDirty[8];
+    ULONG cDirty;
+    BOOL bFlushQueued;
 } PDEVOBJ, *PPDEVOBJ;
 
 /* Function prototypes ********************************************************/
@@ -193,6 +197,25 @@ CODE_SEG("INIT")
 NTSTATUS
 NTAPI
 InitPDEVImpl(VOID);
+
+/* syncflush.c */
+_Requires_lock_held_(*ppdev->hsemDevLock)
+VOID
+NTAPI
+PDEVOBJ_vAddDirtyRect(
+    _Inout_ PPDEVOBJ ppdev,
+    _In_ const RECTL *prcl,
+    _In_ LONG lMargin);
+
+_Requires_lock_held_(*ppdev->hsemDevLock)
+VOID
+NTAPI
+PDEVOBJ_vFlushDirty(
+    _Inout_ PPDEVOBJ ppdev);
+
+VOID
+NTAPI
+GreFlushDisplays(VOID);
 
 PSIZEL
 FASTCALL

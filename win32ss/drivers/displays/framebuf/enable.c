@@ -28,6 +28,7 @@ static DRVFN DrvFunctionTable[] =
    {INDEX_DrvEnableSurface, (PFN)DrvEnableSurface},
    {INDEX_DrvDisableSurface, (PFN)DrvDisableSurface},
    {INDEX_DrvAssertMode, (PFN)DrvAssertMode},
+   {INDEX_DrvSynchronizeSurface, (PFN)DrvSynchronizeSurface},
    {INDEX_DrvGetModes, (PFN)DrvGetModes},
    {INDEX_DrvSetPalette, (PFN)DrvSetPalette},
    {INDEX_DrvSetPointerShape, (PFN)DrvSetPointerShape},

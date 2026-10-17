@@ -66,6 +66,7 @@ list(APPEND SOURCE
     PatBlt.c
     Rectangle.c
     RealizePalette.c
+    ScreenBlt.c
     SelectObject.c
     SetBoundsRect.c
     SetBrushOrgEx.c

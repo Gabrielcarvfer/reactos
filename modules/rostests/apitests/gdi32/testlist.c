@@ -65,6 +65,7 @@ extern void func_PaintRgn(void);
 extern void func_PatBlt(void);
 extern void func_Rectangle(void);
 extern void func_RealizePalette(void);
+extern void func_ScreenBlt(void);
 extern void func_SelectObject(void);
 extern void func_SetBoundsRect(void);
 extern void func_SetBrushOrgEx(void);
@@ -146,6 +147,7 @@ const struct test winetest_testlist[] =
     { "PatBlt", func_PatBlt },
     { "Rectangle", func_Rectangle },
     { "RealizePalette", func_RealizePalette },
+    { "ScreenBlt", func_ScreenBlt },
     { "SelectObject", func_SelectObject },
     { "SetBoundsRect", func_SetBoundsRect },
     { "SetBrushOrgEx", func_SetBrushOrgEx },

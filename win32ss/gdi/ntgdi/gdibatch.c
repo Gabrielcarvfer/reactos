@@ -472,6 +472,9 @@ NtGdiFlush(
     VOID)
 {
     SynchronizeDriver(GCAPS2_SYNCFLUSH);
+
+    /* Show what was drawn on the screen so far */
+    GreFlushDisplays();
     return STATUS_SUCCESS;
 }
 

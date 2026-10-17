@@ -503,6 +503,20 @@ DC_vUpdateDC(PDC pdc)
     pdc->pdcattr->ulDirty_ |= DIRTY_DEFAULT ;
 }
 
+/* The display driver shows what GDI drew in prcl (GCAPS2_SYNCFLUSH) */
+static
+VOID
+DC_vAddDirtyRect(PDC pdc, const RECTL *prcl)
+{
+    LONG lMargin = 2;
+
+    /* Wide pens draw outside the bounds some callers give (ellipses, lines) */
+    if (pdc->dclevel.pbrLine)
+        lMargin += min(max(pdc->dclevel.pbrLine->lWidth, 0), 1024);
+
+    PDEVOBJ_vAddDirtyRect(pdc->ppdev, prcl, lMargin);
+}
+
 /* Prepare a blit for up to 2 DCs */
 /* rc1 and rc2 are the rectangles where we want to draw or
  * from where we take pixels. */
@@ -516,6 +530,7 @@ DC_vPrepareDCsForBlit(
 {
     PDC pdcFirst, pdcSecond;
     const RECT *prcFirst, *prcSecond;
+    BOOL bDestFirst = TRUE;
 
     /* Update brushes */
     if (pdcDest->pdcattr->ulDirty_ & (DIRTY_FILL | DC_BRUSH_DIRTY))
@@ -542,6 +557,7 @@ DC_vPrepareDCsForBlit(
             prcFirst = rcSrc;
             pdcSecond = pdcDest;
             prcSecond = rcDest;
+            bDestFirst = FALSE;
         }
     }
     else
@@ -577,6 +593,9 @@ DC_vPrepareDCsForBlit(
                                prcFirst->top,
                                prcFirst->right,
                                prcFirst->bottom) ;
+
+        if (bDestFirst)
+            DC_vAddDirtyRect(pdcFirst, (const RECTL *)prcFirst);
     }
 
 #if DBG
@@ -607,6 +626,9 @@ DC_vPrepareDCsForBlit(
                                prcSecond->top,
                                prcSecond->right,
                                prcSecond->bottom) ;
+
+        if (!bDestFirst)
+            DC_vAddDirtyRect(pdcSecond, (const RECTL *)prcSecond);
     }
 
 #if DBG

@@ -21,6 +21,86 @@
 #include "framebuf.h"
 
 /*
+ * IntCopyToScreen
+ *
+ * Copies a rectangle of the shadow surface to the screen. Only writes to
+ * video memory: reads from it are uncached and very slow.
+ */
+
+static VOID
+IntCopyToScreen(
+   IN PPDEV ppdev,
+   IN const RECTL *prcl)
+{
+   RECTL rcl;
+   ULONG BytesPerPixel = (ppdev->BitsPerPixel + 7) / 8;
+   ULONG Offset, Width;
+   PBYTE Src, Dst;
+   LONG y;
+
+   if (!ppdev->ShadowPtr || !ppdev->ScreenEnabled)
+      return;
+
+   rcl.left = 0;
+   rcl.top = 0;
+   rcl.right = ppdev->ScreenWidth;
+   rcl.bottom = ppdev->ScreenHeight;
+   if (prcl)
+   {
+      rcl.left = max(rcl.left, prcl->left);
+      rcl.top = max(rcl.top, prcl->top);
+      rcl.right = min(rcl.right, prcl->right);
+      rcl.bottom = min(rcl.bottom, prcl->bottom);
+   }
+   if (rcl.left >= rcl.right || rcl.top >= rcl.bottom)
+      return;
+
+   Offset = rcl.top * ppdev->ScreenDelta + rcl.left * BytesPerPixel;
+   Width = (rcl.right - rcl.left) * BytesPerPixel;
+   Src = (PBYTE)ppdev->ShadowPtr + Offset;
+   Dst = (PBYTE)ppdev->ScreenPtr + Offset;
+
+   if (Width == ppdev->ScreenDelta)
+   {
+      /* Whole lines: one copy */
+      RtlCopyMemory(Dst, Src, Width * (rcl.bottom - rcl.top));
+      return;
+   }
+
+   for (y = rcl.top; y < rcl.bottom; y++)
+   {
+      RtlCopyMemory(Dst, Src, Width);
+      Src += ppdev->ScreenDelta;
+      Dst += ppdev->ScreenDelta;
+   }
+}
+
+/*
+ * DrvSynchronizeSurface
+ *
+ * GDI tells us it drew into the rectangle *prcl (NULL: anywhere) of the
+ * shadow surface: show it.
+ *
+ * Status
+ *    @implemented
+ */
+
+VOID APIENTRY
+DrvSynchronizeSurface(
+   IN SURFOBJ *pso,
+   IN RECTL *prcl,
+   IN FLONG fl)
+{
+   PPDEV ppdev = (PPDEV)pso->dhpdev;
+
+   /* Without a flush/timer flag, GDI is about to draw: nothing to wait for */
+   if (!(fl & (DSS_FLUSH_EVENT | DSS_TIMER_EVENT)))
+      return;
+
+   IntCopyToScreen(ppdev, prcl);
+}
+
+/*
  * DrvEnableSurface
  *
  * Create engine bitmap around frame buffer and set the video mode requested
@@ -67,6 +147,7 @@ DrvEnableSurface(
    }
 
    ppdev->ScreenPtr = VideoMemoryInfo.FrameBufferBase;
+   ppdev->ScreenEnabled = TRUE;
 
    switch (ppdev->BitsPerPixel)
    {
@@ -96,27 +177,58 @@ DrvEnableSurface(
    ScreenSize.cx = ppdev->ScreenWidth;
    ScreenSize.cy = ppdev->ScreenHeight;
 
+   /*
+    * Let GDI draw into a copy of the screen in system memory: drawing that
+    * reads the destination (moving a window, alpha blending, the software
+    * mouse pointer) would otherwise read video memory, which is uncached.
+    */
+
+   ppdev->ShadowPtr = NULL;
+   if (ppdev->ScreenDelta > 0)
+   {
+      ppdev->ShadowPtr = EngAllocMem(FL_ZERO_MEMORY,
+                                     ppdev->ScreenDelta * ppdev->ScreenHeight,
+                                     ALLOC_TAG);
+   }
+
    hSurface = (HSURF)EngCreateBitmap(ScreenSize, ppdev->ScreenDelta, BitmapType,
                                      (ppdev->ScreenDelta > 0) ? BMF_TOPDOWN : 0,
-                                     ppdev->ScreenPtr);
+                                     ppdev->ShadowPtr ? ppdev->ShadowPtr : ppdev->ScreenPtr);
    if (hSurface == NULL)
    {
-      return NULL;
+      goto Failure;
    }
 
    /*
-    * Associate the surface with our device.
+    * Associate the surface with our device. With a shadow, GDI calls
+    * DrvSynchronizeSurface with what it changed (GCAPS2_SYNCFLUSH).
     */
 
-   if (!EngAssociateSurface(hSurface, ppdev->hDevEng, 0))
+   if (!EngAssociateSurface(hSurface, ppdev->hDevEng,
+                            ppdev->ShadowPtr ? HOOK_SYNCHRONIZE : 0))
    {
       EngDeleteSurface(hSurface);
-      return NULL;
+      goto Failure;
    }
+
+   /* Start from the same (black) picture as the shadow */
+   IntCopyToScreen(ppdev, NULL);
 
    ppdev->hSurfEng = hSurface;
 
    return hSurface;
+
+Failure:
+   if (ppdev->ShadowPtr)
+   {
+      EngFreeMem(ppdev->ShadowPtr);
+      ppdev->ShadowPtr = NULL;
+   }
+   ppdev->ScreenEnabled = FALSE;
+   VideoMemory.RequestedVirtualAddress = ppdev->ScreenPtr;
+   EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_UNMAP_VIDEO_MEMORY,
+                      &VideoMemory, sizeof(VIDEO_MEMORY), NULL, 0, &ulTemp);
+   return NULL;
 }
 
 /*
@@ -137,8 +249,15 @@ DrvDisableSurface(
    VIDEO_MEMORY VideoMemory;
    PPDEV ppdev = (PPDEV)dhpdev;
 
+   ppdev->ScreenEnabled = FALSE;
    EngDeleteSurface(ppdev->hSurfEng);
    ppdev->hSurfEng = NULL;
+
+   if (ppdev->ShadowPtr)
+   {
+      EngFreeMem(ppdev->ShadowPtr);
+      ppdev->ShadowPtr = NULL;
+   }
 
 #ifdef EXPERIMENTAL_MOUSE_CURSOR_SUPPORT
    /* Clear all mouse pointer surfaces. */
@@ -189,6 +308,10 @@ DrvAssertMode(
 	     IntSetPalette(dhpdev, ppdev->PaletteEntries, 0, 256);
       }
 
+      /* The mode set cleared the screen: show the shadow again */
+      ppdev->ScreenEnabled = TRUE;
+      IntCopyToScreen(ppdev, NULL);
+
       return TRUE;
    }
    else
@@ -196,6 +319,7 @@ DrvAssertMode(
       /*
        * Call the miniport driver to reset the device to a known state.
        */
+      ppdev->ScreenEnabled = FALSE;
       return !EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_RESET_DEVICE,
                                  NULL, 0, NULL, 0, &ulTemp);
    }

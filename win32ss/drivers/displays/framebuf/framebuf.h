@@ -45,6 +45,11 @@ typedef struct _PDEV
    ULONG BlueMask;
    BYTE PaletteShift;
    PVOID ScreenPtr;
+   /* System memory copy of the screen that GDI draws into, or NULL. Reading
+    * video memory is very slow, so GDI never does it; the rectangles GDI
+    * changed are copied to the screen in DrvSynchronizeSurface. */
+   PVOID ShadowPtr;
+   BOOL ScreenEnabled; /* The video mode is set and ScreenPtr can be written */
    HPALETTE DefaultPalette;
    PALETTEENTRY *PaletteEntries;
 
@@ -112,6 +117,12 @@ DrvEnableSurface(
 VOID APIENTRY
 DrvDisableSurface(
    IN DHPDEV dhpdev);
+
+VOID APIENTRY
+DrvSynchronizeSurface(
+   IN SURFOBJ *pso,
+   IN RECTL *prcl,
+   IN FLONG fl);
 
 BOOL APIENTRY
 DrvAssertMode(

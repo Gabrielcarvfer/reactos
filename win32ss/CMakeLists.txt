@@ -90,6 +90,7 @@ list(APPEND SOURCE
     gdi/eng/string.c
     gdi/eng/stretchblt.c
     gdi/eng/surface.c
+    gdi/eng/syncflush.c
     gdi/eng/transblt.c
     gdi/eng/engwindow.c
     gdi/eng/xlateobj.c
