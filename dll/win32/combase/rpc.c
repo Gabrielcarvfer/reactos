@@ -428,7 +428,10 @@ static DWORD start_local_service(const WCHAR *name, DWORD num, LPCWSTR *params)
 static HRESULT create_local_service(REFCLSID rclsid)
 {
     HRESULT hr;
-    WCHAR buf[CHARS_IN_GUID];
+    /* LocalService holds a service name (up to 256 characters), not a GUID:
+     * a CHARS_IN_GUID buffer made RegQueryValueExW fail with ERROR_MORE_DATA
+     * for names such as "GoogleUpdaterInternalService156.0.8067.0" */
+    WCHAR buf[256 + 1];
     HKEY hkey;
     LONG r;
     DWORD type, sz;
@@ -445,31 +448,47 @@ static HRESULT create_local_service(REFCLSID rclsid)
     if (r == ERROR_SUCCESS && type == REG_SZ)
     {
         DWORD num_args = 0;
-        LPWSTR args[1] = { NULL };
+        LPWSTR args[16], params = NULL, p;
+        const WCHAR *value = L"ServiceParameters";
 
-        /*
-         * FIXME: I'm not really sure how to deal with the service parameters.
-         *        I suspect that the string returned from RegQueryValueExW
-         *        should be split into a number of arguments by spaces.
-         *        It would make more sense if ServiceParams contained a
-         *        REG_MULTI_SZ here, but it's a REG_SZ for the services
-         *        that I'm interested in for the moment.
-         */
-        r = RegQueryValueExW(hkey, L"ServiceParams", NULL, &type, NULL, &sz);
+        /* ServiceParameters (the name Windows uses; older Wine read
+         * "ServiceParams") holds the arguments for ServiceMain, separated
+         * by spaces; Google's updater needs its "--com-service" there */
+        r = RegQueryValueExW(hkey, value, NULL, &type, NULL, &sz);
+        if (r != ERROR_SUCCESS)
+        {
+            value = L"ServiceParams";
+            r = RegQueryValueExW(hkey, value, NULL, &type, NULL, &sz);
+        }
         if (r == ERROR_SUCCESS && type == REG_SZ && sz)
         {
-            args[0] = calloc(1, sz);
-            num_args++;
-            RegQueryValueExW(hkey, L"ServiceParams", NULL, &type, (LPBYTE)args[0], &sz);
+            params = calloc(1, sz + sizeof(WCHAR));
+            if (params)
+                RegQueryValueExW(hkey, value, NULL, &type, (LPBYTE)params, &sz);
+        }
+        for (p = params; p && *p && num_args < ARRAY_SIZE(args);)
+        {
+            BOOL quoted;
+
+            while (*p == ' ' || *p == '\t') p++;
+            if (!*p) break;
+            quoted = (*p == '"');
+            if (quoted) p++;
+            args[num_args++] = p;
+            while (*p && (quoted ? *p != '"' : (*p != ' ' && *p != '\t'))) p++;
+            if (*p) *p++ = 0;
         }
         r = start_local_service(buf, num_args, (LPCWSTR *)args);
         if (r != ERROR_SUCCESS)
+        {
+            WARN("Starting service %s failed with error %lu\n", debugstr_w(buf), r);
             hr = REGDB_E_CLASSNOTREG; /* FIXME: check retval */
-        free(args[0]);
+        }
+        free(params);
     }
     else
     {
-        WARN("No LocalService value\n");
+        WARN("No usable LocalService value (error %ld)\n", r);
         hr = REGDB_E_CLASSNOTREG; /* FIXME: check retval */
     }
     RegCloseKey(hkey);
