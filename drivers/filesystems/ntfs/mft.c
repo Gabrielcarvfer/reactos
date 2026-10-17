@@ -1371,12 +1371,9 @@ NtfsMapAttributeRuns(PDEVICE_EXTENSION Vcb,
     }
 
 Cleanup:
-    Context->CacheRun = DataRun;
-    Context->CacheRunOffset = Offset + Mapped;
-    Context->CacheRunStartLCN = DataRunStartLCN;
-    Context->CacheRunLength = DataRunLength;
-    Context->CacheRunLastLCN = LastLCN;
-    Context->CacheRunCurrentOffset = CurrentOffset;
+    /* The run cache (Context->CacheRun*) is not updated here: nothing reads
+     * it, DataRun points into TempBuffer which is freed below, and
+     * concurrent readers of a shared context (Vcb->MFTContext) raced on it */
 
     //TEMPTEMP
     ExFreePoolWithTag(TempBuffer, TAG_NTFS);

@@ -164,7 +164,13 @@ USHORT
 ExQueryDepthSList(_In_ PSLIST_HEADER SListHead)
 {
 #ifdef _WIN64
+#ifdef KCSAN_INSTRUMENTED
+    /* Unlocked on purpose: the depth only decides whether a lookaside
+     * free goes to the list or to the pool */
+    return (USHORT)(__atomic_load_n(&SListHead->Alignment, __ATOMIC_RELAXED) & 0xffff);
+#else
     return (USHORT)(SListHead->Alignment & 0xffff);
+#endif
 #else /* !_WIN64 */
     return (USHORT)SListHead->Depth;
 #endif /* _WIN64 */

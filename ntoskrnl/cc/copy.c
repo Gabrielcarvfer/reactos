@@ -384,9 +384,10 @@ CcCanIWrite (
      *   + Otherwise, throttle!
      */
     if ((TryContext != FirstTry || IsListEmpty(&CcDeferredWrites)) &&
-        CcTotalDirtyPages + Pages < CcDirtyPageThreshold &&
-        (MmAvailablePages > MmThrottleTop ||
-         (MmModifiedPageListHead.Total < 1000 && MmAvailablePages > MmThrottleBottom)) &&
+        CC_READ_ONCE(CcTotalDirtyPages) + Pages < CcDirtyPageThreshold &&
+        (CC_READ_ONCE(MmAvailablePages) > MmThrottleTop ||
+         (CC_READ_ONCE(MmModifiedPageListHead.Total) < 1000 &&
+          CC_READ_ONCE(MmAvailablePages) > MmThrottleBottom)) &&
         !PerFileDefer)
     {
         return TRUE;

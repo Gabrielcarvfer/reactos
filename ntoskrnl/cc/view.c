@@ -76,12 +76,15 @@ ULONG CcRosVacbIncRefCount_(PROS_VACB vacb, PCSTR file, INT line)
 ULONG CcRosVacbDecRefCount_(PROS_VACB vacb, PCSTR file, INT line)
 {
     ULONG Refs;
-    BOOLEAN VacbDirty = vacb->Dirty;
+    /* Trace only: a concurrent CcRosUnmarkDirtyVacb may change it */
+    BOOLEAN VacbDirty = CC_READ_ONCE(vacb->Dirty);
     BOOLEAN VacbTrace = vacb->SharedCacheMap->Trace;
     BOOLEAN VacbPageOut = vacb->PageOut;
 
     Refs = InterlockedDecrement((PLONG)&vacb->ReferenceCount);
-    ASSERT(!(Refs == 0 && VacbDirty));
+    /* Check Dirty after the decrement: once Refs is 0 nobody else can unmark
+     * it, while the value read above can be stale (spurious assertion) */
+    ASSERT(!(Refs == 0 && vacb->Dirty));
     if (VacbTrace)
     {
         DbgPrint("(%s:%i) VACB %p --RefCount=%lu, Dirty %u, PageOut %lu\n",
@@ -650,7 +653,7 @@ CcRosReleaseVacb (
      * (WasMarked == TRUE path), ensuring those pages are retried. No dirty data
      * can be silently lost through this race.
      */
-    if (Dirty && !Vacb->Dirty)
+    if (Dirty && !CC_READ_ONCE(Vacb->Dirty))
     {
         CcRosMarkDirtyVacb(Vacb);
     }

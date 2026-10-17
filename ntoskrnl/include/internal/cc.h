@@ -1,5 +1,14 @@
 #pragma once
 
+/* Read of a value that is updated under a lock this reader does not take,
+ * used only as a heuristic (throttling, an early-out rechecked under the
+ * lock). KCSAN builds: a relaxed atomic load, which it never reports */
+#ifdef KCSAN_INSTRUMENTED
+#define CC_READ_ONCE(x) __atomic_load_n(&(x), __ATOMIC_RELAXED)
+#else
+#define CC_READ_ONCE(x) (*(volatile __typeof__(x) *)&(x))
+#endif
+
 //
 // Define this if you want debugging support
 //

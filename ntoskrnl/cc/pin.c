@@ -359,11 +359,11 @@ CcMapData (
 
     if (Flags & MAP_WAIT)
     {
-        ++CcMapDataWait;
+        _EX_STAT_INC(CcMapDataWait);
     }
     else
     {
-        ++CcMapDataNoWait;
+        _EX_STAT_INC(CcMapDataNoWait);
     }
 
     VacbOffset = (ULONG)(FileOffset->QuadPart % VACB_MAPPING_GRANULARITY);

@@ -132,7 +132,7 @@ CcWriteBehind(VOID)
     }
 
     /* Make sure we're not throttling writes after this */
-    while (MmAvailablePages < MmThrottleTop)
+    while (CC_READ_ONCE(MmAvailablePages) < MmThrottleTop)
     {
         /* Break if we can't even find one to free */
         if (!CcRosFreeOneUnusedVacb())
