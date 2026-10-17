@@ -14,6 +14,7 @@ list(APPEND SOURCE
     dosdev.c
     EnumSystemCodePages.c
     FastFail.c
+    FatStress.c
     FindActCtxSectionStringW.c
     FindFiles.c
     FindFirstFileEx.c
@@ -38,6 +39,7 @@ list(APPEND SOURCE
     JobObject.c
     LCMapString.c
     LoadLibraryExW.c
+    LockStress.c
     LocaleNameToLCID.c
     LockFileEx.c
     lstrcpynW.c

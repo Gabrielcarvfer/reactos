@@ -13,6 +13,7 @@ extern void func_DeviceIoControl(void);
 extern void func_dosdev(void);
 extern void func_EnumSystemCodePages(void);
 extern void func_FastFail(void);
+extern void func_FatStress(void);
 extern void func_FindActCtxSectionStringW(void);
 extern void func_FindFiles(void);
 extern void func_FindFirstFileEx(void);
@@ -37,6 +38,7 @@ extern void func_JapaneseCalendar(void);
 extern void func_JobObject(void);
 extern void func_LCMapString(void);
 extern void func_LoadLibraryExW(void);
+extern void func_LockStress(void);
 extern void func_LocaleNameToLCID(void);
 extern void func_LockFileEx(void);
 extern void func_lstrcpynW(void);
@@ -84,6 +86,7 @@ const struct test winetest_testlist[] =
     { "dosdev",                      func_dosdev },
     { "EnumSystemCodePages",         func_EnumSystemCodePages },
     { "FastFail",                    func_FastFail },
+    { "FatStress",                   func_FatStress },
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
     { "FindFiles",                   func_FindFiles },
     { "FindFirstFileEx", func_FindFirstFileEx },
@@ -108,6 +111,7 @@ const struct test winetest_testlist[] =
     { "JobObject",                   func_JobObject },
     { "LCMapString",                 func_LCMapString },
     { "LoadLibraryExW",              func_LoadLibraryExW },
+    { "LockStress",                  func_LockStress },
     { "LocaleNameToLCID",            func_LocaleNameToLCID },
     { "LockFileEx",                  func_LockFileEx },
     { "lstrcpynW",                   func_lstrcpynW },
