@@ -10,14 +10,16 @@
 
 #include "afd.h"
 
-/* A stream send IRP in FCB->PendingIrpList[FUNCTION_SEND] keeps
- *   IoStatus.Information: how many of its bytes were copied to the send window
- *   DriverContext[3]: how many of those are in the window and not sent yet
- *   DriverContext[2]: how many are still to be copied.
+/* A stream send completes as soon as all of its data is copied to the
+ * socket's send window, as on Windows (it used to wait until tcpip had taken
+ * the window: a "non-blocking" send blocked for as long as the peer's receive
+ * window stayed closed). A send IRP waiting in
+ * FCB->PendingIrpList[FUNCTION_SEND] keeps
+ *   IoStatus.Information: how many of its bytes were copied to the window
+ *   DriverContext[2]: how many are still to be copied (blocking sends).
  * A blocking send bigger than the send window is copied piece by piece as the
- * window drains and completes once all of it is sent, as on Windows (it used
- * to complete with a short count: a 1 MB send() returned 8192) */
-#define SEND_IN_WINDOW(Irp) ((Irp)->Tail.Overlay.DriverContext[3])
+ * window drains and completes once all of it is copied (it used to complete
+ * with a short count: a 1 MB send() returned 8192) */
 #define SEND_TO_COPY(Irp) ((Irp)->Tail.Overlay.DriverContext[2])
 
 static BOOLEAN IsBlockingSend(PAFD_FCB FCB, PAFD_SEND_INFO SendReq)
@@ -80,37 +82,34 @@ static UINT CopySendData(PAFD_FCB FCB, PAFD_SEND_INFO SendReq, UINT Offset,
     return Copied;
 }
 
-/* Some queued send has bytes that are not in the window yet: a new send must
- * wait behind it, or the stream would be reordered. (The requests in the
- * window come first in the queue, so the last one tells) */
+/* A queued send still has bytes that are not in the window: a new send must
+ * wait behind it, or the stream would be reordered. (Sends that are all in
+ * the window are completed, so any queued one waits) */
 static BOOLEAN SendQueueWaiting(PAFD_FCB FCB)
 {
-    PIRP LastIrp;
-
-    if (IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND]))
-        return FALSE;
-
-    LastIrp = CONTAINING_RECORD(FCB->PendingIrpList[FUNCTION_SEND].Blink, IRP, Tail.Overlay.ListEntry);
-    return LastIrp->IoStatus.Information == 0 || SEND_TO_COPY(LastIrp) != NULL;
+    return !IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND]);
 }
 
-/* Copy queued sends into the free part of the send window, in order */
+static VOID CompleteSendIrp(PIRP Irp, PAFD_SEND_INFO SendReq, NTSTATUS Status)
+{
+    Irp->IoStatus.Status = Status;
+    (void)IoSetCancelRoutine(Irp, NULL);
+    UnlockBuffers(SendReq->BufferArray, SendReq->BufferCount, FALSE);
+    if (Irp->MdlAddress) UnlockRequest(Irp, IoGetCurrentIrpStackLocation(Irp));
+    IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+}
+
+/* Copy queued sends into the free part of the send window, in order, and
+ * complete those that are all in it */
 static VOID FillSendWindow(PAFD_FCB FCB)
 {
-    PLIST_ENTRY Entry;
     PIRP NextIrp;
     PAFD_SEND_INFO SendReq;
     UINT SpaceAvail, Length, Remaining, Copied;
 
-    for (Entry = FCB->PendingIrpList[FUNCTION_SEND].Flink;
-         Entry != &FCB->PendingIrpList[FUNCTION_SEND];
-         Entry = Entry->Flink)
+    while (!IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND]))
     {
-        NextIrp = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
-
-        /* All of this one is in the window already */
-        if (NextIrp->IoStatus.Information != 0 && SEND_TO_COPY(NextIrp) == NULL)
-            continue;
+        NextIrp = CONTAINING_RECORD(FCB->PendingIrpList[FUNCTION_SEND].Flink, IRP, Tail.Overlay.ListEntry);
 
         SpaceAvail = FCB->Send.Size - FCB->Send.BytesUsed;
         if (SpaceAvail == 0)
@@ -129,18 +128,17 @@ static VOID FillSendWindow(PAFD_FCB FCB)
 
         Copied = CopySendData(FCB, SendReq, (UINT)NextIrp->IoStatus.Information, SpaceAvail, FALSE);
         NextIrp->IoStatus.Information += Copied;
-        SEND_IN_WINDOW(NextIrp) = (PVOID)((ULONG_PTR)SEND_IN_WINDOW(NextIrp) + Copied);
 
-        if (Copied < Remaining)
+        /* Blocking: the rest follows later. Non-blocking: it completes with
+         * what was copied */
+        if (Copied < Remaining && IsBlockingSend(FCB, SendReq))
         {
-            /* Blocking: the rest follows later. Non-blocking: it completes
-             * with what was copied */
-            SEND_TO_COPY(NextIrp) = IsBlockingSend(FCB, SendReq) ?
-                (PVOID)(ULONG_PTR)(Remaining - Copied) : NULL;
+            SEND_TO_COPY(NextIrp) = (PVOID)(ULONG_PTR)(Remaining - Copied);
             break;
         }
 
-        SEND_TO_COPY(NextIrp) = NULL;
+        RemoveEntryList(&NextIrp->Tail.Overlay.ListEntry);
+        CompleteSendIrp(NextIrp, SendReq, STATUS_SUCCESS);
     }
 }
 
@@ -212,8 +210,6 @@ static NTSTATUS NTAPI SendComplete
     PIRP NextIrp = NULL;
     PIO_STACK_LOCATION NextIrpSp;
     PAFD_SEND_INFO SendReq = NULL;
-    SIZE_T TotalBytesCopied = 0, TotalBytesProcessed = 0;
-    UINT SendLength;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -252,6 +248,7 @@ static NTSTATUS NTAPI SendComplete
             IoCompleteRequest( NextIrp, IO_NETWORK_INCREMENT );
         }
 
+        FCB->Send.BytesUsed = 0;
         RetryDisconnectCompletion(FCB);
 
         SocketStateUnlock( FCB );
@@ -281,6 +278,8 @@ static NTSTATUS NTAPI SendComplete
             IoCompleteRequest( NextIrp, IO_NETWORK_INCREMENT );
         }
 
+        /* (what is in the window is lost) */
+        FCB->Send.BytesUsed = 0;
         RetryDisconnectCompletion(FCB);
 
         SocketStateUnlock( FCB );
@@ -288,71 +287,14 @@ static NTSTATUS NTAPI SendComplete
         return STATUS_SUCCESS;
     }
 
+    /* The sends that this data came from are completed already */
+    ASSERT(Irp->IoStatus.Information <= FCB->Send.BytesUsed);
     RtlMoveMemory( FCB->Send.Window,
                    FCB->Send.Window + Irp->IoStatus.Information,
                    FCB->Send.BytesUsed - Irp->IoStatus.Information );
+    FCB->Send.BytesUsed -= Irp->IoStatus.Information;
 
-    TotalBytesProcessed = 0;
-    SendLength = Irp->IoStatus.Information;
-    while (!IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND]) && SendLength > 0) {
-        NextIrpEntry = RemoveHeadList(&FCB->PendingIrpList[FUNCTION_SEND]);
-        NextIrp = CONTAINING_RECORD(NextIrpEntry, IRP, Tail.Overlay.ListEntry);
-        NextIrpSp = IoGetCurrentIrpStackLocation( NextIrp );
-        SendReq = GetLockedData(NextIrp, NextIrpSp);
-
-        TotalBytesCopied = (ULONG_PTR)SEND_IN_WINDOW(NextIrp);
-        ASSERT(TotalBytesCopied != 0);
-
-        /* If we didn't get enough, keep waiting */
-        if (TotalBytesCopied > SendLength)
-        {
-            /* Update the bytes left to copy */
-            TotalBytesCopied -= SendLength;
-            SEND_IN_WINDOW(NextIrp) = (PVOID)TotalBytesCopied;
-
-            /* Update the state variables */
-            FCB->Send.BytesUsed -= SendLength;
-            TotalBytesProcessed += SendLength;
-            SendLength = 0;
-
-            /* Pend the IRP */
-            InsertHeadList(&FCB->PendingIrpList[FUNCTION_SEND],
-                           &NextIrp->Tail.Overlay.ListEntry);
-            break;
-        }
-
-        ASSERT(NextIrp->IoStatus.Information != 0);
-
-        FCB->Send.BytesUsed -= TotalBytesCopied;
-        TotalBytesProcessed += TotalBytesCopied;
-        SendLength -= TotalBytesCopied;
-
-        /* What was copied of it is sent, but more of it is still to copy */
-        if (SEND_TO_COPY(NextIrp) != NULL)
-        {
-            SEND_IN_WINDOW(NextIrp) = NULL;
-            InsertHeadList(&FCB->PendingIrpList[FUNCTION_SEND],
-                           &NextIrp->Tail.Overlay.ListEntry);
-            break;
-        }
-
-        NextIrp->IoStatus.Status = Irp->IoStatus.Status;
-
-        (void)IoSetCancelRoutine(NextIrp, NULL);
-
-        UnlockBuffers( SendReq->BufferArray,
-                       SendReq->BufferCount,
-                       FALSE );
-
-        if (NextIrp->MdlAddress) UnlockRequest(NextIrp, NextIrpSp);
-
-        IoCompleteRequest(NextIrp, IO_NETWORK_INCREMENT);
-    }
-
-    ASSERT(SendLength == 0);
-
-    /* Refill the window from the queued sends (also the rest of a partly
-     * sent one: the copied requests are skipped) */
+    /* Refill the window from the queued sends */
     FillSendWindow(FCB);
 
     if (FCB->Send.Size - FCB->Send.BytesUsed != 0 && !FCB->SendClosed &&
@@ -611,7 +553,6 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     Blocking = IsBlockingSend(FCB, SendReq);
 
     Irp->IoStatus.Information = 0;
-    SEND_IN_WINDOW(Irp) = NULL;
     SEND_TO_COPY(Irp) = NULL;
 
     if (SendLength == 0)
@@ -671,11 +612,30 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         FCB->PollState &= ~AFD_EVENT_SEND;
     }
 
-    /* We use the IRP tail for some temporary storage here */
-    SEND_IN_WINDOW(Irp) = (PVOID)Irp->IoStatus.Information;
+    /* A blocking send bigger than the window waits for room for the rest
+     * (queued before sending: tcpip may complete the send right away, and
+     * SendComplete refills the window from the queue) */
+    if (SEND_TO_COPY(Irp) != NULL)
+    {
+        Status = QueueUserModeIrp(FCB, Irp, FUNCTION_SEND);
+        if (!FCB->SendIrp.InFlightRequest)
+        {
+            TdiSend(&FCB->SendIrp.InFlightRequest,
+                    FCB->Connection.Object,
+                    0,
+                    FCB->Send.Window,
+                    FCB->Send.BytesUsed,
+                    SendComplete,
+                    FCB);
+        }
 
-    Status = QueueUserModeIrp(FCB, Irp, FUNCTION_SEND);
-    if (Status == STATUS_PENDING && !FCB->SendIrp.InFlightRequest)
+        SocketStateUnlock(FCB);
+        return Status;
+    }
+
+    /* All of it is in the window (or, non-blocking, what fitted): send the
+     * window if nothing is on its way already, and complete */
+    if (!FCB->SendIrp.InFlightRequest)
     {
         TdiSend(&FCB->SendIrp.InFlightRequest,
                 FCB->Connection.Object,
@@ -686,9 +646,8 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 FCB);
     }
 
-    SocketStateUnlock(FCB);
-
-    return STATUS_PENDING;
+    UnlockBuffers(SendReq->BufferArray, SendReq->BufferCount, FALSE);
+    return UnlockAndMaybeComplete(FCB, STATUS_SUCCESS, Irp, (UINT)Irp->IoStatus.Information);
 }
 
 NTSTATUS NTAPI

@@ -78,7 +78,7 @@ AfdGetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
          * it's more or less a zero/non-zero comparison to determine whether
          * we can shutdown the socket
          */
-        if (FCB->SendIrp.InFlightRequest)
+        if (FCB->SendIrp.InFlightRequest || FCB->Send.BytesUsed)
             InfoReq->Information.Ulong++;
         break;
 
