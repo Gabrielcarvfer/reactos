@@ -254,6 +254,9 @@ CountThread(
     ULONG *CounterValue = ThreadData->CounterValues;
     KPRIORITY Priority;
 
+    /* Same processor as TestEventScheduling (see there) */
+    KeSetSystemAffinityThread((KAFFINITY)1);
+
     Priority = KeQueryPriorityThread(KeGetCurrentThread());
     ok_eq_long(Priority, 8L);
 
@@ -266,6 +269,8 @@ CountThread(
 
     Priority = KeQueryPriorityThread(KeGetCurrentThread());
     ok_eq_long(Priority, 8L + min(ThreadData->PriorityIncrement, 7));
+
+    KeRevertToUserAffinityThread();
 }
 
 static
@@ -293,6 +298,11 @@ TestEventScheduling(
     KeInitializeEvent(&ThreadData->Event, SynchronizationEvent, FALSE);
     KeInitializeEvent(&ThreadData->WaitEvent, SynchronizationEvent, FALSE);
     Counter = &ThreadData->Counter;
+
+    /* The checks below expect the woken thread to preempt this one (or not)
+     * right away. With more processors it runs at the same time on another
+     * one instead: keep both threads on the first processor. */
+    KeSetSystemAffinityThread((KAFFINITY)1);
 
     for (PriorityIncrement = 0; PriorityIncrement <= 8; PriorityIncrement++)
     {
@@ -350,6 +360,7 @@ TestEventScheduling(
         }
     }
 
+    KeRevertToUserAffinityThread();
     ExFreePoolWithTag(ThreadData, 'CEmK');
 }
 
