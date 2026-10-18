@@ -192,6 +192,32 @@ NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHA
     return Status;
 }
 
+/* The reader took Length bytes out of the connection's queue: open the
+ * receive window by as much. Call without the connection's lock (lwIP's
+ * callbacks take it under the core lock) */
+void
+LibTCPRecved(PCONNECTION_ENDPOINT Connection, ULONG Length)
+{
+    PTCP_PCB pcb;
+    u16_t Chunk;
+
+    if (!Length)
+        return;
+
+    LOCK_TCPIP_CORE();
+    pcb = Connection->SocketContext;
+    if (pcb && pcb->state != LISTEN)
+    {
+        while (Length)
+        {
+            Chunk = (u16_t)MIN(Length, 0xFFFF);
+            tcp_recved(pcb, Chunk);
+            Length -= Chunk;
+        }
+    }
+    UNLOCK_TCPIP_CORE();
+}
+
 static
 BOOLEAN
 WaitForEventSafely(PRKEVENT Event)
@@ -246,9 +272,10 @@ InternalRecvEventHandler(void *arg, PTCP_PCB pcb, struct pbuf *p, const err_t er
 
     if (p)
     {
+        /* The window opens again when the data is read (LibTCPRecved), so a
+         * reader that falls behind stops the sender instead of piling the
+         * data up here */
         LibTCPEnqueuePacket(Connection, p);
-
-        tcp_recved(pcb, p->tot_len);
 
         TCPRecvEventHandler(arg);
     }

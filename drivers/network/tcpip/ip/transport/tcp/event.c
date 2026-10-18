@@ -544,6 +544,8 @@ TCPRecvEventHandler(void *arg)
     PUCHAR RecvBuffer;
     NTSTATUS Status;
 
+    ULONG Consumed = 0;
+
     /* (called in lwIP, under its core lock) */
     LockObject(Connection);
 
@@ -566,10 +568,14 @@ TCPRecvEventHandler(void *arg)
 
         Bucket->Status = Status;
         Bucket->Information = Received;
+        if (Status == STATUS_SUCCESS)
+            Consumed += Received;
 
         CompleteBucket(Connection, Bucket, FALSE);
     }
     UnlockObject(Connection);
+
+    LibTCPRecved(Connection, Consumed);
 }
 
 VOID

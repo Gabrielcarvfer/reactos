@@ -583,6 +583,9 @@ NTSTATUS TCPReceiveData
     {
         UnlockObject(Connection);
         (*BytesReceived) = Received;
+
+        if (Status == STATUS_SUCCESS)
+            LibTCPRecved(Connection, Received);
     }
 
     return Status;

@@ -92,6 +92,7 @@ struct lwip_callback_msg
 };
 
 NTSTATUS    LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHAR RecvBuffer, UINT RecvLen, UINT *Received);
+void        LibTCPRecved(PCONNECTION_ENDPOINT Connection, ULONG Length);
 
 /* Requests finished under lwIP's core lock (event.c) */
 VOID        LibTCPTakeDeferredCompletions(PLIST_ENTRY List);
