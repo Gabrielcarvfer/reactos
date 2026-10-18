@@ -169,9 +169,13 @@ ThemeInitDrawContext(PDRAW_CONTEXT pcontext,
     pcontext->CaptionHeight = pcontext->wi.cyWindowBorders;
     pcontext->CaptionHeight += GetSystemMetrics(pcontext->wi.dwExStyle & WS_EX_TOOLWINDOW ? SM_CYSMCAPTION : SM_CYCAPTION );
 
+    /* The update region of WM_NCPAINT belongs to the system, which deletes it
+     * after the message: only delete the region made here */
+    pcontext->bOwnRgn = FALSE;
     if (hRgn <= (HRGN)1)
     {
         hRgn = CreateRectRgnIndirect(&pcontext->wi.rcWindow);
+        pcontext->bOwnRgn = TRUE;
     }
     pcontext->hRgn = hRgn;
 
@@ -183,7 +187,7 @@ ThemeCleanupDrawContext(PDRAW_CONTEXT pcontext)
 {
     ReleaseDC(pcontext->hWnd ,pcontext->hDC);
 
-    if (pcontext->hRgn != NULL)
+    if (pcontext->hRgn != NULL && pcontext->bOwnRgn)
     {
         DeleteObject(pcontext->hRgn);
     }
@@ -1294,6 +1298,7 @@ HRESULT WINAPI DrawNCPreview(HDC hDC,
     context.wi.dwStyle |= WS_VISIBLE;
 
     context.hRgn = CreateRectRgnIndirect(&context.wi.rcWindow);
+    context.bOwnRgn = TRUE;
     RECT rcAdjPreview = { prcPreview->left, prcPreview->top, prcPreview->right, prcPreview->bottom };
     INT previewWidth = rcAdjPreview.right - rcAdjPreview.left;
     INT previewHeight = rcAdjPreview.bottom - rcAdjPreview.top;

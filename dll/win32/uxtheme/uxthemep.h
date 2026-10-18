@@ -210,6 +210,7 @@ typedef struct _DRAW_CONTEXT
     WINDOWINFO wi;
     BOOL Active; /* wi.dwWindowStatus isn't correct for mdi child windows */
     HRGN hRgn;
+    BOOL bOwnRgn; /* hRgn was made here (else it is WM_NCPAINT's, owned by the system) */
     int CaptionHeight;
 
     /* for double buffering */

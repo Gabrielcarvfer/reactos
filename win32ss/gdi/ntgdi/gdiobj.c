@@ -1178,7 +1178,12 @@ GreDeleteObject(HGDIOBJ hobj)
     pentry = ENTRY_ReferenceEntryByHandle(hobj, 0);
     if (!pentry)
     {
-        DPRINT1("GreDeleteObject: Trying to delete invalid object %p\n", hobj);
+        /* (A program's bug, e.g. deleting twice: say it, but not on every call:
+         * each character of debug output is slow in a VM) */
+        static LONG lInvalidDeletes;
+        LONG lCount = InterlockedIncrement(&lInvalidDeletes);
+        if (lCount <= 10 || (lCount % 1000) == 0)
+            DPRINT1("GreDeleteObject: Trying to delete invalid object %p (%ld times)\n", hobj, lCount);
         return FALSE;
     }
 
