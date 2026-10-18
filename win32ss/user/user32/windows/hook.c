@@ -585,6 +585,10 @@ User32CallHookProcFromKernel(PVOID Arguments, ULONG ArgumentLength)
         if (!(mod = LoadLibraryExW((LPCWSTR)Common->ModuleName, NULL, LOAD_WITH_ALTERED_SEARCH_PATH)))
         {
            ERR("Failed to load Hook Module.\n");
+           /* Common->Proc is an address in the process that set the hook:
+            * there is no hook procedure to call here. Skip it, as if it
+            * passed the event on. */
+           return ZwCallbackReturn(NULL, 0, STATUS_SUCCESS);
         }
         else
         {

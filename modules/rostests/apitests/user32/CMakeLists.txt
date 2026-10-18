@@ -19,6 +19,7 @@ list(APPEND SOURCE
     EmptyClipboard.c
     EnumDisplaySettings.c
     GetClassInfo.c
+    GlobalKeyboardHook.c
     GetDCEx.c
     GetIconInfo.c
     GetKeyState.c
@@ -92,6 +93,15 @@ set_module_type(user32_apitest_menuui win32gui UNICODE)
 add_importlibs(user32_apitest_menuui user32 msvcrt kernel32)
 add_rostests_file(TARGET user32_apitest_menuui)
 add_dependencies(user32_apitest user32_apitest_menuui)
+
+spec2def(user32_apitest_hookdll.dll user32_apitest_hookdll.spec)
+add_library(user32_apitest_hookdll MODULE
+    user32_apitest_hookdll.c
+    ${CMAKE_CURRENT_BINARY_DIR}/user32_apitest_hookdll.def)
+set_module_type(user32_apitest_hookdll win32dll ENTRYPOINT DllMain 12)
+add_importlibs(user32_apitest_hookdll user32 kernel32)
+add_rostests_file(TARGET user32_apitest_hookdll)
+add_dependencies(user32_apitest user32_apitest_hookdll)
 
 add_rostests_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/verclasstest1.manifest")
 add_rostests_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/verclasstest2.manifest")

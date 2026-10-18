@@ -1097,6 +1097,29 @@ IntRemoveHook(PVOID Object)
 /*
   Win32k Kernel Space Hook Caller.
  */
+/* Can this global hook of ptiHook's process run in pti, the thread getting
+ * the input? Only for hooks in a DLL of the same bitness, and never in
+ * threads that cannot call back to user mode. */
+static
+BOOL
+IntHookRunsInContext(PHOOK Hook, PTHREADINFO ptiHook, PTHREADINFO pti)
+{
+    if (Hook->HookId != WH_KEYBOARD && Hook->HookId != WH_MOUSE)
+        return FALSE;
+    if (!Hook->ihmod || !Hook->offPfn || !Hook->ModuleName.Buffer || !Hook->ModuleName.Length)
+        return FALSE;
+    if (pti->TIF_flags & (TIF_SYSTEMTHREAD | TIF_CSRSSTHREAD | TIF_INCLEANUP))
+        return FALSE;
+    if (ptiHook->ppi == pti->ppi)
+        return FALSE; /* (handled below, as before) */
+#ifdef _WIN64
+    if ((ptiHook->ppi->peProcess->Wow64Process != NULL) !=
+        (pti->ppi->peProcess->Wow64Process != NULL))
+        return FALSE;
+#endif
+    return TRUE;
+}
+
 LRESULT
 APIENTRY
 co_HOOK_CallHooks( INT HookId,
@@ -1257,7 +1280,30 @@ co_HOOK_CallHooks( INT HookId,
           }
           UserRefObjectCo(Hook, &Ref);
 
-          if (ptiHook != pti )
+          if (ptiHook != pti && IntHookRunsInContext(Hook, ptiHook, pti))
+          {
+             /* Like Windows: a global WH_KEYBOARD or WH_MOUSE hook in a DLL runs
+              * in the thread that gets the input, with the DLL loaded into its
+              * process. (Sending every key or mouse message to the thread that
+              * set the hook made input wait for that thread, up to 200 ms per
+              * message: kbswitch's keyboard hook made typing crawl whenever
+              * kbswitch did not get the CPU.) */
+             TRACE("Global Hook %d called in context\n", HookId);
+             ObReferenceObject(pti->pEThread);
+             IntReferenceThreadInfo(pti);
+             Result = co_IntCallHookProc( HookId,
+                                          Code,
+                                          wParam,
+                                          lParam,
+                                          Hook->Proc,
+                                          Hook->ihmod,
+                                          Hook->offPfn,
+                                          Hook->Ansi,
+                                         &Hook->ModuleName);
+             IntDereferenceThreadInfo(pti);
+             ObDereferenceObject(pti->pEThread);
+          }
+          else if (ptiHook != pti )
           {
                                                   // Block | TimeOut
              if ( HookId == WH_JOURNALPLAYBACK || //   1   |    0
