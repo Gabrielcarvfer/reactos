@@ -32,6 +32,13 @@ LIST_ENTRY Entries[5];
         ok_eq_pointer(Value, Expected);             \
 } while (0)
 
+#ifdef _WIN64
+/* There are no separate ExfInterlocked* functions here: the checked build
+ * fills a removed entry with the 64-bit pattern in all of them */
+#undef ok_eq_free
+#define ok_eq_free ok_eq_free2
+#endif
+
 START_TEST(ExDoubleList)
 {
     KSPIN_LOCK SpinLock;

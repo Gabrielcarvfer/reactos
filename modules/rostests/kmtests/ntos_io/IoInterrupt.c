@@ -12,10 +12,11 @@
 
 #define CheckSpinLock(Lock, Locked) do                  \
 {                                                       \
-    if (KmtIsMultiProcessorBuild)                       \
-        ok_eq_ulongptr(*(Lock), (Locked) != 0);         \
-    else if (KmtIsCheckedBuild)                         \
+    /* (a checked build stores the owner thread | 1) */ \
+    if (KmtIsCheckedBuild)                              \
         ok_eq_bool(*(Lock) != 0, (Locked) != 0);        \
+    else if (KmtIsMultiProcessorBuild)                  \
+        ok_eq_ulongptr(*(Lock), (Locked) != 0);         \
     else                                                \
         ok_eq_ulongptr(*(Lock), 0);                     \
 } while (0)
