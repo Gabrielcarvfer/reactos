@@ -3416,11 +3416,17 @@ static enum fill_status fill_networkadapterconfig( struct table *table, const st
         rec->index                = aa->u.s.IfIndex;
 #ifndef __REACTOS__
         rec->ipaddress            = get_ipaddress( aa->FirstUnicastAddress );
+#else
+        /* (the table's memory is not zeroed: a field left alone is garbage,
+           which crashed AnyDesk's service when it read this one) */
+        rec->ipaddress            = NULL;
 #endif
         rec->ipconnectionmetric   = 20;
         rec->ipenabled            = -1;
 #ifndef __REACTOS__
         rec->ipsubnet             = get_ipsubnet( aa->FirstUnicastAddress );
+#else
+        rec->ipsubnet             = NULL;
 #endif
         rec->mac_address          = get_mac_address( aa->PhysicalAddress, aa->PhysicalAddressLength );
         rec->settingid            = get_settingid( rec->index );
@@ -4079,6 +4085,8 @@ static enum fill_status fill_operatingsystem( struct table *table, const struct 
     rec->name                   = get_osname( rec->caption );
 #ifndef __REACTOS__
     rec->operatingsystemsku     = get_operatingsystemsku();
+#else
+    rec->operatingsystemsku     = PRODUCT_UNDEFINED;
 #endif
     rec->osarchitecture         = get_osarchitecture();
     rec->oslanguage             = GetSystemDefaultLangID();
