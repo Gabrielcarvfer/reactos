@@ -14,6 +14,7 @@ KMT_TESTFUNC Test_ExFastMutex;
 KMT_TESTFUNC Test_ExHardError;
 KMT_TESTFUNC Test_ExHardErrorInteractive;
 KMT_TESTFUNC Test_ExInterlocked;
+KMT_TESTFUNC Test_ExKlsan;
 KMT_TESTFUNC Test_ExPools;
 KMT_TESTFUNC Test_ExPushLock;
 KMT_TESTFUNC Test_ExResource;
@@ -103,6 +104,7 @@ const KMT_TEST TestList[] =
     { "ExHardError",                        Test_ExHardError },
     { "-ExHardErrorInteractive",            Test_ExHardErrorInteractive },
     { "ExInterlocked",                      Test_ExInterlocked },
+    { "ExKlsan",                            Test_ExKlsan },
     { "ExPools",                            Test_ExPools },
     { "ExPushLock",                         Test_ExPushLock },
     { "ExResource",                         Test_ExResource },

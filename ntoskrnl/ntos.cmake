@@ -456,3 +456,16 @@ if(KCSAN_PROTOTYPE)
     list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kcsan/kcsan.c)
     add_definitions(-DKCSAN_PROTOTYPE)
 endif()
+
+# Kernel memory leak sanitizer (ntoskrnl/klsan/klsan.c): with the boot option
+# KLSAN, every pool block is recorded with its allocation stack, and a scan
+# (NtSystemDebugControl, see sdk/include/reactos/klsan.h) reports the blocks
+# nothing points to any more. amd64 only (the stacks come from the unwind data).
+option(ENABLE_KLSAN "Build the kernel memory leak sanitizer (KLSAN)" OFF)
+if(ENABLE_KLSAN)
+    if(NOT ARCH STREQUAL "amd64")
+        message(FATAL_ERROR "ENABLE_KLSAN: amd64 only")
+    endif()
+    list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/klsan/klsan.c)
+    add_definitions(-DKLSAN)
+endif()

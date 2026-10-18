@@ -2572,6 +2572,12 @@ MmArmInitSystem(IN ULONG Phase,
 
         /* Initialize the loaded module list */
         MiInitializeLoadedModuleList(LoaderBlock);
+
+#ifdef KLSAN
+        /* The memory leak sanitizer (boot option KLSAN): the pools and the
+         * module list are ready, the drivers are not loaded yet */
+        KlsanInitialize(LoaderBlock);
+#endif
     }
 
     //

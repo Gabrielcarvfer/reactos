@@ -9,6 +9,9 @@
 /* INCLUDES *****************************************************************/
 
 #include <ntoskrnl.h>
+#ifdef KLSAN
+#include <reactos/klsan.h>
+#endif
 #define NDEBUG
 #include <debug.h>
 
@@ -234,6 +237,24 @@ NtSystemDebugControl(
                 ProbeForWriteUlong(ReturnLength);
         }
 
+#ifdef KLSAN
+        /* The memory leak sanitizer (ntoskrnl/klsan/klsan.c) */
+        if ((ULONG)Command == SYSDBG_KLSAN_CONTROL)
+        {
+            KLSAN_CONTROL Control;
+
+            if (InputBufferLength < sizeof(Control))
+            {
+                Status = STATUS_INFO_LENGTH_MISMATCH;
+            }
+            else
+            {
+                Control = *(PKLSAN_CONTROL)InputBuffer;
+                Status = KlsanControl(&Control, OutputBuffer, OutputBufferLength, &Length);
+            }
+        }
+        else
+#endif
         switch (Command)
         {
             case SysDbgQueryModuleInformation:

@@ -2,8 +2,8 @@
 include(../ntos.cmake)
 
 include_directories(${REACTOS_SOURCE_DIR}/ntoskrnl)
-if(KCSAN_PROTOTYPE)
-    # (written by ../CMakeLists.txt: ntoskrnl.spec + the KCSAN runtime)
+if(KCSAN_PROTOTYPE OR ENABLE_KLSAN)
+    # (written by ../CMakeLists.txt: ntoskrnl.spec + the KCSAN runtime / KLSAN)
     file(RELATIVE_PATH _ntkrnlmp_spec ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/../ntoskrnl_kcsan.spec)
     spec2def(ntkrnlmp.exe ${_ntkrnlmp_spec})
 else()

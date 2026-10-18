@@ -1016,6 +1016,11 @@ MmUnloadSystemImage(IN PVOID ImageHandle)
         }
     }
 
+#ifdef KLSAN
+    /* (before the image goes away: the leak sanitizer reads its unwind data) */
+    KlsanModuleUnloaded(LdrEntry);
+#endif
+
     /*
      * Delete the image mapping and return its system PTEs. Only images that
      * MiLoadImageSection or MiReloadBootLoadedDrivers put into system PTE
@@ -3475,6 +3480,11 @@ LoaderScan:
 
     /* Write-protect the system image */
     MiWriteProtectSystemImage(LdrEntry->DllBase);
+
+#ifdef KLSAN
+    /* The leak sanitizer walks stacks through its own module table */
+    KlsanModuleLoaded(LdrEntry);
+#endif
 
     /* Initialize the security cookie (Win7 is not doing this yet!) */
     LdrpInitSecurityCookie(LdrEntry);

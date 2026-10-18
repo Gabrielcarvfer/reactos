@@ -1808,6 +1808,33 @@ MmCopyVirtualMemory(IN PEPROCESS SourceProcess,
                     IN KPROCESSOR_MODE PreviousMode,
                     OUT PSIZE_T ReturnSize);
 
+/* klsan.c (ENABLE_KLSAN builds) **********************************************/
+#ifdef KLSAN
+extern BOOLEAN KlsanEnabled;
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KlsanInitialize(IN PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+VOID
+NTAPI
+KlsanModuleLoaded(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+
+VOID
+NTAPI
+KlsanModuleUnloaded(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+
+struct _KLSAN_CONTROL;
+NTSTATUS
+NTAPI
+KlsanControl(
+    IN struct _KLSAN_CONTROL *Control,
+    OUT PVOID Output OPTIONAL,
+    IN ULONG OutputLength,
+    OUT PULONG ReturnLength OPTIONAL);
+#endif
+
 /* wslist.cpp ****************************************************************/
 _Requires_exclusive_lock_held_(WorkingSet->WorkingSetMutex)
 VOID

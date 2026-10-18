@@ -18,6 +18,13 @@
 /* KASAN (kasan.c) */
 BOOLEAN NTAPI KasanIsBlock(IN PVOID P);
 
+#ifdef KLSAN
+/* KLSAN (klsan/klsan.c) has the ExpAllocatePoolWithTagRaw and
+ * ExpFreePoolWithTagRaw everybody uses: they record the blocks for the leak
+ * scans, around the pool functions here */
+PVOID NTAPI ExpAllocatePoolWithTagRaw(IN POOL_TYPE PoolType, IN SIZE_T NumberOfBytes, IN ULONG Tag);
+#endif
+
 #undef ExAllocatePoolWithQuota
 #undef ExAllocatePoolWithQuotaTag
 
@@ -1903,6 +1910,10 @@ ExReturnPoolQuota(IN PVOID P)
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 
+#ifdef KLSAN
+#define ExpAllocatePoolWithTagRaw ExpAllocatePoolWithTagUntracked
+#endif
+
 /*
  * @implemented
  */
@@ -2466,6 +2477,10 @@ ExpAllocatePoolWithTagRaw(IN POOL_TYPE PoolType,
     return POOL_FREE_BLOCK(Entry);
 }
 
+#ifdef KLSAN
+#undef ExpAllocatePoolWithTagRaw
+#endif
+
 /*
  * @implemented
  */
@@ -2494,6 +2509,10 @@ ExAllocatePool(POOL_TYPE PoolType,
 #endif
     return ExAllocatePoolWithTag(PoolType, NumberOfBytes, Tag);
 }
+
+#ifdef KLSAN
+#define ExpFreePoolWithTagRaw ExpFreePoolWithTagUntracked
+#endif
 
 /*
  * @implemented
@@ -2924,6 +2943,10 @@ ExpFreePoolWithTagRaw(IN PVOID P,
 /*
  * @implemented
  */
+#ifdef KLSAN
+#undef ExpFreePoolWithTagRaw
+#endif
+
 /* (ExFreePool is in kasan.c, with ExFreePoolWithTag) */
 
 /*
