@@ -397,9 +397,77 @@ Exit:
     ok(ret == 0, "WSACleanup failed with %d\n", WSAGetLastError());
 }
 
+/* One recv() returns all the data that already arrived, not one segment of
+ * it (each segment used to reach AFD as a receive of its own) */
+static void Test_QueuedData(void)
+{
+    const int Count = 32, Size = 1000;
+    SOCKET Listener = INVALID_SOCKET, Client = INVALID_SOCKET, Server = INVALID_SOCKET;
+    struct sockaddr_in Address;
+    int AddressLength = sizeof(Address);
+    static char Data[1000], Buffer[64 * 1024];
+    BOOL NoDelay = TRUE;
+    WSADATA WsaData;
+    int ret, i, Received;
+
+    ret = WSAStartup(MAKEWORD(2, 2), &WsaData);
+    ok(ret == 0, "WSAStartup failed with %d\n", ret);
+
+    Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Listener != INVALID_SOCKET, "socket failed: %d\n", WSAGetLastError());
+    memset(&Address, 0, sizeof(Address));
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = inet_addr("127.0.0.1");
+    ok(bind(Listener, (struct sockaddr *)&Address, sizeof(Address)) == 0, "bind failed: %d\n", WSAGetLastError());
+    ok(listen(Listener, 1) == 0, "listen failed: %d\n", WSAGetLastError());
+    ok(getsockname(Listener, (struct sockaddr *)&Address, &AddressLength) == 0, "getsockname failed: %d\n", WSAGetLastError());
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Client != INVALID_SOCKET, "socket failed: %d\n", WSAGetLastError());
+    ret = connect(Client, (struct sockaddr *)&Address, sizeof(Address));
+    ok(ret == 0, "connect failed: %d\n", WSAGetLastError());
+    Server = accept(Listener, NULL, NULL);
+    ok(Server != INVALID_SOCKET, "accept failed: %d\n", WSAGetLastError());
+    if (ret != 0 || Server == INVALID_SOCKET)
+    {
+        skip("No connection\n");
+        goto cleanup;
+    }
+
+    /* Separate segments */
+    ok(setsockopt(Client, IPPROTO_TCP, TCP_NODELAY, (char *)&NoDelay, sizeof(NoDelay)) == 0,
+       "setsockopt failed: %d\n", WSAGetLastError());
+    for (i = 0; i < Count; i++)
+    {
+        memset(Data, i, sizeof(Data));
+        ret = send(Client, Data, Size, 0);
+        ok(ret == Size, "send %d returned %d (error %d)\n", i, ret, WSAGetLastError());
+    }
+
+    /* Let it all arrive, then read it with one call */
+    Sleep(500);
+    Received = recv(Server, Buffer, sizeof(Buffer), 0);
+    ok(Received == Count * Size, "recv returned %d, expected %d\n", Received, Count * Size);
+    for (i = 0; i < Received; i++)
+    {
+        if (Buffer[i] != (char)(i / Size))
+        {
+            ok(0, "byte %d is %d, expected %d\n", i, Buffer[i], i / Size);
+            break;
+        }
+    }
+
+cleanup:
+    if (Server != INVALID_SOCKET) closesocket(Server);
+    if (Client != INVALID_SOCKET) closesocket(Client);
+    if (Listener != INVALID_SOCKET) closesocket(Listener);
+    WSACleanup();
+}
+
 START_TEST(recv)
 {
     Test_recv();
     Test_Overread();
+    Test_QueuedData();
 }
 
