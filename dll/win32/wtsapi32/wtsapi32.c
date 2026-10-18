@@ -32,6 +32,70 @@ WINE_DEFAULT_DEBUG_CHANNEL(wtsapi);
 #define GetCurrentProcessToken() ((HANDLE)~(ULONG_PTR)3)
 #endif
 
+#ifdef __REACTOS__
+#include <tlhelp32.h>
+
+/*
+ * ReactOS has no terminal services: one session, the console (winlogon's),
+ * where the user logs on. Its user is the owner of the shell running in it.
+ * Services (AnyDesk) look for the console session's user this way to start a
+ * process on the user's desktop.
+ */
+static BOOL wts_get_session_user_token(DWORD session_id, HANDLE *token)
+{
+    PROCESSENTRY32W entry;
+    HANDLE snapshot, process, process_token;
+    DWORD id;
+    BOOL found = FALSE;
+
+    snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return FALSE;
+    entry.dwSize = sizeof(entry);
+    if (Process32FirstW(snapshot, &entry))
+    {
+        do
+        {
+            if (_wcsicmp(entry.szExeFile, L"explorer.exe") ||
+                !ProcessIdToSessionId(entry.th32ProcessID, &id) || id != session_id)
+                continue;
+            if (!(process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, entry.th32ProcessID)))
+                continue;
+            if (OpenProcessToken(process, TOKEN_DUPLICATE | TOKEN_QUERY, &process_token))
+            {
+                found = DuplicateTokenEx(process_token, MAXIMUM_ALLOWED, NULL, SecurityImpersonation,
+                                         TokenPrimary, token);
+                CloseHandle(process_token);
+            }
+            CloseHandle(process);
+        } while (!found && Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return found;
+}
+
+/* The name or the domain of a session's user */
+static WCHAR *wts_get_session_user_name(DWORD session_id, BOOL domain)
+{
+    WCHAR name[256], domain_name[256], *ret;
+    DWORD name_length = ARRAY_SIZE(name), domain_length = ARRAY_SIZE(domain_name), size = 0;
+    TOKEN_USER *user = NULL;
+    SID_NAME_USE use;
+    HANDLE token;
+    BOOL ok;
+
+    if (!wts_get_session_user_token(session_id, &token)) return NULL;
+    GetTokenInformation(token, TokenUser, NULL, 0, &size);
+    ok = (user = heap_alloc(size)) && GetTokenInformation(token, TokenUser, user, size, &size) &&
+         LookupAccountSidW(NULL, user->User.Sid, name, &name_length, domain_name, &domain_length, &use);
+    heap_free(user);
+    CloseHandle(token);
+    if (!ok) return NULL;
+    ret = heap_alloc((lstrlenW(domain ? domain_name : name) + 1) * sizeof(WCHAR));
+    if (ret) lstrcpyW(ret, domain ? domain_name : name);
+    return ret;
+}
+#endif
+
 /************************************************************
  *                WTSCloseServer  (WTSAPI32.@)
  */
@@ -247,6 +311,35 @@ BOOL WINAPI WTSEnumerateSessionsExA(HANDLE server, DWORD *level, DWORD filter, W
 BOOL WINAPI WTSEnumerateSessionsA(HANDLE hServer, DWORD Reserved, DWORD Version,
     PWTS_SESSION_INFOA* ppSessionInfo, DWORD* pCount)
 {
+#ifdef __REACTOS__
+    WTS_SESSION_INFOA *info;
+    HANDLE token;
+
+    if (!ppSessionInfo || !pCount)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    /* The console session; its name follows the array */
+    info = heap_alloc_zero(sizeof(*info) + sizeof("Console"));
+    if (!info)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    info->SessionId = WTSGetActiveConsoleSessionId();
+    info->pWinStationName = (char *)(info + 1);
+    lstrcpyA(info->pWinStationName, "Console");
+    info->State = WTSConnected;
+    if (wts_get_session_user_token(info->SessionId, &token))
+    {
+        info->State = WTSActive;
+        CloseHandle(token);
+    }
+    *ppSessionInfo = info;
+    *pCount = 1;
+    return TRUE;
+#else
     static int once;
 
     if (!once++) FIXME("Stub %p 0x%08x 0x%08x %p %p\n", hServer, Reserved, Version,
@@ -258,6 +351,7 @@ BOOL WINAPI WTSEnumerateSessionsA(HANDLE hServer, DWORD Reserved, DWORD Version,
     *ppSessionInfo = NULL;
 
     return TRUE;
+#endif
 }
 
 /************************************************************
@@ -266,6 +360,35 @@ BOOL WINAPI WTSEnumerateSessionsA(HANDLE hServer, DWORD Reserved, DWORD Version,
 BOOL WINAPI WTSEnumerateSessionsW(HANDLE hServer, DWORD Reserved, DWORD Version,
     PWTS_SESSION_INFOW* ppSessionInfo, DWORD* pCount)
 {
+#ifdef __REACTOS__
+    WTS_SESSION_INFOW *info;
+    HANDLE token;
+
+    if (!ppSessionInfo || !pCount)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    /* The console session; its name follows the array */
+    info = heap_alloc_zero(sizeof(*info) + sizeof(L"Console"));
+    if (!info)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    info->SessionId = WTSGetActiveConsoleSessionId();
+    info->pWinStationName = (WCHAR *)(info + 1);
+    lstrcpyW(info->pWinStationName, L"Console");
+    info->State = WTSConnected;
+    if (wts_get_session_user_token(info->SessionId, &token))
+    {
+        info->State = WTSActive;
+        CloseHandle(token);
+    }
+    *ppSessionInfo = info;
+    *pCount = 1;
+    return TRUE;
+#else
     FIXME("Stub %p 0x%08x 0x%08x %p %p\n", hServer, Reserved, Version,
           ppSessionInfo, pCount);
 
@@ -275,6 +398,7 @@ BOOL WINAPI WTSEnumerateSessionsW(HANDLE hServer, DWORD Reserved, DWORD Version,
     *ppSessionInfo = NULL;
 
     return TRUE;
+#endif
 }
 
 /************************************************************
@@ -482,10 +606,48 @@ BOOL WINAPI WTSQuerySessionInformationW(
             return TRUE;
         }
 
+        case WTSWinStationName:
+        {
+            WCHAR* name = heap_alloc(sizeof(L"Console"));
+            if (!name)
+            {
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return FALSE;
+            }
+            lstrcpyW(name, L"Console");
+            *Buffer = name;
+            *BytesReturned = sizeof(L"Console");
+            return TRUE;
+        }
+
+        case WTSDomainName:
+        {
+            /* The session's user (that of its shell) */
+            WCHAR* name = wts_get_session_user_name(SessionId, TRUE);
+            if (!name) name = heap_alloc_zero(sizeof(WCHAR));
+            if (!name)
+            {
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return FALSE;
+            }
+            *Buffer = name;
+            *BytesReturned = (lstrlenW(name) + 1) * sizeof(WCHAR);
+            return TRUE;
+        }
+
         case WTSUserName:
         {
             WCHAR* username;
             DWORD count = 0;
+
+            /* The session's user (that of its shell), not the caller: a
+             * service asks for the console's user */
+            if ((username = wts_get_session_user_name(SessionId, FALSE)))
+            {
+                *Buffer = username;
+                *BytesReturned = (lstrlenW(username) + 1) * sizeof(WCHAR);
+                return TRUE;
+            }
 
             GetUserNameW(NULL, &count);
             if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
@@ -587,6 +749,39 @@ BOOL WINAPI WTSQuerySessionInformationW(
  */
 BOOL WINAPI WTSQueryUserToken(ULONG session_id, PHANDLE token)
 {
+#ifdef __REACTOS__
+    if (!token)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    /* Only for callers with SeTcbPrivilege (services running as LocalSystem) */
+    {
+        PRIVILEGE_SET privileges;
+        HANDLE own_token;
+        BOOL held = FALSE;
+
+        privileges.PrivilegeCount = 1;
+        privileges.Control = PRIVILEGE_SET_ALL_NECESSARY;
+        privileges.Privilege[0].Attributes = 0;
+        if (LookupPrivilegeValueW(NULL, L"SeTcbPrivilege", &privileges.Privilege[0].Luid) &&
+            OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &own_token))
+        {
+            if (!PrivilegeCheck(own_token, &privileges, &held)) held = FALSE;
+            CloseHandle(own_token);
+        }
+        if (!held)
+        {
+            SetLastError(ERROR_PRIVILEGE_NOT_HELD);
+            return FALSE;
+        }
+    }
+    /* The token of the user logged on in the session (a primary token) */
+    if (wts_get_session_user_token(session_id, token))
+        return TRUE;
+    SetLastError(ERROR_NO_TOKEN);
+    return FALSE;
+#else
     FIXME("%u %p semi-stub!\n", session_id, token);
 
     if (!token)
@@ -598,6 +793,7 @@ BOOL WINAPI WTSQueryUserToken(ULONG session_id, PHANDLE token)
     return DuplicateHandle(GetCurrentProcess(), GetCurrentProcessToken(),
                            GetCurrentProcess(), token,
                            0, FALSE, DUPLICATE_SAME_ACCESS);
+#endif
 }
 
 /************************************************************
