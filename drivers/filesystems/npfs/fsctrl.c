@@ -784,6 +784,24 @@ NpGetConnectionAttribute(
 
     /* TODO: implement "extended attributes" support */
 
+    /* The server end's process is known from its creation, whatever the
+       state of the pipe (Chromium's IPC asks for it, as client and server) */
+    if (strncmp(SystemBuffer, "ServerProcessId", InputBufferLength) == 0 ||
+        strncmp(SystemBuffer, "ServerSessionId", InputBufferLength) == 0)
+    {
+        if (OutputBufferLength < sizeof(ULONG))
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            *(PULONG)SystemBuffer = (SystemBuffer[6] == 'P') ? (ULONG)(ULONG_PTR)Ccb->ServerProcessId
+                                                             : Ccb->ServerSessionId;
+            Irp->IoStatus.Information = sizeof(ULONG);
+        }
+        goto Cleanup;
+    }
+
     /* HACK: This should be set as an extended attribute by NpCreateClientEnd,
      * and we should query the EA instead of returning PID directly. */
 

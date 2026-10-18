@@ -329,6 +329,10 @@ NpCreateCcb(IN PNP_FCB Fcb,
     CcbNonPaged->NodeType = NPFS_NTC_NONPAGED_CCB;
 
     RtlZeroMemory(Ccb, sizeof(*Ccb));
+
+    /* (the server end is created in the context of its process) */
+    Ccb->ServerProcessId = PsGetCurrentProcessId();
+    Ccb->ServerSessionId = PsGetCurrentProcessSessionId();
     Ccb->NodeType = NPFS_NTC_CCB;
     Ccb->NonPagedCcb = CcbNonPaged;
     Ccb->FileObject[FILE_PIPE_SERVER_END] = FileObject;

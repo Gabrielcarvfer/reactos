@@ -52,6 +52,7 @@ list(APPEND SOURCE
     NewApis.c
     PackageNames.c
     PipeCompletionPort.c
+    PipeProcessIds.c
     Pipes.c
     PrivMoveFileIdentityW.c
     ProcThreadAttributeList.c

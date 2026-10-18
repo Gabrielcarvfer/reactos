@@ -51,6 +51,7 @@ extern void func_NestedJobs(void);
 extern void func_NewApis(void);
 extern void func_PackageNames(void);
 extern void func_PipeCompletionPort(void);
+extern void func_PipeProcessIds(void);
 extern void func_Pipes(void);
 extern void func_PrivMoveFileIdentityW(void);
 extern void func_ProcThreadAttributeList(void);
@@ -130,6 +131,7 @@ const struct test winetest_testlist[] =
     { "NewApis",                     func_NewApis },
     { "PackageNames",                func_PackageNames },
     { "PipeCompletionPort",          func_PipeCompletionPort },
+    { "PipeProcessIds",              func_PipeProcessIds },
     { "Pipes",                       func_Pipes },
     { "PrivMoveFileIdentityW",       func_PrivMoveFileIdentityW },
     { "ProcThreadAttributeList", func_ProcThreadAttributeList },
