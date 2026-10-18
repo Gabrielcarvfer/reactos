@@ -56,9 +56,17 @@ int LibTCPDeferOutput(struct tcp_pcb *pcb);
  * add support for other transport mediums */
 #define TCP_MSS                         1460
 
-#define TCP_WND                         0xFFFF
+/* 256 KB windows (window scaling): with 64 KB, at most 64 KB were in flight
+ * per round trip, which capped both directions well below the link */
+#define LWIP_WND_SCALE                  1
+#define TCP_RCV_SCALE                   3
 
-#define TCP_SND_BUF                     TCP_WND
+#define TCP_WND                         (256 * 1024)
+
+#define TCP_SND_BUF                     (256 * 1024)
+
+/* (a u16_t) */
+#define TCP_SNDLOWAT                    (32 * 1024)
 
 #define TCP_MAXRTX                      8
 
