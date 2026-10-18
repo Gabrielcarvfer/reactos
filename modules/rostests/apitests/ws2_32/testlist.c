@@ -17,6 +17,7 @@ extern void func_nonblocking(void);
 extern void func_nostartup(void);
 extern void func_open_osfhandle(void);
 extern void func_recv(void);
+extern void func_RecvFromCancel(void);
 extern void func_send(void);
 extern void func_SkipCompletionPort(void);
 extern void func_SocketNames(void);
@@ -43,6 +44,7 @@ const struct test winetest_testlist[] =
     { "nostartup", func_nostartup },
     { "open_osfhandle", func_open_osfhandle },
     { "recv", func_recv },
+    { "RecvFromCancel", func_RecvFromCancel },
     { "send", func_send },
     { "SkipCompletionPort", func_SkipCompletionPort },
     { "SocketNames", func_SocketNames },

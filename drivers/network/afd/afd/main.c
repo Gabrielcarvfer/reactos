@@ -1196,12 +1196,16 @@ CleanupPendingIrp(PAFD_FCB FCB, PIRP Irp, PIO_STACK_LOCATION IrpSp, PAFD_ACTIVE_
     {
         ASSERT(IrpSp->MajorFunction == IRP_MJ_DEVICE_CONTROL);
 
-        if (IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_RECV)
+        /* (recvfrom/sendto too: the datagram requests start with the same
+         * buffer array and count) */
+        if (IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_RECV ||
+            IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_RECV_DATAGRAM)
         {
             RecvReq = GetLockedData(Irp, IrpSp);
             UnlockBuffers(RecvReq->BufferArray, RecvReq->BufferCount, CheckUnlockExtraBuffers(FCB, IrpSp));
         }
-        else if (IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_SEND)
+        else if (IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_SEND ||
+                 IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_SEND_DATAGRAM)
         {
             SendReq = GetLockedData(Irp, IrpSp);
             UnlockBuffers(SendReq->BufferArray, SendReq->BufferCount, CheckUnlockExtraBuffers(FCB, IrpSp));
