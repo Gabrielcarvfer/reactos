@@ -181,24 +181,56 @@ IntDesktopObjectDelete(
 {
     PWIN32_DELETEMETHOD_PARAMETERS DeleteParameters = Parameters;
     PDESKTOP pdesk = (PDESKTOP)DeleteParameters->Object;
+    BOOL Entered = UserIsEnteredExclusive();
 
     TRACE("Deleting desktop object 0x%p\n", pdesk);
+
+    /* (the last reference may go away outside of win32k, e.g. when a
+     * process ends: the windows and the heap need the user lock) */
+    if (!Entered)
+        UserEnterExclusive();
+
+    /* (lets another thread than the desktop thread destroy its windows) */
+    pdesk->dwDTFlags |= DF_DESTROYED;
+
+    /* The desktop and message windows were made with IntCreateWindow, which
+     * returns them with a reference of their own: give it back too, or
+     * they (and the heap they are in) are never freed. The message window
+     * first: destroying a window looks at the desktop window. */
+    if (pdesk->spwndMessage)
+    {
+        USER_REFERENCE_ENTRY Ref;
+        PWND pwnd = pdesk->spwndMessage;
+
+        UserRefObjectCo(pwnd, &Ref);
+        UserDereferenceObject(pwnd);
+        co_UserDestroyWindow(pwnd);
+        UserDerefObjectCo(pwnd);
+        pdesk->spwndMessage = NULL;
+    }
 
     if (pdesk->pDeskInfo &&
         pdesk->pDeskInfo->spwnd)
     {
-        ASSERT(pdesk->pDeskInfo->spwnd->spwndChild == NULL);
-        co_UserDestroyWindow(pdesk->pDeskInfo->spwnd);
-    }
+        USER_REFERENCE_ENTRY Ref;
+        PWND pwnd = pdesk->pDeskInfo->spwnd;
 
-    if (pdesk->spwndMessage)
-        co_UserDestroyWindow(pdesk->spwndMessage);
+        ASSERT(pwnd->spwndChild == NULL);
+        UserRefObjectCo(pwnd, &Ref);
+        UserDereferenceObject(pwnd);
+        co_UserDestroyWindow(pwnd);
+        UserDerefObjectCo(pwnd);
+        pdesk->pDeskInfo->spwnd = NULL;
+    }
 
     /* Remove the desktop from the window station's list of associated desktops */
     RemoveEntryList(&pdesk->ListEntry);
 
     /* Free the heap */
     IntFreeDesktopHeap(pdesk);
+
+    if (!Entered)
+        UserLeave();
 
     ObDereferenceObject(pdesk->rpwinstaParent);
 
@@ -1837,8 +1869,16 @@ BOOL IntDeRegisterShellHookWindow(HWND hWnd)
 static VOID
 IntFreeDesktopHeap(IN OUT PDESKTOP Desktop)
 {
-    /* FIXME: Disable until unmapping works in mm */
-#if 0
+    /* Objects still in the heap would be freed into it later: then it stays
+     * (as it always did; 20 MB of session space each on 64-bit) */
+    if (Desktop->cHeapAllocs != 0)
+    {
+        ERR("Desktop %p: %ld blocks still in its heap, the heap is kept\n", Desktop, Desktop->cHeapAllocs);
+        return;
+    }
+
+    /* (session space: the delete routine runs attached to the desktop's
+     * session, see ExpWin32SessionCallout) */
     if (Desktop->pheapDesktop != NULL)
     {
         MmUnmapViewInSessionSpace(Desktop->pheapDesktop);
@@ -1850,7 +1890,6 @@ IntFreeDesktopHeap(IN OUT PDESKTOP Desktop)
         ObDereferenceObject(Desktop->hsectionDesktop);
         Desktop->hsectionDesktop = NULL;
     }
-#endif
 }
 
 static VOID

@@ -41,6 +41,9 @@ typedef struct _DESKTOP
     /* Thread blocking input */
     PVOID BlockInputThread;
     LIST_ENTRY ShellHookWindows;
+    /* Blocks allocated with DesktopHeapAlloc and not freed yet: the heap
+     * can only go away with the desktop when none is left */
+    LONG cHeapAllocs;
 } DESKTOP, *PDESKTOP;
 
 // Desktop flags
@@ -206,22 +209,32 @@ static __inline PVOID
 DesktopHeapAlloc(IN PDESKTOP Desktop,
                  IN SIZE_T Bytes)
 {
+    PVOID Block;
+
     /* Desktop heap has no lock, using global user lock instead. */
     ASSERT(UserIsEnteredExclusive());
-    return RtlAllocateHeap(Desktop->pheapDesktop,
-                           HEAP_NO_SERIALIZE,
-                           Bytes);
+    Block = RtlAllocateHeap(Desktop->pheapDesktop,
+                            HEAP_NO_SERIALIZE,
+                            Bytes);
+    if (Block)
+        Desktop->cHeapAllocs++;
+    return Block;
 }
 
 static __inline BOOL
 DesktopHeapFree(IN PDESKTOP Desktop,
                 IN PVOID lpMem)
 {
+    BOOL Freed;
+
     /* Desktop heap has no lock, using global user lock instead. */
     ASSERT(UserIsEnteredExclusive());
-    return RtlFreeHeap(Desktop->pheapDesktop,
-                       HEAP_NO_SERIALIZE,
-                       lpMem);
+    Freed = RtlFreeHeap(Desktop->pheapDesktop,
+                        HEAP_NO_SERIALIZE,
+                        lpMem);
+    if (Freed)
+        Desktop->cHeapAllocs--;
+    return Freed;
 }
 
 static __inline PVOID

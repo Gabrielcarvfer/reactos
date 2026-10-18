@@ -400,6 +400,59 @@ static void Test_References(void)
     ok (GetThreadDesktop(GetCurrentThreadId()) == hdesk1, "Expected GetThreadDesktop to return hdesk1\n");
 }
 
+/*
+ * Every desktop has a heap of its own, mapped in session space (20 MB of it on
+ * 64-bit). Destroying a desktop must give that back: it used to be kept
+ * forever, so after a few dozen desktops (Chromium-based programs make one
+ * for their sandbox at each start) CreateDesktop failed for good.
+ */
+static DWORD WINAPI DesktopUserThread(LPVOID Param)
+{
+    HDESK hdesk = (HDESK)Param;
+    HWND hwnd;
+
+    if (!SetThreadDesktop(hdesk))
+        return 1;
+    hwnd = CreateWindowExW(0, L"STATIC", L"desktop heap test", WS_POPUP, 0, 0, 10, 10, NULL, NULL, NULL, NULL);
+    if (!hwnd)
+        return 2;
+    DestroyWindow(hwnd);
+    return 0;
+}
+
+static void Test_CreateCloseMany(void)
+{
+    WCHAR Name[64];
+    HDESK hdesk;
+    HANDLE hThread;
+    DWORD ExitCode, Created = 0;
+    int i;
+
+    for (i = 0; i < 60; i++)
+    {
+        wsprintfW(Name, L"DesktopHeapTest%d", i);
+        hdesk = CreateDesktopW(Name, NULL, NULL, 0, DESKTOP_ALL_ACCESS, NULL);
+        ok(hdesk != NULL, "Desktop %d: CreateDesktopW failed with %lu\n", i, GetLastError());
+        if (!hdesk)
+            break;
+        Created++;
+
+        /* (a thread on it, with a window: objects in its heap) */
+        hThread = CreateThread(NULL, 0, DesktopUserThread, hdesk, 0, NULL);
+        ok(hThread != NULL, "CreateThread failed with %lu\n", GetLastError());
+        if (hThread)
+        {
+            WaitForSingleObject(hThread, INFINITE);
+            ExitCode = 0xdeadbeef;
+            GetExitCodeThread(hThread, &ExitCode);
+            ok(ExitCode == 0, "Desktop %d: the thread failed with %lu\n", i, ExitCode);
+            CloseHandle(hThread);
+        }
+        ok(CloseDesktop(hdesk), "Desktop %d: CloseDesktop failed with %lu\n", i, GetLastError());
+    }
+    ok(Created == 60, "Created %lu desktops\n", Created);
+}
+
 START_TEST(desktop)
 {
     char **test_argv;
@@ -421,4 +474,5 @@ START_TEST(desktop)
     Test_InitialDesktop(test_argv[0]);
     Test_OpenInputDesktop();
     Test_References();
+    Test_CreateCloseMany();
 }

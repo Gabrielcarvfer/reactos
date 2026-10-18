@@ -2878,8 +2878,10 @@ BOOLEAN co_UserDestroyWindow(PVOID Object)
    /* Check for owner thread */
    if (Window->head.pti != ti)
    {
-       /* Check if we are destroying the desktop window */
-       if (! ((Window->head.rpdesk->dwDTFlags & DF_DESTROYED) && Window == Window->head.rpdesk->pDeskInfo->spwnd))
+       /* Check if we are destroying the desktop window (or its message window) */
+       if (! ((Window->head.rpdesk->dwDTFlags & DF_DESTROYED) &&
+              (Window == Window->head.rpdesk->pDeskInfo->spwnd ||
+               Window == Window->head.rpdesk->spwndMessage)))
        {
            EngSetLastError(ERROR_ACCESS_DENIED);
            return FALSE;
