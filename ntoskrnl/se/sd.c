@@ -1370,10 +1370,12 @@ SeAssignSecurityEx(
 
     PAGED_CODE();
 
-    *NewDescriptor = NULL;
+    /* Windows writes *NewDescriptor only when it returns: a caller's
+     * bad token or owner faults before it is touched (kmtest SeInheritance) */
 
     if (!ARGUMENT_PRESENT(SubjectContext))
     {
+        *NewDescriptor = NULL;
         return STATUS_NO_TOKEN;
     }
 
@@ -1403,6 +1405,7 @@ SeAssignSecurityEx(
             if (!ARGUMENT_PRESENT(ParentDescriptor))
             {
                 SeUnlockSubjectContext(SubjectContext);
+                *NewDescriptor = NULL;
                 return STATUS_INVALID_OWNER;
             }
 
@@ -1410,6 +1413,7 @@ SeAssignSecurityEx(
             if (!Owner)
             {
                 SeUnlockSubjectContext(SubjectContext);
+                *NewDescriptor = NULL;
                 return STATUS_INVALID_OWNER;
             }
         }
@@ -1435,6 +1439,7 @@ SeAssignSecurityEx(
             if (!ARGUMENT_PRESENT(ParentDescriptor))
             {
                 SeUnlockSubjectContext(SubjectContext);
+                *NewDescriptor = NULL;
                 return STATUS_INVALID_PRIMARY_GROUP;
             }
 
@@ -1442,6 +1447,7 @@ SeAssignSecurityEx(
             if (!Group)
             {
                 SeUnlockSubjectContext(SubjectContext);
+                *NewDescriptor = NULL;
                 return STATUS_INVALID_PRIMARY_GROUP;
             }
         }
@@ -1454,6 +1460,7 @@ SeAssignSecurityEx(
     if (!Group)
     {
         SeUnlockSubjectContext(SubjectContext);
+        *NewDescriptor = NULL;
         return STATUS_INVALID_PRIMARY_GROUP;
     }
     GroupLength = RtlLengthSid(Group);
@@ -1545,6 +1552,7 @@ SeAssignSecurityEx(
     {
         DPRINT1("ExAlloctePool() failed\n");
         SeUnlockSubjectContext(SubjectContext);
+        *NewDescriptor = NULL;
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 

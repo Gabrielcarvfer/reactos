@@ -630,7 +630,10 @@ SepPropagateAcl(
         AceDest = (PACCESS_ALLOWED_ACE)CurrentDest;
         AceSource = (PACCESS_ALLOWED_ACE)CurrentSource;
 
-        if (AceSource->Header.AceType > ACCESS_MAX_MS_V2_ACE_TYPE)
+        /* A mandatory label ACE has the same layout as the ones below and is
+         * inherited the same way (kmtest SeInheritance) */
+        if (AceSource->Header.AceType > ACCESS_MAX_MS_V2_ACE_TYPE &&
+            AceSource->Header.AceType != SYSTEM_MANDATORY_LABEL_ACE_TYPE)
         {
             /* FIXME: handle object & compound ACEs */
             AceSize = AceSource->Header.AceSize;
@@ -650,7 +653,8 @@ SepPropagateAcl(
         ASSERT(AceSource->Header.AceType == ACCESS_ALLOWED_ACE_TYPE ||
                AceSource->Header.AceType == ACCESS_DENIED_ACE_TYPE ||
                AceSource->Header.AceType == SYSTEM_AUDIT_ACE_TYPE ||
-               AceSource->Header.AceType == SYSTEM_ALARM_ACE_TYPE);
+               AceSource->Header.AceType == SYSTEM_ALARM_ACE_TYPE ||
+               AceSource->Header.AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE);
 
         ASSERT(AceSource->Header.AceSize % sizeof(ULONG) == 0);
         ASSERT(AceSource->Header.AceSize >= sizeof(*AceSource));
@@ -673,8 +677,12 @@ SepPropagateAcl(
         /* Map effective ACE to specific rights */
         if (!(AceFlags & INHERIT_ONLY_ACE))
         {
-            RtlMapGenericMask(&Mask, GenericMapping);
-            Mask &= GenericMapping->GenericAll;
+            /* (a label's mask is a policy, not access rights) */
+            if (AceSource->Header.AceType != SYSTEM_MANDATORY_LABEL_ACE_TYPE)
+            {
+                RtlMapGenericMask(&Mask, GenericMapping);
+                Mask &= GenericMapping->GenericAll;
+            }
 
             if (IsInherited)
             {
