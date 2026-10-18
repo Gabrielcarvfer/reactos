@@ -43,6 +43,11 @@ extern IActivationFactory *json_value_factory;
 
 HRESULT json_array_push( IJsonArray *iface, IJsonValue *value );
 
+/* json_collections.c: iterators over object members and array elements */
+HRESULT json_object_iterator_create( IMap_HSTRING_IInspectable *members,
+                                     IIterator_IKeyValuePair_HSTRING_IJsonValue **out );
+HRESULT json_array_iterator_create( IJsonValue **elements, UINT32 length, IIterator_IJsonValue **out );
+
 /* Stringify (json_value.c): the text of a value, object or array */
 struct json_writer
 {

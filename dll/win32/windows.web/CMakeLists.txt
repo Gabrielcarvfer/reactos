@@ -4,6 +4,7 @@ spec2def(windows.web.dll windows.web.spec)
 
 list(APPEND SOURCE
     json_array.c
+    json_collections.c
     json_object.c
     json_value.c
     main.c

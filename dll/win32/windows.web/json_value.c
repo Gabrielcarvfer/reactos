@@ -119,6 +119,7 @@ static const struct IActivationFactoryVtbl factory_vtbl =
 struct json_value
 {
     IJsonValue IJsonValue_iface;
+    IStringable IStringable_iface;
     LONG ref;
 
     JsonValueType json_value_type;
@@ -149,6 +150,13 @@ static HRESULT WINAPI json_value_QueryInterface( IJsonValue *iface, REFIID iid, 
         IsEqualGUID( iid, &IID_IJsonValue ))
     {
         *out = &impl->IJsonValue_iface;
+        IInspectable_AddRef( *out );
+        return S_OK;
+    }
+
+    if (IsEqualGUID( iid, &IID_IStringable ))
+    {
+        *out = &impl->IStringable_iface;
         IInspectable_AddRef( *out );
         return S_OK;
     }
@@ -401,6 +409,29 @@ static HRESULT WINAPI json_value_GetObject( IJsonValue *iface, IJsonObject **val
     return S_OK;
 }
 
+DEFINE_IINSPECTABLE( json_value_stringable, IStringable, struct json_value, IJsonValue_iface )
+
+/* ToString: the JSON text, as Stringify */
+static HRESULT WINAPI json_value_stringable_ToString( IStringable *iface, HSTRING *value )
+{
+    struct json_value *impl = impl_from_IStringable( iface );
+    TRACE( "iface %p, value %p.\n", iface, value );
+    return IJsonValue_Stringify( &impl->IJsonValue_iface, value );
+}
+
+static const struct IStringableVtbl json_value_stringable_vtbl =
+{
+    json_value_stringable_QueryInterface,
+    json_value_stringable_AddRef,
+    json_value_stringable_Release,
+    /* IInspectable methods */
+    json_value_stringable_GetIids,
+    json_value_stringable_GetRuntimeClassName,
+    json_value_stringable_GetTrustLevel,
+    /* IStringable methods */
+    json_value_stringable_ToString,
+};
+
 static const struct IJsonValueVtbl json_value_vtbl =
 {
     json_value_QueryInterface,
@@ -589,6 +620,7 @@ static HRESULT parse_json_value( struct json_buffer *json, IJsonValue **value )
 
     if (!(impl = calloc( 1, sizeof( *impl ) ))) return E_OUTOFMEMORY;
     impl->IJsonValue_iface.lpVtbl = &json_value_vtbl;
+    impl->IStringable_iface.lpVtbl = &json_value_stringable_vtbl;
     impl->ref = 1;
 
     if (json_buffer_take( json, L"null", TRUE ))
@@ -697,6 +729,7 @@ static HRESULT WINAPI json_value_statics_CreateBooleanValue( IJsonValueStatics *
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
 
     impl->IJsonValue_iface.lpVtbl = &json_value_vtbl;
+    impl->IStringable_iface.lpVtbl = &json_value_stringable_vtbl;
     impl->ref = 1;
     impl->json_value_type = JsonValueType_Boolean;
     impl->boolean_value = input != FALSE;
@@ -716,6 +749,7 @@ static HRESULT WINAPI json_value_statics_CreateNumberValue( IJsonValueStatics *i
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
 
     impl->IJsonValue_iface.lpVtbl = &json_value_vtbl;
+    impl->IStringable_iface.lpVtbl = &json_value_stringable_vtbl;
     impl->ref = 1;
     impl->json_value_type = JsonValueType_Number;
     impl->number_value = input;
@@ -736,6 +770,7 @@ static HRESULT WINAPI json_value_statics_CreateStringValue( IJsonValueStatics *i
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
 
     impl->IJsonValue_iface.lpVtbl = &json_value_vtbl;
+    impl->IStringable_iface.lpVtbl = &json_value_stringable_vtbl;
     impl->ref = 1;
     impl->json_value_type = JsonValueType_String;
     if (FAILED(hr = WindowsDuplicateString( input, &impl->string_value )))
