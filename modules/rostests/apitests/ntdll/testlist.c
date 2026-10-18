@@ -26,6 +26,7 @@ extern void func_strtoul(void);
 extern void func_wcstoul(void);
 extern void func_wcstombs(void);
 
+extern void func_DllInitFail(void);
 extern void func_DllLoadNotification(void);
 extern void func_LdrEnumResources(void);
 extern void func_LdrFindResource_U(void);
@@ -179,6 +180,7 @@ const struct test winetest_testlist[] =
     { "wcstoul", func_wcstoul },
     { "wcstombs", func_wcstombs },
 
+    { "DllInitFail",                    func_DllInitFail },
     { "DllLoadNotification",            func_DllLoadNotification },
     { "LdrEnumResources",               func_LdrEnumResources },
     { "LdrFindResource_U",              func_LdrFindResource_U },

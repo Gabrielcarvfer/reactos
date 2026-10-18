@@ -1,6 +1,7 @@
 
 add_subdirectory(load_notifications)
 add_subdirectory(empty_dll)
+add_subdirectory(init_fail_dll)
 
 include_directories($<TARGET_FILE_DIR:load_notifications>)
 include_directories($<TARGET_FILE_DIR:empty_dll>)
@@ -36,6 +37,7 @@ target_link_libraries(ntdll_crt_test_lib ${PSEH_LIB})
 add_dependencies(ntdll_crt_test_lib psdk)
 
 list(APPEND SOURCE
+    DllInitFail.c
     DllLoadNotification.c
     LdrEnumResources.c
     LdrFindResource_U.c
