@@ -391,6 +391,115 @@ DisconnectRegistry(
 }
 
 
+/* The paged pool bytes in use with the registry's tag 'CM  ' (-1: unknown) */
+static LONGLONG
+GetCmPagedPoolUsage(VOID)
+{
+    PSYSTEM_POOLTAG_INFORMATION Info;
+    ULONG Size = 256 * 1024, Length, i;
+    LONGLONG Used = -1;
+    NTSTATUS Status;
+
+    Info = RtlAllocateHeap(RtlGetProcessHeap(), 0, Size);
+    if (!Info)
+        return -1;
+    Status = NtQuerySystemInformation(SystemPoolTagInformation, Info, Size, &Length);
+    if (NT_SUCCESS(Status))
+    {
+        for (i = 0; i < Info->Count; i++)
+        {
+            if (!memcmp(Info->TagInfo[i].Tag, "CM  ", 4))
+            {
+                Used = Info->TagInfo[i].PagedUsed;
+                break;
+            }
+        }
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
+    return Used;
+}
+
+/*
+ * Loading a hive must not keep the copy of the file it reads (it did: every
+ * NtLoadKey left the whole file in paged pool, found by KLSAN). A 512 KB hive
+ * loaded and unloaded 10 times would have leaked 5 MB.
+ */
+static VOID
+TestLoadUnloadPoolUsage(
+    IN PUNICODE_STRING NtTestPath)
+{
+    static const PCWSTR HiveName = L"TestHive3";
+    static const PCWSTR MountPoint = L"\\Registry\\Machine\\TestHive3";
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"Big");
+    HANDLE KeyHandle;
+    PUCHAR Data;
+    LONGLONG Before, After;
+    NTSTATUS Status;
+    ULONG i, Loaded = 0;
+    const ULONG DataSize = 512 * 1024, Rounds = 10;
+
+    Status = CreateProtoHive(&KeyHandle);
+    if (!NT_SUCCESS(Status))
+    {
+        skip("CreateProtoHive() failed; Status 0x%08lx\n", Status);
+        return;
+    }
+    Data = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, DataSize);
+    if (!Data)
+    {
+        DestroyProtoHive(KeyHandle);
+        skip("No memory\n");
+        return;
+    }
+    for (i = 0; i < DataSize; i++)
+        Data[i] = (UCHAR)(i * 7);
+    Status = NtSetValueKey(KeyHandle, &ValueName, 0, 3 /* REG_BINARY */, Data, DataSize);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Data);
+    Status = CreateRegistryFile(NULL, NtTestPath, HiveName, KeyHandle);
+    DestroyProtoHive(KeyHandle);
+    if (!NT_SUCCESS(Status))
+    {
+        skip("CreateRegistryFile() failed; Status 0x%08lx\n", Status);
+        return;
+    }
+
+    /* (a first load, for anything that is set up only once) */
+    Status = ConnectRegistry(NULL, MountPoint, NULL, NtTestPath, HiveName);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+        DisconnectRegistry(NULL, MountPoint, 0);
+
+    Before = GetCmPagedPoolUsage();
+    for (i = 0; i < Rounds; i++)
+    {
+        Status = ConnectRegistry(NULL, MountPoint, NULL, NtTestPath, HiveName);
+        if (!NT_SUCCESS(Status))
+            break;
+        Loaded++;
+        Status = DisconnectRegistry(NULL, MountPoint, 0);
+        if (!NT_SUCCESS(Status))
+            break;
+    }
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    ok_long(Loaded, Rounds);
+    After = GetCmPagedPoolUsage();
+
+    if (Before < 0 || After < 0)
+    {
+        skip("No pool tag information\n");
+    }
+    else
+    {
+        /* (some slack for the registry's other use of the tag meanwhile) */
+        ok(After - Before < (LONGLONG)DataSize * Rounds / 4,
+           "Paged pool 'CM  ' grew by %I64d bytes over %lu loads of a %lu-byte hive\n",
+           After - Before, Loaded, DataSize);
+    }
+
+    MyDeleteFile(NULL, NtTestPath, HiveName, TRUE);
+}
+
 START_TEST(NtLoadUnloadKey)
 {
     typedef struct _HIVE_LIST_ENTRY
@@ -604,6 +713,13 @@ START_TEST(NtLoadUnloadKey)
     Status = NtClose(KeyHandle);
     ok_ntstatus(Status, STATUS_SUCCESS);
 #endif
+
+
+/***********************************************************************************************/
+
+
+    /* Loading and unloading must not leak pool */
+    TestLoadUnloadPoolUsage(&NtTestPath);
 
 
 /***********************************************************************************************/

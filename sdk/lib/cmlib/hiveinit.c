@@ -1191,10 +1191,13 @@ HvLoadHive(
      */
     Hive->Free(BaseBlock, Hive->BaseBlockAlloc);
     Status = HvpInitializeMemoryHive(Hive, HiveData, FileName);
+
+    /* The bins and the base block were copied out of it: the hive does not
+     * use the file data any more */
+    Hive->Free(HiveData, FileSize);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to initialize hive from memory\n");
-        Hive->Free(HiveData, FileSize);
         return Status;
     }
 
