@@ -45,7 +45,7 @@ SHGetStockIconInfo(
     _Inout_ K_SHSTOCKICONINFO *psii)
 {
     HMODULE hModule = shell32_hInstance;
-    UINT ResourceId;
+    UINT ResourceId, LocationId;
     int cx, cy;
 
     TRACE("(%u, 0x%x, %p)\n", siid, uFlags, psii);
@@ -53,16 +53,20 @@ SHGetStockIconInfo(
     if (!psii || psii->cbSize != sizeof(*psii) || siid >= K_SIID_MAX_ICONS)
         return E_INVALIDARG;
 
+    /* ResourceId is for LoadImage: user32 maps the IDI_ ids of its icons to its
+       resources 101 (warning), 103 (error) and 104 (information), which are
+       what the icon location must name (programs extract it from the file) */
     switch (siid)
     {
         case K_SIID_SHIELD: /* (no shield icon yet) */
-        case K_SIID_WARNING: ResourceId = (UINT)(ULONG_PTR)IDI_WARNING; hModule = NULL; break;
-        case K_SIID_INFO:    ResourceId = (UINT)(ULONG_PTR)IDI_INFORMATION; hModule = NULL; break;
-        case K_SIID_ERROR:   ResourceId = (UINT)(ULONG_PTR)IDI_ERROR; hModule = NULL; break;
+        case K_SIID_WARNING: ResourceId = (UINT)(ULONG_PTR)IDI_WARNING; LocationId = 101; hModule = NULL; break;
+        case K_SIID_INFO:    ResourceId = (UINT)(ULONG_PTR)IDI_INFORMATION; LocationId = 104; hModule = NULL; break;
+        case K_SIID_ERROR:   ResourceId = (UINT)(ULONG_PTR)IDI_ERROR; LocationId = 103; hModule = NULL; break;
         default:
             ResourceId = siid + 1;
             if (!FindResourceW(shell32_hInstance, MAKEINTRESOURCEW(ResourceId), (LPCWSTR)RT_GROUP_ICON))
                 ResourceId = IDI_SHELL_DOCUMENT;
+            LocationId = ResourceId;
             break;
     }
 
@@ -76,7 +80,7 @@ SHGetStockIconInfo(
         GetSystemDirectoryW(psii->szPath, _countof(psii->szPath));
         StringCchCatW(psii->szPath, _countof(psii->szPath), L"\\user32.dll");
     }
-    psii->iIcon = -(int)ResourceId;
+    psii->iIcon = -(int)LocationId;
     psii->iSysImageIndex = -1;
     psii->hIcon = NULL;
 
