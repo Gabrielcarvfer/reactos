@@ -8,6 +8,7 @@ list(APPEND SOURCE
     GetOwnerModuleFromTcpEntry.c
     GetOwnerModuleFromUdpEntry.c
     icmp.c
+    NetioTables.c
     SendARP.c
     testlist.c)
 

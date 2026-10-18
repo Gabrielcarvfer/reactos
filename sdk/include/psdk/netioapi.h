@@ -126,6 +126,27 @@ typedef struct _MIB_IPFORWARD_ROW2 {
     NL_ROUTE_ORIGIN Origin;
 } MIB_IPFORWARD_ROW2, *PMIB_IPFORWARD_ROW2;
 
+typedef struct _MIB_IPFORWARD_TABLE2 {
+    ULONG NumEntries;
+    MIB_IPFORWARD_ROW2 Table[1];
+} MIB_IPFORWARD_TABLE2, *PMIB_IPFORWARD_TABLE2;
+
+typedef enum _MIB_IF_TABLE_LEVEL {
+    MibIfTableNormal,
+    MibIfTableRaw,
+    MibIfTableNormalWithoutStatistics
+} MIB_IF_TABLE_LEVEL, *PMIB_IF_TABLE_LEVEL;
+
+typedef enum _MIB_IF_ENTRY_LEVEL {
+    MibIfEntryNormal = 0,
+    MibIfEntryNormalWithoutStatistics = 2
+} MIB_IF_ENTRY_LEVEL, *PMIB_IF_ENTRY_LEVEL;
+
+NETIOAPI_API GetIfEntry2Ex(IN MIB_IF_ENTRY_LEVEL Level, IN OUT PMIB_IF_ROW2 Row);
+NETIOAPI_API GetIfTable2Ex(IN MIB_IF_TABLE_LEVEL Level, OUT PMIB_IF_TABLE2 *Table);
+NETIOAPI_API GetIpForwardTable2(IN ADDRESS_FAMILY Family, OUT PMIB_IPFORWARD_TABLE2 *Table);
+NETIOAPI_API GetUnicastIpAddressEntry(IN OUT PMIB_UNICASTIPADDRESS_ROW Row);
+NETIOAPI_API ConvertLengthToIpv4Mask(IN ULONG MaskLength, OUT PULONG Mask);
 NETIOAPI_API GetUnicastIpAddressTable(IN ADDRESS_FAMILY Family, OUT PMIB_UNICASTIPADDRESS_TABLE *Table);
 NETIOAPI_API GetBestRoute2(IN NET_LUID *InterfaceLuid OPTIONAL, IN NET_IFINDEX InterfaceIndex,
                            IN CONST SOCKADDR_INET *SourceAddress OPTIONAL,

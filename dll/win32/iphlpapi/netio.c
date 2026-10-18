@@ -452,3 +452,205 @@ DWORD WINAPI GetBestRoute2(NET_LUID *InterfaceLuid, NET_IFINDEX InterfaceIndex, 
     }
     return NO_ERROR;
 }
+
+DWORD WINAPI ConvertLengthToIpv4Mask(ULONG MaskLength, PULONG Mask)
+{
+    if (!Mask) return ERROR_INVALID_PARAMETER;
+    if (MaskLength > 32)
+    {
+        *Mask = INADDR_NONE;
+        return ERROR_INVALID_PARAMETER;
+    }
+    *Mask = MaskLength ? htonl(~0u << (32 - MaskLength)) : 0;
+    return NO_ERROR;
+}
+
+/* An interface as a MIB_IF_ROW2 (IPv4 interfaces of the TCP/IP driver) */
+static void FillIfRow2(PMIB_IF_ROW2 Row, const MIB_IFROW *IfRow)
+{
+    ZeroMemory(Row, sizeof(*Row));
+    MakeLuid(&Row->InterfaceLuid, IfRow);
+    Row->InterfaceIndex = IfRow->dwIndex;
+    GetInterfaceGuid(IfRow->dwIndex, &Row->InterfaceGuid);
+    GetAlias(IfRow, Row->Alias, ARRAYSIZE(Row->Alias));
+    _snwprintf(Row->Description, ARRAYSIZE(Row->Description), L"%.*S",
+               (int)min(IfRow->dwDescrLen, IF_MAX_STRING_SIZE), (const char *)IfRow->bDescr);
+    Row->PhysicalAddressLength = min(IfRow->dwPhysAddrLen, IF_MAX_PHYS_ADDRESS_LENGTH);
+    CopyMemory(Row->PhysicalAddress, IfRow->bPhysAddr, Row->PhysicalAddressLength);
+    CopyMemory(Row->PermanentPhysicalAddress, IfRow->bPhysAddr, Row->PhysicalAddressLength);
+    Row->Mtu = IfRow->dwMtu;
+    Row->Type = IfRow->dwType;
+    Row->TunnelType = TUNNEL_TYPE_NONE;
+    Row->MediaType = (IfRow->dwType == IF_TYPE_SOFTWARE_LOOPBACK) ? (NDIS_MEDIUM)17 /* NdisMediumLoopback */ : NdisMedium802_3;
+    Row->PhysicalMediumType = (IfRow->dwType == IF_TYPE_SOFTWARE_LOOPBACK) ? NdisPhysicalMediumUnspecified
+                                                                           : NdisPhysicalMedium802_3;
+    Row->AccessType = (IfRow->dwType == IF_TYPE_SOFTWARE_LOOPBACK) ? NET_IF_ACCESS_LOOPBACK : NET_IF_ACCESS_BROADCAST;
+    Row->DirectionType = NET_IF_DIRECTION_SENDRECEIVE;
+    Row->InterfaceAndOperStatusFlags.HardwareInterface = (IfRow->dwType != IF_TYPE_SOFTWARE_LOOPBACK);
+    Row->InterfaceAndOperStatusFlags.ConnectorPresent = (IfRow->dwType != IF_TYPE_SOFTWARE_LOOPBACK);
+    Row->OperStatus = (IfRow->dwOperStatus >= IF_OPER_STATUS_CONNECTED) ? IfOperStatusUp : IfOperStatusDown;
+    Row->AdminStatus = IfRow->dwAdminStatus ? NET_IF_ADMIN_STATUS_UP : NET_IF_ADMIN_STATUS_DOWN;
+    Row->MediaConnectState = (Row->OperStatus == IfOperStatusUp) ? MediaConnectStateConnected
+                                                                  : MediaConnectStateDisconnected;
+    Row->InterfaceAndOperStatusFlags.NotMediaConnected = (Row->MediaConnectState != MediaConnectStateConnected);
+    Row->ConnectionType = NET_IF_CONNECTION_DEDICATED;
+    Row->TransmitLinkSpeed = IfRow->dwSpeed;
+    Row->ReceiveLinkSpeed = IfRow->dwSpeed;
+    Row->InOctets = IfRow->dwInOctets;
+    Row->InUcastPkts = IfRow->dwInUcastPkts;
+    Row->InNUcastPkts = IfRow->dwInNUcastPkts;
+    Row->InDiscards = IfRow->dwInDiscards;
+    Row->InErrors = IfRow->dwInErrors;
+    Row->InUnknownProtos = IfRow->dwInUnknownProtos;
+    Row->OutOctets = IfRow->dwOutOctets;
+    Row->OutUcastPkts = IfRow->dwOutUcastPkts;
+    Row->OutNUcastPkts = IfRow->dwOutNUcastPkts;
+    Row->OutDiscards = IfRow->dwOutDiscards;
+    Row->OutErrors = IfRow->dwOutErrors;
+    Row->OutQLen = IfRow->dwOutQLen;
+}
+
+DWORD WINAPI GetIfEntry2(PMIB_IF_ROW2 Row)
+{
+    MIB_IFROW IfRow;
+
+    if (!Row) return ERROR_INVALID_PARAMETER;
+    /* The interface is given by its LUID or, without one, its index */
+    if (Row->InterfaceLuid.Value)
+    {
+        if (!GetLuidRow(&Row->InterfaceLuid, &IfRow)) return ERROR_FILE_NOT_FOUND;
+    }
+    else if (!Row->InterfaceIndex || !GetInterfaceRow(Row->InterfaceIndex, &IfRow))
+    {
+        return ERROR_FILE_NOT_FOUND;
+    }
+    FillIfRow2(Row, &IfRow);
+    return NO_ERROR;
+}
+
+DWORD WINAPI GetIfEntry2Ex(MIB_IF_ENTRY_LEVEL Level, PMIB_IF_ROW2 Row)
+{
+    UNREFERENCED_PARAMETER(Level);
+    return GetIfEntry2(Row);
+}
+
+DWORD WINAPI GetIfTable2Ex(MIB_IF_TABLE_LEVEL Level, PMIB_IF_TABLE2 *Table)
+{
+    PMIB_IFTABLE Interfaces;
+    PMIB_IF_TABLE2 Result;
+    DWORD i;
+
+    UNREFERENCED_PARAMETER(Level);
+    if (!Table) return ERROR_INVALID_PARAMETER;
+    *Table = NULL;
+    if (!(Interfaces = GetInterfaces())) return ERROR_NOT_ENOUGH_MEMORY;
+
+    Result = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                       FIELD_OFFSET(MIB_IF_TABLE2, Table[Interfaces->dwNumEntries]));
+    if (!Result)
+    {
+        HeapFree(GetProcessHeap(), 0, Interfaces);
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    for (i = 0; i < Interfaces->dwNumEntries; i++)
+        FillIfRow2(&Result->Table[i], &Interfaces->table[i]);
+    Result->NumEntries = Interfaces->dwNumEntries;
+    HeapFree(GetProcessHeap(), 0, Interfaces);
+    *Table = Result;
+    return NO_ERROR;
+}
+
+DWORD WINAPI GetIfTable2(PMIB_IF_TABLE2 *Table)
+{
+    return GetIfTable2Ex(MibIfTableNormal, Table);
+}
+
+DWORD WINAPI GetIpForwardTable2(ADDRESS_FAMILY Family, PMIB_IPFORWARD_TABLE2 *Table)
+{
+    PMIB_IPFORWARDTABLE Routes = NULL;
+    PMIB_IPFORWARD_TABLE2 Result;
+    ULONG Size = 0;
+    DWORD Error, i;
+
+    if (!Table || (Family != AF_UNSPEC && Family != AF_INET && Family != AF_INET6))
+        return ERROR_INVALID_PARAMETER;
+    *Table = NULL;
+
+    /* IPv4 only (there is no IPv6 stack) */
+    if (Family != AF_INET6)
+    {
+        while ((Error = GetIpForwardTable(Routes, &Size, FALSE)) == ERROR_INSUFFICIENT_BUFFER)
+        {
+            HeapFree(GetProcessHeap(), 0, Routes);
+            if (!(Routes = HeapAlloc(GetProcessHeap(), 0, Size))) return ERROR_NOT_ENOUGH_MEMORY;
+        }
+        if (Error != NO_ERROR)
+        {
+            HeapFree(GetProcessHeap(), 0, Routes);
+            Routes = NULL;
+            if (Error != ERROR_NO_DATA) return Error;
+        }
+    }
+
+    Result = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                       FIELD_OFFSET(MIB_IPFORWARD_TABLE2, Table[Routes ? Routes->dwNumEntries : 0]));
+    if (!Result)
+    {
+        HeapFree(GetProcessHeap(), 0, Routes);
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    for (i = 0; Routes && i < Routes->dwNumEntries; i++)
+    {
+        const MIB_IPFORWARDROW *Route = &Routes->table[i];
+        PMIB_IPFORWARD_ROW2 Row = &Result->Table[i];
+        MIB_IFROW IfRow;
+
+        if (GetInterfaceRow(Route->dwForwardIfIndex, &IfRow))
+            MakeLuid(&Row->InterfaceLuid, &IfRow);
+        Row->InterfaceIndex = Route->dwForwardIfIndex;
+        Row->DestinationPrefix.Prefix.Ipv4.sin_family = AF_INET;
+        Row->DestinationPrefix.Prefix.Ipv4.sin_addr.s_addr = Route->dwForwardDest;
+        Row->DestinationPrefix.PrefixLength = (UINT8)MaskLength(Route->dwForwardMask);
+        Row->NextHop.Ipv4.sin_family = AF_INET;
+        Row->NextHop.Ipv4.sin_addr.s_addr = Route->dwForwardNextHop;
+        Row->ValidLifetime = 0xffffffff;
+        Row->PreferredLifetime = 0xffffffff;
+        Row->Metric = Route->dwForwardMetric1;
+        Row->Protocol = (NL_ROUTE_PROTOCOL)Route->dwForwardProto;
+        Row->Loopback = ((ntohl(Route->dwForwardDest) >> 24) == 127);
+        Row->Age = Route->dwForwardAge;
+        Row->Origin = NlroManual;
+    }
+    Result->NumEntries = Routes ? Routes->dwNumEntries : 0;
+    HeapFree(GetProcessHeap(), 0, Routes);
+    *Table = Result;
+    return NO_ERROR;
+}
+
+DWORD WINAPI GetUnicastIpAddressEntry(PMIB_UNICASTIPADDRESS_ROW Row)
+{
+    PMIB_UNICASTIPADDRESS_TABLE Table;
+    DWORD Error, i;
+
+    if (!Row) return ERROR_INVALID_PARAMETER;
+    if (Row->Address.si_family != AF_INET) return ERROR_NOT_FOUND;
+    Error = GetUnicastIpAddressTable(AF_INET, &Table);
+    if (Error != NO_ERROR) return Error;
+
+    Error = ERROR_NOT_FOUND;
+    for (i = 0; i < Table->NumEntries; i++)
+    {
+        const MIB_UNICASTIPADDRESS_ROW *Entry = &Table->Table[i];
+
+        if (Entry->Address.Ipv4.sin_addr.s_addr != Row->Address.Ipv4.sin_addr.s_addr)
+            continue;
+        if ((Row->InterfaceLuid.Value && Row->InterfaceLuid.Value != Entry->InterfaceLuid.Value) ||
+            (!Row->InterfaceLuid.Value && Row->InterfaceIndex && Row->InterfaceIndex != Entry->InterfaceIndex))
+            continue;
+        *Row = *Entry;
+        Error = NO_ERROR;
+        break;
+    }
+    FreeMibTable(Table);
+    return Error;
+}
