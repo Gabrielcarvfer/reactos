@@ -566,6 +566,8 @@ MiniSendComplete(
 
         NDIS_PER_PACKET_INFO_FROM_PACKET(Packet,
                                          ScatterGatherListPacketInfo) = NULL;
+
+        ProFreeCoalescedPacket(Adapter, Packet);
     }
 
     (*AdapterBinding->ProtocolBinding->Chars.SendCompleteHandler)(
@@ -2621,6 +2623,8 @@ NdisIAddDevice(
   Adapter = (PLOGICAL_ADAPTER)DeviceObject->DeviceExtension;
   KeInitializeSpinLock(&Adapter->NdisMiniportBlock.Lock);
   InitializeListHead(&Adapter->ProtocolListHead);
+  KeInitializeSpinLock(&Adapter->CoalescedLock);
+  InitializeListHead(&Adapter->CoalescedList);
 
   Status = IoRegisterDeviceInterface(PhysicalDeviceObject,
                                      &GUID_DEVINTERFACE_NET,

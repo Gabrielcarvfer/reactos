@@ -26,6 +26,93 @@ typedef struct _DMA_CONTEXT {
     PNDIS_PACKET Packet;
 } DMA_CONTEXT, *PDMA_CONTEXT;
 
+/* GetScatterGatherList maps one MDL: a packet made of several buffers is
+ * sent from a copy of its data in one buffer (until the send completes) */
+typedef struct _COALESCED_PACKET {
+    LIST_ENTRY ListEntry;
+    PNDIS_PACKET Packet;
+    PMDL Mdl;
+    UCHAR Data[ANYSIZE_ARRAY];
+} COALESCED_PACKET, *PCOALESCED_PACKET;
+
+#define TAG_NDIS_COALESCE 'cSDN'
+
+static
+PMDL
+ProCoalescePacket(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet, UINT PacketLength)
+{
+    PCOALESCED_PACKET Coalesced;
+    PNDIS_BUFFER Buffer;
+    PVOID Va;
+    UINT Length, Offset = 0;
+    KIRQL OldIrql;
+
+    Coalesced = ExAllocatePoolWithTag(NonPagedPool,
+                                      FIELD_OFFSET(COALESCED_PACKET, Data[PacketLength]),
+                                      TAG_NDIS_COALESCE);
+    if (!Coalesced)
+        return NULL;
+
+    NdisQueryPacket(Packet, NULL, NULL, &Buffer, NULL);
+    while (Buffer && Offset < PacketLength)
+    {
+        NdisQueryBufferSafe(Buffer, &Va, &Length, HighPagePriority);
+        if (!Va)
+        {
+            ExFreePoolWithTag(Coalesced, TAG_NDIS_COALESCE);
+            return NULL;
+        }
+        Length = min(Length, PacketLength - Offset);
+        RtlCopyMemory(Coalesced->Data + Offset, Va, Length);
+        Offset += Length;
+        NdisGetNextBuffer(Buffer, &Buffer);
+    }
+
+    Coalesced->Mdl = IoAllocateMdl(Coalesced->Data, PacketLength, FALSE, FALSE, NULL);
+    if (!Coalesced->Mdl)
+    {
+        ExFreePoolWithTag(Coalesced, TAG_NDIS_COALESCE);
+        return NULL;
+    }
+    MmBuildMdlForNonPagedPool(Coalesced->Mdl);
+
+    Coalesced->Packet = Packet;
+    KeAcquireSpinLock(&Adapter->CoalescedLock, &OldIrql);
+    InsertTailList(&Adapter->CoalescedList, &Coalesced->ListEntry);
+    KeReleaseSpinLock(&Adapter->CoalescedLock, OldIrql);
+
+    return Coalesced->Mdl;
+}
+
+VOID
+ProFreeCoalescedPacket(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet)
+{
+    PCOALESCED_PACKET Coalesced = NULL;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    if (IsListEmpty(&Adapter->CoalescedList))
+        return;
+
+    KeAcquireSpinLock(&Adapter->CoalescedLock, &OldIrql);
+    for (Entry = Adapter->CoalescedList.Flink; Entry != &Adapter->CoalescedList; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, COALESCED_PACKET, ListEntry)->Packet == Packet)
+        {
+            Coalesced = CONTAINING_RECORD(Entry, COALESCED_PACKET, ListEntry);
+            RemoveEntryList(Entry);
+            break;
+        }
+    }
+    KeReleaseSpinLock(&Adapter->CoalescedLock, OldIrql);
+
+    if (Coalesced)
+    {
+        IoFreeMdl(Coalesced->Mdl);
+        ExFreePoolWithTag(Coalesced, TAG_NDIS_COALESCE);
+    }
+}
+
 PNET_PNP_EVENT
 ProSetupPnPEvent(
     NET_PNP_EVENT_CODE EventCode,
@@ -488,7 +575,8 @@ ProSend(
   PNDIS_BUFFER NdisBuffer;
   PDMA_CONTEXT Context;
   NDIS_STATUS NdisStatus;
-  UINT PacketLength;
+  UINT PacketLength, BufferCount;
+  PMDL Mdl;
   KIRQL OldIrql;
 
   NDIS_DbgPrint(MAX_TRACE, ("Called.\n"));
@@ -531,13 +619,27 @@ ProSend(
 
             NdisQueryPacket(Packet,
                             NULL,
-                            NULL,
+                            &BufferCount,
                             &NdisBuffer,
                             &PacketLength);
+
+            /* The scatter/gather list covers one MDL: copy a packet of
+             * several buffers into one (the miniport got only the first
+             * buffer's pages, with the length of the whole packet) */
+            Mdl = NdisBuffer;
+            if (BufferCount > 1 || MmGetMdlByteCount(NdisBuffer) < PacketLength)
+            {
+                Mdl = ProCoalescePacket(Adapter, Packet, PacketLength);
+                if (!Mdl) {
+                    NDIS_DbgPrint(MIN_TRACE, ("Insufficient resources\n"));
+                    return NDIS_STATUS_RESOURCES;
+                }
+            }
 
             Context = ExAllocatePool(NonPagedPool, sizeof(DMA_CONTEXT));
             if (!Context) {
                 NDIS_DbgPrint(MIN_TRACE, ("Insufficient resources\n"));
+                ProFreeCoalescedPacket(Adapter, Packet);
                 return NDIS_STATUS_RESOURCES;
             }
 
@@ -546,13 +648,13 @@ ProSend(
 
             KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
 
-            KeFlushIoBuffers(NdisBuffer, FALSE, TRUE);
+            KeFlushIoBuffers(Mdl, FALSE, TRUE);
 
             NdisStatus = Adapter->NdisMiniportBlock.SystemAdapterObject->DmaOperations->GetScatterGatherList(
                           Adapter->NdisMiniportBlock.SystemAdapterObject,
                           Adapter->NdisMiniportBlock.PhysicalDeviceObject,
-                          NdisBuffer,
-                          MmGetMdlVirtualAddress(NdisBuffer),
+                          Mdl,
+                          MmGetMdlVirtualAddress(Mdl),
                           PacketLength,
                           ScatterGatherSendPacket,
                           Context,
@@ -562,6 +664,8 @@ ProSend(
 
             if (!NT_SUCCESS(NdisStatus)) {
                 NDIS_DbgPrint(MIN_TRACE, ("GetScatterGatherList failed! (%x)\n", NdisStatus));
+                ExFreePool(Context);
+                ProFreeCoalescedPacket(Adapter, Packet);
                 return NdisStatus;
             }
 

@@ -100,6 +100,8 @@ typedef struct _LOGICAL_ADAPTER
     BOOLEAN                    BusInterfaceQueried;
     PVOID volatile             SerialOwner;             /* Processor in a serialized miniport */
     LONG                       SerialCount;             /* Its nesting depth */
+    KSPIN_LOCK                 CoalescedLock;           /* Protects CoalescedList */
+    LIST_ENTRY                 CoalescedList;           /* Packets sent from a copy (ProSend) */
 } LOGICAL_ADAPTER, *PLOGICAL_ADAPTER;
 
 /*

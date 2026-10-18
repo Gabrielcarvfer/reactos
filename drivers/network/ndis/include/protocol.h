@@ -70,6 +70,9 @@ NDIS_STATUS
 proSendPacketToMiniport(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet);
 
 VOID
+ProFreeCoalescedPacket(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet);
+
+VOID
 NTAPI
 ndisBindMiniportsToProtocol(OUT PNDIS_STATUS Status, IN PPROTOCOL_BINDING Protocol);
 
