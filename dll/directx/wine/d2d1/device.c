@@ -2089,13 +2089,214 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_ID2D1DeviceContext_CreateBit
     return hr;
 }
 
+struct d2d_color_context
+{
+    ID2D1ColorContext1 ID2D1ColorContext1_iface;
+    LONG refcount;
+
+    ID2D1Factory *factory;
+    D2D1_COLOR_CONTEXT_TYPE type;
+    DXGI_COLOR_SPACE_TYPE dxgi_space;
+    D2D1_COLOR_SPACE space;
+    BYTE *profile;
+    UINT32 profile_size;
+};
+
+static inline struct d2d_color_context *impl_from_ID2D1ColorContext(ID2D1ColorContext1 *iface)
+{
+    return CONTAINING_RECORD(iface, struct d2d_color_context, ID2D1ColorContext1_iface);
+}
+
+static HRESULT STDMETHODCALLTYPE d2d_color_context_QueryInterface(ID2D1ColorContext1 *iface, REFIID iid, void **out)
+{
+    TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
+
+    if (IsEqualGUID(iid, &IID_ID2D1ColorContext1)
+            || IsEqualGUID(iid, &IID_ID2D1ColorContext)
+            || IsEqualGUID(iid, &IID_ID2D1Resource)
+            || IsEqualGUID(iid, &IID_IUnknown))
+    {
+        ID2D1ColorContext1_AddRef(iface);
+        *out = iface;
+        return S_OK;
+    }
+
+    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
+
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE d2d_color_context_AddRef(ID2D1ColorContext1 *iface)
+{
+    struct d2d_color_context *context = impl_from_ID2D1ColorContext(iface);
+    ULONG refcount = InterlockedIncrement(&context->refcount);
+
+    TRACE("%p increasing refcount to %lu.\n", iface, refcount);
+
+    return refcount;
+}
+
+static ULONG STDMETHODCALLTYPE d2d_color_context_Release(ID2D1ColorContext1 *iface)
+{
+    struct d2d_color_context *context = impl_from_ID2D1ColorContext(iface);
+    ULONG refcount = InterlockedDecrement(&context->refcount);
+
+    TRACE("%p decreasing refcount to %lu.\n", iface, refcount);
+
+    if (!refcount)
+    {
+        ID2D1Factory_Release(context->factory);
+        free(context->profile);
+        free(context);
+    }
+
+    return refcount;
+}
+
+static void STDMETHODCALLTYPE d2d_color_context_GetFactory(ID2D1ColorContext1 *iface, ID2D1Factory **factory)
+{
+    struct d2d_color_context *context = impl_from_ID2D1ColorContext(iface);
+
+    TRACE("iface %p, factory %p.\n", iface, factory);
+
+    ID2D1Factory_AddRef(*factory = context->factory);
+}
+
+static D2D1_COLOR_SPACE STDMETHODCALLTYPE d2d_color_context_GetColorSpace(ID2D1ColorContext1 *iface)
+{
+    struct d2d_color_context *context = impl_from_ID2D1ColorContext(iface);
+
+    TRACE("iface %p.\n", iface);
+
+    return context->space;
+}
+
+static UINT32 STDMETHODCALLTYPE d2d_color_context_GetProfileSize(ID2D1ColorContext1 *iface)
+{
+    struct d2d_color_context *context = impl_from_ID2D1ColorContext(iface);
+
+    TRACE("iface %p.\n", iface);
+
+    return context->profile_size;
+}
+
+static HRESULT STDMETHODCALLTYPE d2d_color_context_GetProfile(ID2D1ColorContext1 *iface, BYTE *profile, UINT32 size)
+{
+    struct d2d_color_context *context = impl_from_ID2D1ColorContext(iface);
+
+    TRACE("iface %p, profile %p, size %u.\n", iface, profile, size);
+
+    if (size < context->profile_size)
+        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    if (context->profile_size)
+        memcpy(profile, context->profile, context->profile_size);
+    return S_OK;
+}
+
+static D2D1_COLOR_CONTEXT_TYPE STDMETHODCALLTYPE d2d_color_context_GetColorContextType(ID2D1ColorContext1 *iface)
+{
+    struct d2d_color_context *context = impl_from_ID2D1ColorContext(iface);
+
+    TRACE("iface %p.\n", iface);
+
+    return context->type;
+}
+
+static DXGI_COLOR_SPACE_TYPE STDMETHODCALLTYPE d2d_color_context_GetDXGIColorSpace(ID2D1ColorContext1 *iface)
+{
+    struct d2d_color_context *context = impl_from_ID2D1ColorContext(iface);
+
+    TRACE("iface %p.\n", iface);
+
+    return context->dxgi_space;
+}
+
+static HRESULT STDMETHODCALLTYPE d2d_color_context_GetSimpleColorProfile(ID2D1ColorContext1 *iface,
+        D2D1_SIMPLE_COLOR_PROFILE *simple_profile)
+{
+    TRACE("iface %p, simple_profile %p.\n", iface, simple_profile);
+
+    /* Only for D2D1_COLOR_CONTEXT_TYPE_SIMPLE, which is not created */
+    return D2DERR_INVALID_PROPERTY;
+}
+
+static const ID2D1ColorContext1Vtbl d2d_color_context_vtbl =
+{
+    d2d_color_context_QueryInterface,
+    d2d_color_context_AddRef,
+    d2d_color_context_Release,
+    d2d_color_context_GetFactory,
+    d2d_color_context_GetColorSpace,
+    d2d_color_context_GetProfileSize,
+    d2d_color_context_GetProfile,
+    d2d_color_context_GetColorContextType,
+    d2d_color_context_GetDXGIColorSpace,
+    d2d_color_context_GetSimpleColorProfile,
+};
+
+static HRESULT d2d_color_context_create(struct d2d_device_context *context, D2D1_COLOR_CONTEXT_TYPE type,
+        DXGI_COLOR_SPACE_TYPE dxgi_space, D2D1_COLOR_SPACE space, const BYTE *profile, UINT32 profile_size,
+        ID2D1ColorContext1 **color_context)
+{
+    struct d2d_color_context *object;
+
+    if (!(object = calloc(1, sizeof(*object))))
+        return E_OUTOFMEMORY;
+    if (profile_size && !(object->profile = malloc(profile_size)))
+    {
+        free(object);
+        return E_OUTOFMEMORY;
+    }
+    if (profile_size)
+        memcpy(object->profile, profile, profile_size);
+
+    object->ID2D1ColorContext1_iface.lpVtbl = &d2d_color_context_vtbl;
+    object->refcount = 1;
+    object->type = type;
+    object->dxgi_space = dxgi_space;
+    object->space = space;
+    object->profile_size = profile_size;
+    ID2D1Factory_AddRef(object->factory = context->factory);
+
+    *color_context = &object->ID2D1ColorContext1_iface;
+    return S_OK;
+}
+
+/* A color context only describes the color space: there is no color
+ * management, and sRGB and scRGB have no profile data here. */
 static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateColorContext(ID2D1DeviceContext6 *iface,
         D2D1_COLOR_SPACE space, const BYTE *profile, UINT32 profile_size, ID2D1ColorContext **color_context)
 {
-    FIXME("iface %p, space %#x, profile %p, profile_size %u, color_context %p stub!\n",
+    struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
+
+    TRACE("iface %p, space %#x, profile %p, profile_size %u, color_context %p.\n",
             iface, space, profile, profile_size, color_context);
 
-    return E_NOTIMPL;
+    if (!color_context)
+        return E_POINTER;
+    *color_context = NULL;
+
+    switch (space)
+    {
+        case D2D1_COLOR_SPACE_SRGB:
+            if (profile || profile_size)
+                return E_INVALIDARG;
+            return d2d_color_context_create(context, D2D1_COLOR_CONTEXT_TYPE_ICC, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
+                    space, NULL, 0, (ID2D1ColorContext1 **)color_context);
+        case D2D1_COLOR_SPACE_SCRGB:
+            if (profile || profile_size)
+                return E_INVALIDARG;
+            return d2d_color_context_create(context, D2D1_COLOR_CONTEXT_TYPE_ICC, DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709,
+                    space, NULL, 0, (ID2D1ColorContext1 **)color_context);
+        case D2D1_COLOR_SPACE_CUSTOM:
+            if (!profile || !profile_size)
+                return E_INVALIDARG;
+            return d2d_color_context_create(context, D2D1_COLOR_CONTEXT_TYPE_ICC, DXGI_COLOR_SPACE_CUSTOM,
+                    space, profile, profile_size, (ID2D1ColorContext1 **)color_context);
+        default:
+            return E_INVALIDARG;
+    }
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateColorContextFromFilename(ID2D1DeviceContext6 *iface,
@@ -2911,9 +3112,26 @@ static void STDMETHODCALLTYPE d2d_device_context_DrawSvgDocument(ID2D1DeviceCont
 static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateColorContextFromDxgiColorSpace(
         ID2D1DeviceContext6 *iface, DXGI_COLOR_SPACE_TYPE color_space, ID2D1ColorContext1 **color_context)
 {
-    FIXME("iface %p, color_space %u, color_context %p stub!\n", iface, color_space, color_context);
+    struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
 
-    return E_NOTIMPL;
+    TRACE("iface %p, color_space %u, color_context %p.\n", iface, color_space, color_context);
+
+    if (!color_context)
+        return E_POINTER;
+    *color_context = NULL;
+
+    switch (color_space)
+    {
+        case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709:
+            return d2d_color_context_create(context, D2D1_COLOR_CONTEXT_TYPE_DXGI, color_space,
+                    D2D1_COLOR_SPACE_SRGB, NULL, 0, color_context);
+        case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
+            return d2d_color_context_create(context, D2D1_COLOR_CONTEXT_TYPE_DXGI, color_space,
+                    D2D1_COLOR_SPACE_SCRGB, NULL, 0, color_context);
+        default:
+            FIXME("DXGI color space %u not supported.\n", color_space);
+            return E_INVALIDARG;
+    }
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateColorContextFromSimpleColorProfile(
