@@ -220,6 +220,42 @@ NTSTATUS SendFragments(
     return NdisStatus;
 }
 
+static VOID IPSendDirectComplete
+(PVOID Context, PNDIS_PACKET NdisPacket, NDIS_STATUS NdisStatus)
+{
+    FreeNdisPacket(NdisPacket);
+}
+
+NTSTATUS IPSendDatagramDirect(PIP_PACKET IPPacket, PNEIGHBOR_CACHE_ENTRY NCE)
+/*
+ * FUNCTION: Sends an IP datagram that needs no fragmenting, as it is
+ * ARGUMENTS:
+ *     IPPacket = Pointer to an IP packet: the whole datagram, headers
+ *                included, in the first buffer of its NDIS packet, which
+ *                this takes over
+ *     NCE      = Pointer to NCE for first hop to destination
+ * NOTES:
+ *     IPSendDatagram copies every datagram into a new packet (the first
+ *     "fragment") and waits for it to be sent. A datagram no bigger than the
+ *     MTU, or a large send the adapter segments, can go as it is
+ */
+{
+    PNDIS_PACKET NdisPacket = IPPacket->NdisPacket;
+
+    ASSERT(!IPPacket->ReturnPacket);
+
+    IPPacket->NdisPacket = NULL;
+    IPPacket->Free(IPPacket);
+
+    if (!NBQueuePacket(NCE, NdisPacket, IPSendDirectComplete, NULL))
+    {
+        FreeNdisPacket(NdisPacket);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS IPSendDatagram(PIP_PACKET IPPacket, PNEIGHBOR_CACHE_ENTRY NCE)
 /*
  * FUNCTION: Sends an IP datagram to a remote address

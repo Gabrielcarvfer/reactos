@@ -53,6 +53,9 @@ NDIS_STATUS AllocatePacketWithBuffer( PNDIS_PACKET *NdisPacket,
 
 VOID FreeNdisPacket( PNDIS_PACKET Packet );
 
+NDIS_STATUS AllocatePacketWithHeadroom( PNDIS_PACKET *NdisPacket,
+                                        UINT Len, UINT Headroom, PCHAR *Data );
+
 void GetDataPtr( PNDIS_PACKET Packet,
 		 UINT Offset,
 		 PCHAR *DataOut,

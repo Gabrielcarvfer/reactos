@@ -91,6 +91,9 @@ LibTCPTakeDeferredCompletions(PLIST_ENTRY List)
 
     ASSERT(sys_core_locked());
 
+    /* Send what lwIP gathered into a large send */
+    TCPFlushLargeSend();
+
     if (ReceiveBatchThread != KeGetCurrentThread())
     {
         while (!IsListEmpty(&RecvNotifyList))

@@ -100,6 +100,8 @@ typedef struct _PACKET_CONTEXT {
 					   * in a queue */
     PVOID Context;                        /* Context information for handler */
     UINT  PacketType;                     /* Type of packet */
+    UINT  Headroom;                       /* Free bytes before the data of the first buffer,
+                                           * in the same allocation (AllocatePacketWithHeadroom) */
 } PACKET_CONTEXT, *PPACKET_CONTEXT;
 
 /* The ProtocolReserved field is structured as a PACKET_CONTEXT */
@@ -169,6 +171,7 @@ typedef struct _IP_INTERFACE {
     LL_TRANSMIT_ROUTINE Transmit; /* Pointer to transmit function */
     PVOID TCPContext;             /* TCP Content for this interface */
     SEND_RECV_STATS Stats;        /* Send/Receive statistics */
+    UINT  LargeSendMax;           /* Largest TCP large send (segmented by the adapter), 0 if none */
 } IP_INTERFACE, *PIP_INTERFACE;
 
 typedef struct _IP_SET_ADDRESS {

@@ -355,6 +355,40 @@ NDIS_STATUS AllocatePacketWithBuffer( PNDIS_PACKET *NdisPacket,
 }
 
 
+/* A packet of one buffer of Len bytes, allocated with Headroom bytes before
+ * it, where the link layer can put its header without copying the data
+ * (LANTransmit) */
+NDIS_STATUS AllocatePacketWithHeadroom( PNDIS_PACKET *NdisPacket,
+                                        UINT Len, UINT Headroom, PCHAR *Data ) {
+    PNDIS_PACKET Packet;
+    PNDIS_BUFFER Buffer;
+    NDIS_STATUS Status;
+    PCHAR NewData;
+
+    NewData = ExAllocatePoolWithTag( NonPagedPool, Headroom + Len, PACKET_BUFFER_TAG );
+    if( !NewData ) return NDIS_STATUS_RESOURCES;
+
+    NdisAllocatePacket( &Status, &Packet, GlobalPacketPool );
+    if( Status != NDIS_STATUS_SUCCESS ) {
+        ExFreePoolWithTag( NewData, PACKET_BUFFER_TAG );
+        return Status;
+    }
+
+    NdisAllocateBuffer( &Status, &Buffer, GlobalBufferPool, NewData + Headroom, Len );
+    if( Status != NDIS_STATUS_SUCCESS ) {
+        ExFreePoolWithTag( NewData, PACKET_BUFFER_TAG );
+        NdisFreePacket( Packet );
+        return Status;
+    }
+
+    NdisChainBufferAtFront( Packet, Buffer );
+    PC(Packet)->Headroom = Headroom;
+    *NdisPacket = Packet;
+    *Data = NewData + Headroom;
+
+    return NDIS_STATUS_SUCCESS;
+}
+
 VOID FreeNdisPacket
 ( PNDIS_PACKET Packet )
 /*
@@ -367,6 +401,8 @@ VOID FreeNdisPacket
 
     TI_DbgPrint(DEBUG_PBUFFER, ("Packet (0x%X)\n", Packet));
 
+    UINT Headroom = PC(Packet)->Headroom;
+
     /* Free all the buffers in the packet first */
     NdisQueryPacket(Packet, NULL, NULL, &Buffer, NULL);
     for (; Buffer != NULL; Buffer = NextBuffer) {
@@ -375,6 +411,9 @@ VOID FreeNdisPacket
 
         NdisGetNextBuffer(Buffer, &NextBuffer);
         NdisQueryBuffer(Buffer, &Data, &Length);
+        /* (the first buffer's allocation may start before its data) */
+        Data = (PCHAR)Data - Headroom;
+        Headroom = 0;
 	TI_DbgPrint(DEBUG_PBUFFER, ("Freeing ndis buffer (0x%X)\n", Buffer));
         NdisFreeBuffer(Buffer);
 	TI_DbgPrint(DEBUG_PBUFFER, ("Freeing exal buffer (0x%X)\n", Data));

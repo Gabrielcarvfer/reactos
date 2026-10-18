@@ -1019,6 +1019,68 @@ VOID NTAPI ProtocolBindAdapter(
 }
 
 
+/* Whether the adapter segments large TCP sends (NDIS large send offload v1):
+ * then tcpip hands it up to LargeSendMax bytes of a connection's data in one
+ * frame (TCPSendDataCallback), one packet and one transmit for ~44 segments */
+VOID LANQueryLargeSend(
+    PLAN_ADAPTER Adapter,
+    PIP_INTERFACE Interface)
+{
+    UCHAR Buffer[sizeof(NDIS_TASK_OFFLOAD_HEADER) + 3 * (sizeof(NDIS_TASK_OFFLOAD) + sizeof(NDIS_TASK_TCP_IP_CHECKSUM))];
+    PNDIS_TASK_OFFLOAD_HEADER Header = (PNDIS_TASK_OFFLOAD_HEADER)Buffer;
+    PNDIS_TASK_OFFLOAD Task;
+    PNDIS_TASK_TCP_LARGE_SEND LargeSend;
+    NDIS_STATUS NdisStatus;
+    ULONG Offset;
+
+    Interface->LargeSendMax = 0;
+
+    if (Adapter->Media != NdisMedium802_3)
+        return;
+
+    RtlZeroMemory(Buffer, sizeof(Buffer));
+    Header->Version = NDIS_TASK_OFFLOAD_VERSION;
+    Header->Size = sizeof(NDIS_TASK_OFFLOAD_HEADER);
+    Header->EncapsulationFormat.Encapsulation = IEEE_802_3_Encapsulation;
+    Header->EncapsulationFormat.Flags.FixedHeaderSize = 1;
+    Header->EncapsulationFormat.EncapsulationHeaderSize = sizeof(ETH_HEADER);
+
+    NdisStatus = NDISCall(Adapter, NdisRequestQueryInformation, OID_TCP_TASK_OFFLOAD,
+                          Buffer, sizeof(Buffer));
+    if (NdisStatus != NDIS_STATUS_SUCCESS || !Header->OffsetFirstTask)
+        return;
+
+    for (Offset = Header->OffsetFirstTask; Offset + FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer) <= sizeof(Buffer); )
+    {
+        Task = (PNDIS_TASK_OFFLOAD)(Buffer + Offset);
+        if (Task->Task == TcpLargeSendNdisTask &&
+            Offset + FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer) + sizeof(NDIS_TASK_TCP_LARGE_SEND) <= sizeof(Buffer))
+        {
+            LargeSend = (PNDIS_TASK_TCP_LARGE_SEND)Task->TaskBuffer;
+            /* (it must copy the TCP options, timestamps, to each segment) */
+            if (LargeSend->TcpOptions && LargeSend->MinSegmentCount <= 2 &&
+                LargeSend->MaxOffLoadSize > Interface->MTU)
+            {
+                Interface->LargeSendMax = min(LargeSend->MaxOffLoadSize, 0xFFFF);
+            }
+        }
+        if (!Task->OffsetNextTask)
+            break;
+        Offset += Task->OffsetNextTask;
+    }
+
+    if (Interface->LargeSendMax)
+    {
+        /* Turn it on */
+        NdisStatus = NDISCall(Adapter, NdisRequestSetInformation, OID_TCP_TASK_OFFLOAD,
+                              Buffer, sizeof(Buffer));
+        if (NdisStatus != NDIS_STATUS_SUCCESS)
+            Interface->LargeSendMax = 0;
+    }
+
+    TI_DbgPrint(MIN_TRACE, ("Large send: up to %u bytes\n", Interface->LargeSendMax));
+}
+
 VOID LANTransmit(
     PVOID Context,
     PNDIS_PACKET NdisPacket,
@@ -1064,15 +1126,54 @@ VOID LANTransmit(
 
     GetDataPtr( NdisPacket, 0, &OldData, &OldSize );
 
-    NdisStatus = AllocatePacketWithBuffer(&XmitPacket, NULL, OldSize + Adapter->HeaderSize);
+    if (PC(NdisPacket)->Headroom >= Adapter->HeaderSize && Adapter->HeaderSize &&
+        NdisPacket->Private.Head == NdisPacket->Private.Tail)
+    {
+        PNDIS_BUFFER Buffer;
+
+        /* The header goes in front of the data, which is sent from where it
+         * is: the new packet takes over the allocation */
+        NdisStatus = NDIS_STATUS_RESOURCES;
+        NdisAllocatePacket(&NdisStatus, &XmitPacket, GlobalPacketPool);
+        if (NdisStatus == NDIS_STATUS_SUCCESS)
+        {
+            Data = OldData - Adapter->HeaderSize;
+            Size = OldSize + Adapter->HeaderSize;
+            NdisAllocateBuffer(&NdisStatus, &Buffer, GlobalBufferPool, Data, Size);
+            if (NdisStatus == NDIS_STATUS_SUCCESS)
+            {
+                NdisChainBufferAtFront(XmitPacket, Buffer);
+                PC(XmitPacket)->Headroom = PC(NdisPacket)->Headroom - Adapter->HeaderSize;
+
+                /* (the old packet keeps no buffer: completing it frees only it) */
+                NdisUnchainBufferAtFront(NdisPacket, &Buffer);
+                NdisFreeBuffer(Buffer);
+                PC(NdisPacket)->Headroom = 0;
+            }
+            else
+            {
+                NdisFreePacket(XmitPacket);
+            }
+        }
+    }
+    else
+    {
+        NdisStatus = AllocatePacketWithBuffer(&XmitPacket, NULL, OldSize + Adapter->HeaderSize);
+        if (NdisStatus == NDIS_STATUS_SUCCESS)
+        {
+            GetDataPtr(XmitPacket, 0, &Data, &Size);
+            RtlCopyMemory(Data + Adapter->HeaderSize, OldData, OldSize);
+        }
+    }
+
     if (NdisStatus != NDIS_STATUS_SUCCESS) {
         (*PC(NdisPacket)->DLComplete)(PC(NdisPacket)->Context, NdisPacket, NDIS_STATUS_RESOURCES);
         return;
     }
 
-    GetDataPtr(XmitPacket, 0, &Data, &Size);
-
-    RtlCopyMemory(Data + Adapter->HeaderSize, OldData, OldSize);
+    /* A large send keeps its segment size (TCPSendDataCallback) */
+    NDIS_PER_PACKET_INFO_FROM_PACKET(XmitPacket, TcpLargeSendPacketInfo) =
+        NDIS_PER_PACKET_INFO_FROM_PACKET(NdisPacket, TcpLargeSendPacketInfo);
 
     (*PC(NdisPacket)->DLComplete)(PC(NdisPacket)->Context, NdisPacket, NDIS_STATUS_SUCCESS);
 
@@ -1123,12 +1224,6 @@ VOID LANTransmit(
 		   ((PCHAR)LinkAddress)[4] & 0xff,
 		   ((PCHAR)LinkAddress)[5] & 0xff));
 	}
-
-    if (Adapter->MTU < Size) {
-        /* This is NOT a pointer. MSDN explicitly says so. */
-        NDIS_PER_PACKET_INFO_FROM_PACKET(NdisPacket,
-                                         TcpLargeSendPacketInfo) = (PVOID)((ULONG_PTR)Adapter->MTU);
-    }
 
     /* Update interface stats */
     Interface->Stats.OutBytes += Size;
@@ -1483,6 +1578,8 @@ BOOLEAN BindAdapter(
         IPDestroyInterface(IF);
         return FALSE;
     }
+
+    LANQueryLargeSend(Adapter, IF);
 
     return TRUE;
 }

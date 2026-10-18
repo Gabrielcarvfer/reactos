@@ -188,6 +188,9 @@ VOID TCPLeaveCompletionContext(ULONG Slot);
 ULONG TCPBeginReceiveBatch(VOID);
 VOID TCPEndReceiveBatch(ULONG Context);
 
+/* Sends the segments gathered into a large send (if.c), under the core lock */
+VOID TCPFlushLargeSend(VOID);
+
 NTSTATUS TCPStartup(
   VOID);
 
