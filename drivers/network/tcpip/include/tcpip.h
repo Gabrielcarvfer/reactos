@@ -30,6 +30,35 @@
 
 #include <debug.h>
 
+/* The address of a buffer. An MDL of locked pages of system space (AFD's
+ * buffers) is used through its own address: mapping it again
+ * (MmGetSystemAddressForMdl) cost a system PTE mapping per request, and
+ * unmapping it a TLB flush on every processor */
+FORCEINLINE
+PVOID
+TcpipBufferAddress(
+    _In_ PMDL Mdl)
+{
+    if (Mdl->MdlFlags & (MDL_MAPPED_TO_SYSTEM_VA | MDL_SOURCE_IS_NONPAGED_POOL))
+        return Mdl->MappedSystemVa;
+
+    if ((Mdl->MdlFlags & MDL_PAGES_LOCKED) &&
+        (ULONG_PTR)MmGetMdlVirtualAddress(Mdl) >= (ULONG_PTR)MmSystemRangeStart)
+    {
+        return MmGetMdlVirtualAddress(Mdl);
+    }
+
+    return MmGetSystemAddressForMdl(Mdl);
+}
+
+#undef NdisQueryBuffer
+#define NdisQueryBuffer(_Buffer, _VirtualAddress, _Length) {         \
+  if (ARGUMENT_PRESENT(_VirtualAddress)) {                           \
+    *(PVOID *)(_VirtualAddress) = TcpipBufferAddress(_Buffer);       \
+  }                                                                  \
+  *(_Length) = MmGetMdlByteCount(_Buffer);                           \
+}
+
 #define TAG_STRING	' RTS' /* string */
 
 /* Define _NTTEST_ to make test version. Device names are prefixed with
