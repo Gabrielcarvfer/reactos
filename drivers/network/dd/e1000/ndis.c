@@ -171,7 +171,7 @@ MiniportInitialize(
     /* Allocate the DMA resources */
     Status = NdisMInitializeScatterGatherDma(MiniportAdapterHandle,
                                              FALSE, // 64bit is supported but can be buggy
-                                             MAXIMUM_FRAME_SIZE);
+                                             MAXIMUM_LARGE_SEND_SIZE);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         NDIS_DbgPrint(MIN_TRACE, ("Unable to configure DMA\n"));

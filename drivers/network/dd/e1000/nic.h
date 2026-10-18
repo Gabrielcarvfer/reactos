@@ -17,6 +17,10 @@
 #define E1000_TAG '001e'
 
 #define MAXIMUM_FRAME_SIZE   1522
+
+/* The biggest frame of a large send (TCP segmentation by the card): an IPv4
+ * datagram of 64 KB at most, and its Ethernet header */
+#define MAXIMUM_LARGE_SEND_SIZE   (64 * 1024 + 14)
 #define RECEIVE_BUFFER_SIZE  2048
 
 #define DRIVER_VERSION 1

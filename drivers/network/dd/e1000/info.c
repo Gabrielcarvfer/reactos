@@ -38,6 +38,7 @@ static NDIS_OID SupportedOidList[] =
     OID_802_3_CURRENT_ADDRESS,
     OID_802_3_MAXIMUM_LIST_SIZE,
     OID_GEN_PHYSICAL_MEDIUM,
+    OID_TCP_TASK_OFFLOAD,
 
     /* Statistics */
     OID_GEN_XMIT_OK,
@@ -246,6 +247,49 @@ MiniportQueryInformation(
         break;
     }
 
+    case OID_TCP_TASK_OFFLOAD:
+    {
+        /* Large send offload (TCP segmentation), for IPv4 over Ethernet */
+        PNDIS_TASK_OFFLOAD_HEADER Header = InformationBuffer;
+        PNDIS_TASK_OFFLOAD Task;
+        PNDIS_TASK_TCP_LARGE_SEND LargeSend;
+        ULONG Needed = sizeof(NDIS_TASK_OFFLOAD_HEADER) +
+                       FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer) + sizeof(NDIS_TASK_TCP_LARGE_SEND);
+
+        if (InformationBufferLength < sizeof(NDIS_TASK_OFFLOAD_HEADER) ||
+            Header->Version != NDIS_TASK_OFFLOAD_VERSION ||
+            Header->EncapsulationFormat.Encapsulation != IEEE_802_3_Encapsulation)
+        {
+            *BytesWritten = 0;
+            *BytesNeeded = 0;
+            return NDIS_STATUS_NOT_SUPPORTED;
+        }
+        if (InformationBufferLength < Needed)
+        {
+            *BytesWritten = 0;
+            *BytesNeeded = Needed;
+            return NDIS_STATUS_BUFFER_TOO_SHORT;
+        }
+
+        Header->OffsetFirstTask = sizeof(NDIS_TASK_OFFLOAD_HEADER);
+        Task = (PNDIS_TASK_OFFLOAD)(Header + 1);
+        Task->Version = NDIS_TASK_OFFLOAD_VERSION;
+        Task->Size = sizeof(NDIS_TASK_OFFLOAD);
+        Task->Task = TcpLargeSendNdisTask;
+        Task->OffsetNextTask = 0;
+        Task->TaskBufferLength = sizeof(NDIS_TASK_TCP_LARGE_SEND);
+        LargeSend = (PNDIS_TASK_TCP_LARGE_SEND)Task->TaskBuffer;
+        LargeSend->Version = NDIS_TASK_TCP_LARGE_SEND_V0;
+        LargeSend->MaxOffLoadSize = MAXIMUM_LARGE_SEND_SIZE - sizeof(ETH_HEADER);
+        LargeSend->MinSegmentCount = 2;
+        LargeSend->TcpOptions = TRUE;
+        LargeSend->IpOptions = FALSE;
+
+        *BytesWritten = Needed;
+        *BytesNeeded = Needed;
+        return NDIS_STATUS_SUCCESS;
+    }
+
     default:
         NDIS_DbgPrint(MIN_TRACE, ("Unknown OID 0x%x(%s)\n", Oid, Oid2Str(Oid)));
         status = NDIS_STATUS_NOT_SUPPORTED;
@@ -296,6 +340,12 @@ MiniportSetInformation(
 
     switch (Oid)
     {
+    case OID_TCP_TASK_OFFLOAD:
+        /* (the tasks are always on: a protocol uses them per packet) */
+        *BytesRead = InformationBufferLength;
+        *BytesNeeded = 0;
+        break;
+
     case OID_GEN_CURRENT_PACKET_FILTER:
         if (InformationBufferLength < sizeof(ULONG))
         {

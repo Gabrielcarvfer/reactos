@@ -96,11 +96,54 @@ typedef struct _E1000_TRANSMIT_DESCRIPTOR
 
 } E1000_TRANSMIT_DESCRIPTOR, *PE1000_TRANSMIT_DESCRIPTOR;
 
+/* 3.3.6 TCP/IP Context Transmit Descriptor */
+typedef struct _E1000_CONTEXT_DESCRIPTOR
+{
+    UCHAR IpChecksumStart;
+    UCHAR IpChecksumOffset;
+    USHORT IpChecksumEnd;
+    UCHAR TcpChecksumStart;
+    UCHAR TcpChecksumOffset;
+    USHORT TcpChecksumEnd;
+    ULONG CommandAndLength;     /* PAYLEN (19:0), DTYP = 0000, TUCMD (31:24) */
+    UCHAR Status;
+    UCHAR HeaderLength;
+    USHORT Mss;
+} E1000_CONTEXT_DESCRIPTOR, *PE1000_CONTEXT_DESCRIPTOR;
+
+/* 3.3.7 TCP/IP Data Transmit Descriptor */
+typedef struct _E1000_DATA_DESCRIPTOR
+{
+    UINT64 Address;
+    ULONG CommandAndLength;     /* DTALEN (19:0), DTYP = 0001, DCMD (31:24) */
+    UCHAR Status;
+    UCHAR Options;              /* POPTS */
+    USHORT Special;
+} E1000_DATA_DESCRIPTOR, *PE1000_DATA_DESCRIPTOR;
+
+/* TUCMD and DCMD (bits 31:24 of CommandAndLength) */
+#define E1000_TXD_CMD_EOP               (1U << 24)
+#define E1000_TXD_CMD_IFCS              (1U << 25)
+#define E1000_TXD_CMD_TSE               (1U << 26)  /* (data) TCP segmentation */
+#define E1000_TXD_CMD_RS                (1U << 27)
+#define E1000_TXD_CMD_DEXT              (1U << 29)
+#define E1000_TXD_CMD_IDE               (1U << 31)
+#define E1000_TXD_CMD_TCP               (1U << 24)  /* (context) TCP packet */
+#define E1000_TXD_CMD_IP                (1U << 25)  /* (context) IPv4 packet */
+#define E1000_TXD_CMD_CTX_TSE           (1U << 26)  /* (context) TCP segmentation */
+#define E1000_TXD_DTYP_DATA             (1U << 20)
+
+/* POPTS */
+#define E1000_TXD_POPTS_IXSM            (1U << 0)   /* Insert IP checksum */
+#define E1000_TXD_POPTS_TXSM            (1U << 1)   /* Insert TCP/UDP checksum */
+
 #include <poppack.h>
 
 
 C_ASSERT(sizeof(E1000_RECEIVE_DESCRIPTOR) == 16);
 C_ASSERT(sizeof(E1000_TRANSMIT_DESCRIPTOR) == 16);
+C_ASSERT(sizeof(E1000_CONTEXT_DESCRIPTOR) == 16);
+C_ASSERT(sizeof(E1000_DATA_DESCRIPTOR) == 16);
 
 
 /* Valid Range: 80-256 for 82542 and 82543 gigabit ethernet controllers
