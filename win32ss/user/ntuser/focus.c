@@ -759,6 +759,30 @@ CanForceFG(PPROCESSINFO ppi)
    return FALSE;
 }
 
+/*
+ * Like Windows, run the process that owns the foreground window as a
+ * foreground process (its threads get the foreground quantum set by
+ * Win32PrioritySeparation) and put the previous one back to background.
+ */
+static VOID
+IntSetForegroundPriority(
+    _In_opt_ PTHREADINFO ptiPrev,
+    _In_opt_ PTHREADINFO ptiNew)
+{
+    PEPROCESS Prev = NULL, New = NULL;
+
+    if (ptiPrev && !(ptiPrev->TIF_flags & (TIF_INCLEANUP | TIF_SYSTEMTHREAD | TIF_CSRSSTHREAD)))
+        Prev = ptiPrev->ppi->peProcess;
+    if (ptiNew && !(ptiNew->TIF_flags & (TIF_INCLEANUP | TIF_SYSTEMTHREAD | TIF_CSRSSTHREAD)))
+        New = ptiNew->ppi->peProcess;
+    if (Prev == New)
+        return;
+    if (Prev)
+        PsSetProcessPriorityByClass(Prev, PsProcessPriorityBackground);
+    if (New)
+        PsSetProcessPriorityByClass(New, PsProcessPriorityForeground);
+}
+
 //
 //  Switching out foreground message queues.
 //
@@ -797,6 +821,9 @@ co_IntSetForegroundMessageQueue(
       gptiForeground = NULL;
       //ERR("Set Foreground pti 0x0 Q 0x0 hWnd 0x0\n");
    }
+
+   if (ptiPrev != ptiChg)
+      IntSetForegroundPriority(ptiPrev, ptiChg);
 
    //
    // Process the changing out of the message queues.

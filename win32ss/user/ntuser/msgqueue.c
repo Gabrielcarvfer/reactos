@@ -442,8 +442,13 @@ MsqWakeQueue(PTHREADINFO pti, DWORD MessageBits, BOOL KeyEvent)
    if (MessageBits & QS_HOTKEY)      pti->nCntsQBits[QSRosHotKey]++;
    if (MessageBits & QS_EVENT)       pti->nCntsQBits[QSRosEvent]++;
 
+   /* Like Windows, give a thread woken up by keyboard or mouse button input
+    * a priority boost, so that it handles the input ahead of CPU-bound
+    * threads of the same priority */
    if (KeyEvent)
-      KeSetEvent(pti->pEventQueueServer, IO_NO_INCREMENT, FALSE);
+      KeSetEvent(pti->pEventQueueServer,
+                 (MessageBits & (QS_KEY | QS_MOUSEBUTTON)) ? IO_KEYBOARD_INCREMENT : IO_NO_INCREMENT,
+                 FALSE);
 }
 
 VOID FASTCALL
