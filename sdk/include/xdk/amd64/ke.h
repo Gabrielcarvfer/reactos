@@ -116,7 +116,10 @@ FORCEINLINE
 KIRQL
 KeRaiseIrqlToSynchLevel(VOID)
 {
-#ifdef CONFIG_SMP
+/* SYNCH_LEVEL is 12 on x64 Windows. A driver does not know whether the
+ * kernel is a multiprocessor one: only the uniprocessor kernel itself
+ * may use DISPATCH_LEVEL */
+#if defined(CONFIG_SMP) || !defined(_NTOSKRNL_)
     return KfRaiseIrql(12); // SYNCH_LEVEL = IPI_LEVEL - 2
 #else
     return KfRaiseIrql(2); // SYNCH_LEVEL = DISPATCH_LEVEL

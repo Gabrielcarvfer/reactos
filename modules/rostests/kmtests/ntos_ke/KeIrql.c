@@ -27,8 +27,12 @@ START_TEST(KeIrql)
 
     PrevIrql = KeGetCurrentIrql();
 
-    /* SYNCH_LEVEL is different for UP/MP */
+    /* SYNCH_LEVEL is different for UP/MP (on x64, always IPI_LEVEL - 2) */
+#ifdef _M_AMD64
+    if (TRUE)
+#else
     if (KmtIsMultiProcessorBuild)
+#endif
         SynchIrql = IPI_LEVEL - 2;
     else
         SynchIrql = DISPATCH_LEVEL;
