@@ -10,6 +10,20 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(iphlpapi);
 #ifdef GetAdaptersAddressesV2
+/* Each adapter record has the size of the Vista+ IP_ADAPTER_ADDRESSES (up to
+ * FirstDnsSuffix): programs built for Vista and later read its fields
+ * (FirstGatewayAddress...) whatever Length says, and with the XP size they
+ * read the adapter name that follows (Wine's wbemprox crashed AnyDesk's
+ * service). The fields we don't fill stay zero. */
+typedef struct _IPHLP_AA_RECORD
+{
+    IP_ADAPTER_ADDRESSES_LH Lh;
+#if (NTDDI_VERSION < NTDDI_VISTASP1)
+    PVOID FirstDnsSuffix;
+#endif
+} IPHLP_AA_RECORD;
+#define IPHLP_AA_RECORD_SIZE sizeof(IPHLP_AA_RECORD)
+
 /* Helper for GetAdaptersAddresses:
  * Retrieves the list of network adapters from tcpip.sys */
 static
@@ -424,7 +438,7 @@ GetAdaptersAddresses(
                 PreviousAA->Next = CurrentAA;
 
             /* Of course we need some space for the base structure. */
-            CurrentAASize = sizeof(IP_ADAPTER_ADDRESSES);
+            CurrentAASize = IPHLP_AA_RECORD_SIZE;
 
             /* Get the entry */
             Status = GetInterfaceEntry(TcpFile, InterfacesList[i], Entry);
@@ -590,7 +604,7 @@ GetAdaptersAddresses(
             /* Fill in the data */
             if ((CurrentAA) && (RemainingSize >= CurrentAASize))
             {
-                CurrentAA->Length = sizeof(IP_ADAPTER_ADDRESSES);
+                CurrentAA->Length = IPHLP_AA_RECORD_SIZE;
                 CurrentAA->IfIndex = Entry->if_index;
                 CopyMemory(CurrentAA->PhysicalAddress, Entry->if_physaddr, Entry->if_physaddrlen);
                 CurrentAA->PhysicalAddressLength = Entry->if_physaddrlen;
@@ -603,7 +617,7 @@ GetAdaptersAddresses(
                     CurrentAA->OperStatus = IfOperStatusDown;
 
                 /* Next items */
-                Ptr = (BYTE*)(CurrentAA + 1);
+                Ptr = (BYTE*)CurrentAA + IPHLP_AA_RECORD_SIZE;
 
                 /* Now fill in the name */
                 CopyMemory(Ptr, &Entry->if_descr[0], Entry->if_descrlen);
