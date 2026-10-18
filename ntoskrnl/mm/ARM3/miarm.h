@@ -2224,6 +2224,84 @@ MiFindEmptyAddressRangeInTree(
     OUT PULONG_PTR Base
 );
 
+TABLE_SEARCH_RESULT
+NTAPI
+MiFindEmptyAddressRangeInTreeEx(
+    _In_ SIZE_T Length,
+    _In_ ULONG_PTR Alignment,
+    _In_ ULONG_PTR LowestAddress,
+    _In_ PMM_AVL_TABLE Table,
+    _Out_ PMMADDRESS_NODE *PreviousVad,
+    _Out_ PULONG_PTR Base);
+
+//
+// Placeholders (MEM_RESERVE_PLACEHOLDER) are private reserved VADs with no
+// access. ReactOS marks them with ExtendableFile, which only file views use.
+//
+#define MI_IS_PLACEHOLDER_VAD(Vad) \
+    ((Vad)->u.VadFlags.PrivateMemory && (Vad)->u2.VadFlags2.ExtendableFile)
+#define MI_SET_PLACEHOLDER_VAD(Vad, Set) \
+    ((Vad)->u2.VadFlags2.ExtendableFile = ((Set) ? 1 : 0))
+
+PMMVAD
+NTAPI
+MiAllocatePlaceholderVad(
+    _In_ PEPROCESS Process,
+    _In_ ULONG_PTR StartingVpn,
+    _In_ ULONG_PTR EndingVpn);
+
+VOID
+NTAPI
+MiFreePlaceholderVad(
+    _In_ PEPROCESS Process,
+    _In_ PMMVAD Vad);
+
+PMMVAD
+NTAPI
+MiRemovePlaceholderVad(
+    _In_ PEPROCESS Process,
+    _In_ ULONG_PTR StartingAddress,
+    _In_ ULONG_PTR EndingAddress);
+
+VOID
+NTAPI
+MiRestorePlaceholderVad(
+    _In_ PEPROCESS Process,
+    _In_ PMMVAD Vad);
+
+NTSTATUS
+NTAPI
+MiAllocateVirtualMemory(
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PVOID *UBaseAddress,
+    _In_ ULONG_PTR ZeroBits,
+    _Inout_ PSIZE_T URegionSize,
+    _In_ ULONG AllocationType,
+    _In_ ULONG Protect,
+    _In_ BOOLEAN Extended);
+
+NTSTATUS
+NTAPI
+MiMapViewOfSectionCommon(
+    _In_ HANDLE SectionHandle,
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PVOID *BaseAddress,
+    _In_ ULONG_PTR ZeroBits,
+    _In_ SIZE_T CommitSize,
+    _Inout_opt_ PLARGE_INTEGER SectionOffset,
+    _Inout_ PSIZE_T ViewSize,
+    _In_ SECTION_INHERIT InheritDisposition,
+    _In_ ULONG AllocationType,
+    _In_ ULONG Win32Protect,
+    _In_ BOOLEAN Extended);
+
+NTSTATUS
+NTAPI
+MiUnmapViewOfSection(
+    _In_ PEPROCESS Process,
+    _In_ PVOID BaseAddress,
+    _In_ ULONG Flags);
+
 NTSTATUS
 NTAPI
 MiCheckSecuredVad(

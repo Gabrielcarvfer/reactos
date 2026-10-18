@@ -50,6 +50,7 @@ extern void func_MultiByteToWideChar(void);
 extern void func_NestedJobs(void);
 extern void func_NewApis(void);
 extern void func_PackageNames(void);
+extern void func_Placeholders(void);
 extern void func_PipeCompletionPort(void);
 extern void func_PipeProcessIds(void);
 extern void func_Pipes(void);
@@ -130,6 +131,7 @@ const struct test winetest_testlist[] =
     { "NestedJobs",                  func_NestedJobs },
     { "NewApis",                     func_NewApis },
     { "PackageNames",                func_PackageNames },
+    { "Placeholders",                func_Placeholders },
     { "PipeCompletionPort",          func_PipeCompletionPort },
     { "PipeProcessIds",              func_PipeProcessIds },
     { "Pipes",                       func_Pipes },

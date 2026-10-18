@@ -296,3 +296,6 @@ NtGetCurrentProcessorNumber 0
 NtWaitForMultipleObjects32 5
 NtGetCurrentProcessorNumberEx 1
 NtCancelIoFileEx 3
+NtAllocateVirtualMemoryEx 7
+NtMapViewOfSectionEx 9
+NtUnmapViewOfSectionEx 3

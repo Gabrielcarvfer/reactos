@@ -300,4 +300,7 @@
 #ifndef SYSFUNCS_NT5_ONLY
     SVC_(GetCurrentProcessorNumberEx, 1)
     SVC_(CancelIoFileEx, 3)
+    SVC_(AllocateVirtualMemoryEx, 7)
+    SVC_(MapViewOfSectionEx, 9)
+    SVC_(UnmapViewOfSectionEx, 3)
 #endif

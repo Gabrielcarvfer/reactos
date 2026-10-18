@@ -1,7 +1,7 @@
 /*
  * PROJECT:     ReactOS Kernel Base
  * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
- * PURPOSE:     VirtualAlloc2 and MapViewOfFile3 (only in KernelBase on Windows)
+ * PURPOSE:     VirtualAlloc2, MapViewOfFile3 and UnmapViewOfFile2 (only in KernelBase on Windows)
  */
 
 #include "ntstatus.h"
@@ -65,4 +65,22 @@ MapViewOfFile3(
         return NULL;
     }
     return Base;
+}
+
+BOOL
+WINAPI
+UnmapViewOfFile2(
+    _In_ HANDLE Process,
+    _In_ PVOID BaseAddress,
+    _In_ ULONG UnmapFlags)
+{
+    NTSTATUS Status;
+
+    Status = NtUnmapViewOfSectionEx(Process, BaseAddress, UnmapFlags);
+    if (!NT_SUCCESS(Status))
+    {
+        SetLastError(RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+    return TRUE;
 }

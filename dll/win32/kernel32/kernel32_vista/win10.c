@@ -233,19 +233,22 @@ PrefetchVirtualMemory(
     return TRUE;
 }
 
-/* The flags (placeholders, transient boost) are not supported: a plain unmap */
+/* MEM_PRESERVE_PLACEHOLDER: the view becomes a placeholder again */
 BOOL
 WINAPI
 UnmapViewOfFileEx(
     _In_ PVOID BaseAddress,
     _In_ ULONG UnmapFlags)
 {
-    if (UnmapFlags)
+    NTSTATUS Status;
+
+    Status = NtUnmapViewOfSectionEx(NtCurrentProcess(), BaseAddress, UnmapFlags);
+    if (!NT_SUCCESS(Status))
     {
-        SetLastError(ERROR_INVALID_PARAMETER);
+        BaseSetLastNTError(Status);
         return FALSE;
     }
-    return UnmapViewOfFile(BaseAddress);
+    return TRUE;
 }
 
 /* CPU SETS (Windows 10) ****************************************************/

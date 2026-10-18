@@ -330,6 +330,21 @@ MiInsertVadEx(
                                            EndingAddress >> PAGE_SHIFT,
                                            &CurrentProcess->VadRoot,
                                            &Parent);
+
+        /* A view replacing a placeholder (NtMapViewOfSectionEx) takes its place */
+        if ((Result == TableFoundNode) && (AllocationType & MEM_REPLACE_PLACEHOLDER))
+        {
+            PMMVAD Placeholder = MiRemovePlaceholderVad(CurrentProcess, StartingAddress, EndingAddress);
+            if (Placeholder)
+            {
+                MiFreePlaceholderVad(CurrentProcess, Placeholder);
+                Result = MiCheckForConflictingNode(StartingAddress >> PAGE_SHIFT,
+                                                   EndingAddress >> PAGE_SHIFT,
+                                                   &CurrentProcess->VadRoot,
+                                                   &Parent);
+            }
+        }
+
         if (Result == TableFoundNode)
         {
             DPRINT("Given address conflicts with existing node\n");
@@ -505,6 +520,20 @@ MiFindEmptyAddressRangeInTree(IN SIZE_T Length,
                               OUT PMMADDRESS_NODE *PreviousVad,
                               OUT PULONG_PTR Base)
 {
+    return MiFindEmptyAddressRangeInTreeEx(Length, Alignment, 0, Table, PreviousVad, Base);
+}
+
+/* The lowest free range at or above LowestAddress (0: anywhere) */
+TABLE_SEARCH_RESULT
+NTAPI
+MiFindEmptyAddressRangeInTreeEx(
+    _In_ SIZE_T Length,
+    _In_ ULONG_PTR Alignment,
+    _In_ ULONG_PTR LowestAddress,
+    _In_ PMM_AVL_TABLE Table,
+    _Out_ PMMADDRESS_NODE *PreviousVad,
+    _Out_ PULONG_PTR Base)
+{
     PMMADDRESS_NODE Node, PreviousNode;
     ULONG_PTR PageCount, AlignmentVpn, LowVpn, HighestVpn;
     ASSERT(Length != 0);
@@ -514,7 +543,7 @@ MiFindEmptyAddressRangeInTree(IN SIZE_T Length,
     /* Calculate page numbers for the length, alignment, and starting address */
     PageCount = BYTES_TO_PAGES(Length);
     AlignmentVpn = Alignment >> PAGE_SHIFT;
-    LowVpn = ALIGN_UP_BY((ULONG_PTR)MM_LOWEST_USER_ADDRESS >> PAGE_SHIFT, AlignmentVpn);
+    LowVpn = ALIGN_UP_BY(max(LowestAddress, (ULONG_PTR)MM_LOWEST_USER_ADDRESS) >> PAGE_SHIFT, AlignmentVpn);
 
     /* Check for kernel mode table (memory areas) */
     if (Table->Unused == 1)

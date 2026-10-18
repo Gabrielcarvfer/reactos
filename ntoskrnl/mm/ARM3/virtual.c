@@ -4724,16 +4724,19 @@ NtQueryVirtualMemory(IN HANDLE ProcessHandle,
 }
 
 /*
- * @implemented
+ * NtAllocateVirtualMemory, and NtAllocateVirtualMemoryEx (Extended) which may
+ * also reserve a placeholder (MEM_RESERVE_PLACEHOLDER) or turn one into an
+ * allocation (MEM_REPLACE_PLACEHOLDER)
  */
 NTSTATUS
 NTAPI
-NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
+MiAllocateVirtualMemory(IN HANDLE ProcessHandle,
                         IN OUT PVOID* UBaseAddress,
                         IN ULONG_PTR ZeroBits,
                         IN OUT PSIZE_T URegionSize,
                         IN ULONG AllocationType,
-                        IN ULONG Protect)
+                        IN ULONG Protect,
+                        IN BOOLEAN Extended)
 {
     PEPROCESS Process;
     PMMVAD Vad = NULL, FoundVad;
@@ -4765,12 +4768,30 @@ NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
         return STATUS_INVALID_PARAMETER_3;
     }
 
-    /* Check for valid Allocation Types */
+    /* Check for valid Allocation Types (placeholders only through the Ex call) */
     if ((AllocationType & ~(MEM_COMMIT | MEM_RESERVE | MEM_RESET | MEM_PHYSICAL |
-                    MEM_TOP_DOWN | MEM_WRITE_WATCH | MEM_LARGE_PAGES)))
+                    MEM_TOP_DOWN | MEM_WRITE_WATCH | MEM_LARGE_PAGES |
+                    (Extended ? (MEM_RESERVE_PLACEHOLDER | MEM_REPLACE_PLACEHOLDER) : 0))))
     {
-        DPRINT1("Invalid Allocation Type\n");
+        DPRINT1("Invalid Allocation Type %lx\n", AllocationType);
         return STATUS_INVALID_PARAMETER_5;
+    }
+
+    /* A placeholder is reserved, never committed, and has no access */
+    if ((AllocationType & MEM_RESERVE_PLACEHOLDER) &&
+        ((AllocationType & ~MEM_TOP_DOWN) != (MEM_RESERVE | MEM_RESERVE_PLACEHOLDER) ||
+         Protect != PAGE_NOACCESS))
+    {
+        DPRINT1("Invalid placeholder reservation %lx %lx\n", AllocationType, Protect);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* Replacing one takes all of it (base and size), and MEM_RESERVE */
+    if ((AllocationType & MEM_REPLACE_PLACEHOLDER) &&
+        ((AllocationType & ~MEM_COMMIT) != (MEM_RESERVE | MEM_REPLACE_PLACEHOLDER)))
+    {
+        DPRINT1("Invalid placeholder replacement %lx\n", AllocationType);
+        return STATUS_INVALID_PARAMETER;
     }
 
     /* Check for at least one of these Allocation Types to be set */
@@ -4977,6 +4998,46 @@ NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
         }
 
         //
+        // Replacing a placeholder: it becomes this reservation where it is
+        // (its VAD stays), then the commit, if any, is done as usual
+        //
+        if (AllocationType & MEM_REPLACE_PLACEHOLDER)
+        {
+            StartingAddress = (ULONG_PTR)PAGE_ALIGN(PBaseAddress);
+            EndingAddress = ((ULONG_PTR)PBaseAddress + PRegionSize - 1) | (PAGE_SIZE - 1);
+
+            AddressSpace = MmGetCurrentAddressSpace();
+            MmLockAddressSpace(AddressSpace);
+            if (Process->VmDeleted)
+            {
+                Status = STATUS_PROCESS_IS_TERMINATING;
+                goto FailPath;
+            }
+            FoundVad = MiLocateAddress((PVOID)StartingAddress);
+            if (!FoundVad || !MI_IS_PLACEHOLDER_VAD(FoundVad) ||
+                (FoundVad->StartingVpn != (StartingAddress >> PAGE_SHIFT)) ||
+                (FoundVad->EndingVpn != (EndingAddress >> PAGE_SHIFT)))
+            {
+                DPRINT1("No placeholder at %p-%p\n", StartingAddress, EndingAddress);
+                Status = STATUS_CONFLICTING_ADDRESSES;
+                goto FailPath;
+            }
+            MiLockProcessWorkingSetUnsafe(Process, CurrentThread);
+            MI_SET_PLACEHOLDER_VAD(FoundVad, FALSE);
+            FoundVad->u.VadFlags.Protection = ProtectionMask;
+            MiUnlockProcessWorkingSetUnsafe(Process, CurrentThread);
+            MmUnlockAddressSpace(AddressSpace);
+
+            if (!(AllocationType & MEM_COMMIT))
+            {
+                PRegionSize = EndingAddress - StartingAddress + 1;
+                Status = STATUS_SUCCESS;
+                goto FailPathNoLock;
+            }
+            goto CommitReserved;
+        }
+
+        //
         // Does the caller have an address in mind, or is this a blind commit?
         //
         if (!PBaseAddress)
@@ -5042,6 +5103,7 @@ NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
         Vad->u.VadFlags.Protection = ProtectionMask;
         Vad->u.VadFlags.PrivateMemory = 1;
         Vad->ControlArea = NULL; // For Memory-Area hack
+        if (AllocationType & MEM_RESERVE_PLACEHOLDER) MI_SET_PLACEHOLDER_VAD(Vad, TRUE);
 
         //
         // Insert the VAD
@@ -5095,6 +5157,7 @@ NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
     // on the user input, and then compute the actual region size once all the
     // alignments have been done.
     //
+CommitReserved:
     EndingAddress = (((ULONG_PTR)PBaseAddress + PRegionSize - 1) | (PAGE_SIZE - 1));
     StartingAddress = (ULONG_PTR)PAGE_ALIGN(PBaseAddress);
     PRegionSize = EndingAddress - StartingAddress + 1;
@@ -5139,7 +5202,8 @@ NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
     //
     if ((FoundVad->u.VadFlags.VadType == VadAwe) ||
         (FoundVad->u.VadFlags.VadType == VadDevicePhysicalMemory) ||
-        (FoundVad->u.VadFlags.VadType == VadLargePages))
+        (FoundVad->u.VadFlags.VadType == VadLargePages) ||
+        MI_IS_PLACEHOLDER_VAD(FoundVad))
     {
         DPRINT1("Illegal VAD for attempting a MEM_COMMIT\n");
         Status = STATUS_CONFLICTING_ADDRESSES;
@@ -5479,6 +5543,152 @@ FailPathNoLock:
  */
 NTSTATUS
 NTAPI
+NtAllocateVirtualMemory(IN HANDLE ProcessHandle,
+                        IN OUT PVOID* UBaseAddress,
+                        IN ULONG_PTR ZeroBits,
+                        IN OUT PSIZE_T URegionSize,
+                        IN ULONG AllocationType,
+                        IN ULONG Protect)
+{
+    return MiAllocateVirtualMemory(ProcessHandle,
+                                   UBaseAddress,
+                                   ZeroBits,
+                                   URegionSize,
+                                   AllocationType,
+                                   Protect,
+                                   FALSE);
+}
+
+/*
+ * MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER: [StartingAddress, EndingAddress]
+ * becomes a placeholder of its own, split from the placeholder around it; a
+ * whole private allocation goes back to being a placeholder (its pages are
+ * freed). The address space is locked, the process attached.
+ */
+static
+NTSTATUS
+MiSplitPlaceholder(
+    _In_ PEPROCESS Process,
+    _In_ ULONG_PTR StartingAddress,
+    _In_ ULONG_PTR EndingAddress)
+{
+    PETHREAD CurrentThread = PsGetCurrentThread();
+    PMMVAD Vad, Middle = NULL, Last = NULL;
+    ULONG_PTR StartVpn = StartingAddress >> PAGE_SHIFT;
+    ULONG_PTR EndVpn = EndingAddress >> PAGE_SHIFT;
+    LONG_PTR CommitReduction;
+
+    Vad = MiLocateAddress((PVOID)StartingAddress);
+    if (!Vad || (Vad->EndingVpn < EndVpn))
+        return STATUS_CONFLICTING_ADDRESSES;
+
+    if (!MI_IS_PLACEHOLDER_VAD(Vad))
+    {
+        /* Only a whole private allocation can become a placeholder again */
+        if (!Vad->u.VadFlags.PrivateMemory || MI_IS_MEMORY_AREA_VAD(Vad) ||
+            (Vad->u.VadFlags.VadType != VadNone) || Vad->u.VadFlags.NoChange ||
+            (Vad->StartingVpn != StartVpn) || (Vad->EndingVpn != EndVpn))
+        {
+            return STATUS_CONFLICTING_ADDRESSES;
+        }
+
+        MiLockProcessWorkingSetUnsafe(Process, CurrentThread);
+        CommitReduction = MiCalculatePageCommitment(StartingAddress, EndingAddress, Vad, Process);
+        MiDeleteVirtualAddresses(StartingAddress, EndingAddress, NULL);
+        Vad->u.VadFlags.CommitCharge = 0;
+        Vad->u.VadFlags.MemCommit = 0;
+        Vad->u.VadFlags.Protection = MM_NOACCESS;
+        MI_SET_PLACEHOLDER_VAD(Vad, TRUE);
+        MiUnlockProcessWorkingSetUnsafe(Process, CurrentThread);
+        Process->CommitCharge -= CommitReduction;
+        return STATUS_SUCCESS;
+    }
+
+    /* Already a placeholder of its own */
+    if ((Vad->StartingVpn == StartVpn) && (Vad->EndingVpn == EndVpn))
+        return STATUS_SUCCESS;
+
+    /* The new placeholder, and one for what follows it if it is in the middle */
+    Middle = MiAllocatePlaceholderVad(Process, StartVpn, EndVpn);
+    if (!Middle)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    if ((Vad->StartingVpn < StartVpn) && (Vad->EndingVpn > EndVpn))
+    {
+        Last = MiAllocatePlaceholderVad(Process, EndVpn + 1, Vad->EndingVpn);
+        if (!Last)
+        {
+            MiFreePlaceholderVad(Process, Middle);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
+
+    /* Shrink the old one, then the new ones fill the hole (no pages to free) */
+    MiLockProcessWorkingSetUnsafe(Process, CurrentThread);
+    if (Vad->StartingVpn == StartVpn)
+    {
+        Vad->StartingVpn = EndVpn + 1;
+    }
+    else
+    {
+        Vad->EndingVpn = StartVpn - 1;
+    }
+    MiInsertVad(Middle, &Process->VadRoot);
+    if (Last) MiInsertVad(Last, &Process->VadRoot);
+    MiUnlockProcessWorkingSetUnsafe(Process, CurrentThread);
+    return STATUS_SUCCESS;
+}
+
+/*
+ * MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS: the adjacent placeholders that
+ * cover [StartingAddress, EndingAddress] exactly become one. The address
+ * space is locked, the process attached.
+ */
+static
+NTSTATUS
+MiCoalescePlaceholders(
+    _In_ PEPROCESS Process,
+    _In_ ULONG_PTR StartingAddress,
+    _In_ ULONG_PTR EndingAddress)
+{
+    PETHREAD CurrentThread = PsGetCurrentThread();
+    PMMVAD First, Vad, Next;
+    ULONG_PTR EndVpn = EndingAddress >> PAGE_SHIFT;
+
+    First = MiLocateAddress((PVOID)StartingAddress);
+    if (!First || !MI_IS_PLACEHOLDER_VAD(First) ||
+        (First->StartingVpn != (StartingAddress >> PAGE_SHIFT)))
+    {
+        return STATUS_CONFLICTING_ADDRESSES;
+    }
+
+    /* Check the whole chain first */
+    for (Vad = First; Vad->EndingVpn < EndVpn; Vad = Next)
+    {
+        Next = (PMMVAD)MiGetNextNode((PMMADDRESS_NODE)Vad);
+        if (!Next || !MI_IS_PLACEHOLDER_VAD(Next) || (Next->StartingVpn != Vad->EndingVpn + 1))
+            return STATUS_CONFLICTING_ADDRESSES;
+    }
+    if (Vad->EndingVpn != EndVpn)
+        return STATUS_CONFLICTING_ADDRESSES;
+
+    /* Then merge it into the first one */
+    MiLockProcessWorkingSetUnsafe(Process, CurrentThread);
+    while (First->EndingVpn < EndVpn)
+    {
+        Next = (PMMVAD)MiGetNextNode((PMMADDRESS_NODE)First);
+        MiRemoveNode((PMMADDRESS_NODE)Next, &Process->VadRoot);
+        First->EndingVpn = Next->EndingVpn;
+        MiFreePlaceholderVad(Process, Next);
+    }
+    MiUnlockProcessWorkingSetUnsafe(Process, CurrentThread);
+    return STATUS_SUCCESS;
+}
+
+/*
+ * @implemented
+ */
+NTSTATUS
+NTAPI
 NtFreeVirtualMemory(IN HANDLE ProcessHandle,
                     IN PVOID* UBaseAddress,
                     IN PSIZE_T URegionSize,
@@ -5502,9 +5712,12 @@ NtFreeVirtualMemory(IN HANDLE ProcessHandle,
     PAGED_CODE();
 
     //
-    // Only two flags are supported, exclusively.
+    // Only two flags are supported, exclusively, and a release can keep or
+    // join placeholders.
     //
-    if (FreeType != MEM_RELEASE && FreeType != MEM_DECOMMIT)
+    if (FreeType != MEM_RELEASE && FreeType != MEM_DECOMMIT &&
+        FreeType != (MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER) &&
+        FreeType != (MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS))
     {
         DPRINT1("Invalid FreeType (0x%08lx)\n", FreeType);
         return STATUS_INVALID_PARAMETER_4;
@@ -5609,6 +5822,37 @@ NtFreeVirtualMemory(IN HANDLE ProcessHandle,
     //
     StartingAddress = (ULONG_PTR)PAGE_ALIGN(PBaseAddress);
     EndingAddress = ((ULONG_PTR)PBaseAddress + PRegionSize - 1) | (PAGE_SIZE - 1);
+
+    //
+    // Splitting or joining placeholders: nothing is freed, the range stays
+    // reserved
+    //
+    if (FreeType & (MEM_PRESERVE_PLACEHOLDER | MEM_COALESCE_PLACEHOLDERS))
+    {
+        if (!PRegionSize)
+            Status = STATUS_INVALID_PARAMETER_3;
+        else if (FreeType & MEM_PRESERVE_PLACEHOLDER)
+            Status = MiSplitPlaceholder(Process, StartingAddress, EndingAddress);
+        else
+            Status = MiCoalescePlaceholders(Process, StartingAddress, EndingAddress);
+        if (!NT_SUCCESS(Status))
+            goto FailPath;
+
+        MmUnlockAddressSpace(AddressSpace);
+        if (Attached) KeUnstackDetachProcess(&ApcState);
+        if (ProcessHandle != NtCurrentProcess()) ObDereferenceObject(Process);
+        _SEH2_TRY
+        {
+            *URegionSize = EndingAddress - StartingAddress + 1;
+            *UBaseAddress = (PVOID)StartingAddress;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        _SEH2_END;
+        return STATUS_SUCCESS;
+    }
+
     Vad = MiLocateAddress((PVOID)StartingAddress);
     if (!Vad)
     {
@@ -5670,6 +5914,18 @@ NtFreeVirtualMemory(IN HANDLE ProcessHandle,
         // ARM3 only supports this VAD in this path
         //
         ASSERT(Vad->u.VadFlags.VadType == VadNone);
+
+        //
+        // A placeholder is released whole (or split first)
+        //
+        if (MI_IS_PLACEHOLDER_VAD(Vad) && PRegionSize &&
+            (((StartingAddress >> PAGE_SHIFT) != Vad->StartingVpn) ||
+             ((EndingAddress >> PAGE_SHIFT) != Vad->EndingVpn)))
+        {
+            DPRINT1("Partial release of a placeholder\n");
+            Status = STATUS_CONFLICTING_ADDRESSES;
+            goto FailPath;
+        }
 
         //
         // Is the caller trying to remove the whole VAD, or remove only a portion

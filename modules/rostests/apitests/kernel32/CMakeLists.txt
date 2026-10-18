@@ -51,6 +51,7 @@ list(APPEND SOURCE
     NestedJobs.c
     NewApis.c
     PackageNames.c
+    Placeholders.c
     PipeCompletionPort.c
     PipeProcessIds.c
     Pipes.c

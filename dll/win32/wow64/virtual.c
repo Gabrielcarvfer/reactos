@@ -175,7 +175,6 @@ NTSTATUS WINAPI wow64_NtAllocateVirtualMemory( UINT *args )
 }
 
 
-#ifndef __REACTOS__ /* not a ReactOS system call */
 /**********************************************************************
  *           wow64_NtAllocateVirtualMemoryEx
  */
@@ -216,7 +215,6 @@ NTSTATUS WINAPI wow64_NtAllocateVirtualMemoryEx( UINT *args )
     }
     return status;
 }
-#endif
 
 
 /**********************************************************************
@@ -453,7 +451,6 @@ NTSTATUS WINAPI wow64_NtMapViewOfSection( UINT *args )
     return status;
 }
 
-#ifndef __REACTOS__ /* not a ReactOS system call */
 /**********************************************************************
  *           wow64_NtMapViewOfSectionEx
  */
@@ -496,7 +493,6 @@ NTSTATUS WINAPI wow64_NtMapViewOfSectionEx( UINT *args )
     }
     return status;
 }
-#endif
 
 /**********************************************************************
  *           wow64_NtProtectVirtualMemory
@@ -802,7 +798,6 @@ NTSTATUS WINAPI wow64_NtUnmapViewOfSection( UINT *args )
 }
 
 
-#ifndef __REACTOS__ /* not a ReactOS system call */
 /**********************************************************************
  *           wow64_NtUnmapViewOfSectionEx
  */
@@ -817,7 +812,6 @@ NTSTATUS WINAPI wow64_NtUnmapViewOfSectionEx( UINT *args )
 
     return NtUnmapViewOfSectionEx( process, addr, flags );
 }
-#endif
 
 
 #ifndef __REACTOS__ /* not a ReactOS system call */

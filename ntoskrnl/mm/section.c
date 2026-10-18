@@ -4053,6 +4053,7 @@ MmMapViewOfSection(
     BOOLEAN NotAtBase = FALSE;
     BOOLEAN IsAttached = FALSE;
     KAPC_STATE ApcState;
+    PMMVAD Placeholder = NULL;
 
     if (MiIsRosSectionObject(SectionObject) == FALSE)
     {
@@ -4278,6 +4279,20 @@ MmMapViewOfSection(
 
         *ViewSize = PAGE_ROUND_UP(*ViewSize);
 
+        /* A view replacing a placeholder takes its place (NtMapViewOfSectionEx) */
+        if (AllocationType & MEM_REPLACE_PLACEHOLDER)
+        {
+            Placeholder = MiRemovePlaceholderVad(Process,
+                                                 (ULONG_PTR)*BaseAddress,
+                                                 (ULONG_PTR)*BaseAddress + *ViewSize - 1);
+            if (!Placeholder)
+            {
+                DPRINT1("No placeholder at %p (%Ix bytes)\n", *BaseAddress, *ViewSize);
+                Status = STATUS_CONFLICTING_ADDRESSES;
+                goto Exit;
+            }
+        }
+
         MmLockSectionSegment(Segment);
         Status = MmMapViewOfSegment(AddressSpace,
                                     FALSE,
@@ -4288,6 +4303,13 @@ MmMapViewOfSection(
                                     ViewOffset,
                                     AllocationType & (MEM_TOP_DOWN|SEC_NO_CHANGE));
         MmUnlockSectionSegment(Segment);
+        if (Placeholder)
+        {
+            if (NT_SUCCESS(Status))
+                MiFreePlaceholderVad(Process, Placeholder);
+            else
+                MiRestorePlaceholderVad(Process, Placeholder);
+        }
         if (!NT_SUCCESS(Status))
         {
             goto Exit;

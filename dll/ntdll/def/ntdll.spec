@@ -587,6 +587,7 @@
 @ stdcall NtUnlockFile(long ptr ptr ptr ptr)
 @ stdcall NtUnlockVirtualMemory(long ptr ptr long)
 @ stdcall NtUnmapViewOfSection(long ptr)
+@ stdcall -version=0xA00+ NtUnmapViewOfSectionEx(long ptr long)
 @ stdcall NtVdmControl(long ptr)
 @ stdcall NtWaitForDebugEvent(ptr long ptr ptr)
 @ stdcall NtWaitForKeyedEvent(ptr ptr long ptr)
@@ -1410,7 +1411,7 @@
 @ stdcall ZwAllocateUserPhysicalPages(ptr ptr ptr)
 @ stdcall ZwAllocateUuids(ptr ptr ptr ptr)
 @ stdcall ZwAllocateVirtualMemory(long ptr ptr ptr long long)
-@ stdcall -version=0xA00+ ZwAllocateVirtualMemoryEx(long ptr ptr long long ptr long) NtAllocateVirtualMemoryEx
+@ stdcall -version=0xA00+ ZwAllocateVirtualMemoryEx(long ptr ptr long long ptr long)
 @ stub -version=0x600+ ZwAlpcAcceptConnectPort
 @ stub -version=0x600+ ZwAlpcCancelMessage
 @ stub -version=0x600+ ZwAlpcConnectPort
@@ -1557,7 +1558,7 @@
 @ stdcall ZwMapUserPhysicalPages(ptr ptr ptr)
 @ stdcall ZwMapUserPhysicalPagesScatter(ptr ptr ptr)
 @ stdcall ZwMapViewOfSection(long long ptr long long ptr ptr long long long)
-@ stdcall -version=0xA00+ ZwMapViewOfSectionEx(long long ptr ptr ptr long long ptr long) NtMapViewOfSectionEx
+@ stdcall -version=0xA00+ ZwMapViewOfSectionEx(long long ptr ptr ptr long long ptr long)
 @ stdcall ZwModifyBootEntry(ptr)
 @ stdcall ZwModifyDriverEntry(ptr)
 @ stdcall ZwNotifyChangeDirectoryFile(long long ptr ptr ptr ptr long long long)
@@ -1769,6 +1770,7 @@
 @ stdcall ZwUnlockFile(long ptr ptr ptr ptr)
 @ stdcall ZwUnlockVirtualMemory(long ptr ptr long)
 @ stdcall ZwUnmapViewOfSection(long ptr)
+@ stdcall -version=0xA00+ ZwUnmapViewOfSectionEx(long ptr long)
 @ stdcall ZwVdmControl(long ptr)
 @ stdcall ZwWaitForDebugEvent(ptr long ptr ptr)
 @ stdcall ZwWaitForKeyedEvent(ptr ptr long ptr)

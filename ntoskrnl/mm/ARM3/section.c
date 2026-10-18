@@ -801,8 +801,8 @@ MiRemoveMappedView(IN PEPROCESS CurrentProcess,
     MiCheckControlArea(ControlArea, OldIrql);
 }
 
-static
 NTSTATUS
+NTAPI
 MiUnmapViewOfSection(IN PEPROCESS Process,
                      IN PVOID BaseAddress,
                      IN ULONG Flags)
@@ -1188,6 +1188,17 @@ MiMapViewOfDataSection(
     if (AllocationType & MEM_DOS_LIM)
         Granularity = PAGE_SIZE;
 #endif
+
+    /* A placeholder is replaced where it is, it may be page-aligned only */
+    if (AllocationType & MEM_REPLACE_PLACEHOLDER)
+    {
+        if (SectionOffset->LowPart & (_64K - 1))
+        {
+            DPRINT1("Page-aligned offsets of pagefile-backed sections are not supported\n");
+            return STATUS_MAPPED_ALIGNMENT;
+        }
+        Granularity = PAGE_SIZE;
+    }
 
     /* One can only reserve a file-based mapping, not shared memory! */
     if ((AllocationType & MEM_RESERVE) && !(ControlArea->FilePointer))
@@ -3280,6 +3291,36 @@ NtMapViewOfSection(
     _In_ ULONG AllocationType,
     _In_ ULONG Win32Protect)
 {
+    return MiMapViewOfSectionCommon(SectionHandle,
+                                    ProcessHandle,
+                                    BaseAddress,
+                                    ZeroBits,
+                                    CommitSize,
+                                    SectionOffset,
+                                    ViewSize,
+                                    InheritDisposition,
+                                    AllocationType,
+                                    Win32Protect,
+                                    FALSE);
+}
+
+/* NtMapViewOfSection, and NtMapViewOfSectionEx (Extended), which may replace
+   a placeholder with the view (MEM_REPLACE_PLACEHOLDER) */
+NTSTATUS
+NTAPI
+MiMapViewOfSectionCommon(
+    _In_ HANDLE SectionHandle,
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PVOID *BaseAddress,
+    _In_ ULONG_PTR ZeroBits,
+    _In_ SIZE_T CommitSize,
+    _Inout_opt_ PLARGE_INTEGER SectionOffset,
+    _Inout_ PSIZE_T ViewSize,
+    _In_ SECTION_INHERIT InheritDisposition,
+    _In_ ULONG AllocationType,
+    _In_ ULONG Win32Protect,
+    _In_ BOOLEAN Extended)
+{
     PVOID SafeBaseAddress;
     LARGE_INTEGER SafeSectionOffset;
     SIZE_T SafeViewSize;
@@ -3305,7 +3346,7 @@ NtMapViewOfSection(
     }
 
     /* Allow only valid allocation types */
-    if (AllocationType & ~ValidAllocationType)
+    if (AllocationType & ~(ValidAllocationType | (Extended ? MEM_REPLACE_PLACEHOLDER : 0)))
     {
         DPRINT1("Invalid allocation type\n");
         return STATUS_INVALID_PARAMETER_9;
@@ -3426,6 +3467,20 @@ NtMapViewOfSection(
             ObDereferenceObject(Section);
             ObDereferenceObject(Process);
             return STATUS_INVALID_PARAMETER_6;
+        }
+    }
+    else if (AllocationType & MEM_REPLACE_PLACEHOLDER)
+    {
+        /* The view takes the place of a placeholder: its address, and
+           the offset, are only page-aligned */
+        if (!SafeBaseAddress || !SafeViewSize || Section->u.Flags.Image ||
+            (SafeBaseAddress != PAGE_ALIGN(SafeBaseAddress)) ||
+            (SafeSectionOffset.LowPart & (PAGE_SIZE - 1)))
+        {
+            DPRINT1("Invalid placeholder replacement %p %Ix\n", SafeBaseAddress, SafeViewSize);
+            ObDereferenceObject(Section);
+            ObDereferenceObject(Process);
+            return STATUS_INVALID_PARAMETER;
         }
     }
     else if (!(AllocationType & MEM_DOS_LIM))

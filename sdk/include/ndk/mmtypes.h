@@ -383,6 +383,60 @@ typedef struct _SECTION_IMAGE_INFORMATION
 } SECTION_IMAGE_INFORMATION, *PSECTION_IMAGE_INFORMATION;
 
 #ifndef NTOS_MODE_USER
+//
+// Placeholders and extended parameters of NtAllocateVirtualMemoryEx and
+// NtMapViewOfSectionEx (Windows 10 1803, winnt.h has them for user mode)
+//
+#ifndef MEM_RESERVE_PLACEHOLDER
+#define MEM_COALESCE_PLACEHOLDERS       0x00000001
+#define MEM_PRESERVE_PLACEHOLDER        0x00000002
+#define MEM_REPLACE_PLACEHOLDER         0x00004000
+#define MEM_RESERVE_PLACEHOLDER         0x00040000
+#endif
+#ifndef MEM_UNMAP_WITH_TRANSIENT_BOOST
+#define MEM_UNMAP_WITH_TRANSIENT_BOOST  0x00000001
+#endif
+
+typedef enum MEM_EXTENDED_PARAMETER_TYPE
+{
+    MemExtendedParameterInvalidType,
+    MemExtendedParameterAddressRequirements,
+    MemExtendedParameterNumaNode,
+    MemExtendedParameterPartitionHandle,
+    MemExtendedParameterUserPhysicalHandle,
+    MemExtendedParameterAttributeFlags,
+    MemExtendedParameterImageMachine,
+    MemExtendedParameterMax
+} MEM_EXTENDED_PARAMETER_TYPE, *PMEM_EXTENDED_PARAMETER_TYPE;
+
+typedef struct _MEM_ADDRESS_REQUIREMENTS
+{
+    PVOID LowestStartingAddress;
+    PVOID HighestEndingAddress;
+    SIZE_T Alignment;
+} MEM_ADDRESS_REQUIREMENTS, *PMEM_ADDRESS_REQUIREMENTS;
+
+#define MEM_EXTENDED_PARAMETER_TYPE_BITS 8
+
+typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER
+{
+    struct
+    {
+        ULONG64 Type : MEM_EXTENDED_PARAMETER_TYPE_BITS;
+        ULONG64 Reserved : 64 - MEM_EXTENDED_PARAMETER_TYPE_BITS;
+    } DUMMYSTRUCTNAME;
+    union
+    {
+        ULONG64 ULong64;
+        PVOID Pointer;
+        SIZE_T Size;
+        HANDLE Handle;
+        ULONG ULong;
+    } DUMMYUNIONNAME;
+} MEM_EXTENDED_PARAMETER, *PMEM_EXTENDED_PARAMETER;
+#endif // !NTOS_MODE_USER
+
+#ifndef NTOS_MODE_USER
 
 //
 // Section Extension Information

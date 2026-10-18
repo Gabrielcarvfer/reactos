@@ -108,6 +108,19 @@ NtAllocateVirtualMemory(
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
+NtAllocateVirtualMemoryEx(
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PVOID *BaseAddress,
+    _Inout_ PSIZE_T RegionSize,
+    _In_ ULONG AllocationType,
+    _In_ ULONG PageProtection,
+    _Inout_updates_opt_(ExtendedParameterCount) PMEM_EXTENDED_PARAMETER ExtendedParameters,
+    _In_ ULONG ExtendedParameterCount
+);
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
 NtCreatePagingFile(
     _In_ PUNICODE_STRING FileName,
     _In_ PLARGE_INTEGER MinimumSize,
@@ -234,6 +247,21 @@ NtMapViewOfSection(
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
+NtMapViewOfSectionEx(
+    _In_ HANDLE SectionHandle,
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PVOID *BaseAddress,
+    _Inout_opt_ PLARGE_INTEGER SectionOffset,
+    _Inout_ PSIZE_T ViewSize,
+    _In_ ULONG AllocationType,
+    _In_ ULONG PageProtection,
+    _Inout_updates_opt_(ExtendedParameterCount) PMEM_EXTENDED_PARAMETER ExtendedParameters,
+    _In_ ULONG ExtendedParameterCount
+);
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
 NtOpenSection(
     _Out_ PHANDLE SectionHandle,
     _In_ ACCESS_MASK DesiredAccess,
@@ -309,6 +337,15 @@ NTAPI
 NtUnmapViewOfSection(
     _In_ HANDLE ProcessHandle,
     _In_ PVOID BaseAddress
+);
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtUnmapViewOfSectionEx(
+    _In_ HANDLE ProcessHandle,
+    _In_opt_ PVOID BaseAddress,
+    _In_ ULONG Flags
 );
 
 NTSYSCALLAPI
