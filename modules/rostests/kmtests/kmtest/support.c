@@ -49,6 +49,11 @@ KmtUserCallbackThread(
     {
         if (!DeviceIoControl(LocalKmtHandle, IOCTL_KMTEST_USERMODE_AWAIT_REQ, NULL, 0, &RequestPacket, sizeof(RequestPacket), &BytesReturned, NULL))
             error_goto(Error, cleanup);
+
+        /* The driver waits for a request only so long (it then answers with
+         * STATUS_TIMEOUT and no data, e.g. while a long test runs): wait again */
+        if (BytesReturned == 0)
+            continue;
         ASSERT(BytesReturned == sizeof(RequestPacket));
 
         switch (RequestPacket.OperationClass)
