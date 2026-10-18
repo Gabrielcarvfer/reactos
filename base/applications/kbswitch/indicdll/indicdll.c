@@ -106,6 +106,16 @@ CheckVirtualKey(UINT vKey, UINT vKey0, UINT vKey1, UINT vKey2)
     return vKey == vKey0 || vKey == vKey1 || vKey == vKey2;
 }
 
+/* The hook normally runs in the thread that got the key, where GetKeyState
+ * tells the state of the modifiers for this key. When it can't (a program of
+ * the other bitness), it runs in kbswitch's own thread instead, whose key
+ * state knows nothing of that input: ask the asynchronous state too. */
+static inline BOOL
+IsKeyDown(INT vKey)
+{
+    return (GetKeyState(vKey) < 0) || (GetAsyncKeyState(vKey) < 0);
+}
+
 static LRESULT CALLBACK
 KeyboardProc(INT code, WPARAM wParam, LPARAM lParam)
 {
@@ -118,9 +128,9 @@ KeyboardProc(INT code, WPARAM wParam, LPARAM lParam)
         LONG keyFlags = HIWORD(lParam);
         if (!(keyFlags & KF_UP) && !(keyFlags & KF_REPEAT))
         {
-            BOOL bShiftPressed = (GetKeyState(VK_SHIFT) < 0);
-            BOOL bAltPressed = (keyFlags & KF_ALTDOWN) || (GetKeyState(VK_MENU) < 0);
-            BOOL bCtrlPressed = (GetKeyState(VK_CONTROL) < 0);
+            BOOL bShiftPressed = IsKeyDown(VK_SHIFT);
+            BOOL bAltPressed = (keyFlags & KF_ALTDOWN) || IsKeyDown(VK_MENU);
+            BOOL bCtrlPressed = IsKeyDown(VK_CONTROL);
             // Detect Alt+Shift and Ctrl+Shift
             if ((bAltPressed && CheckVirtualKey(vKey, VK_SHIFT, VK_LSHIFT, VK_RSHIFT)) ||
                 (bShiftPressed && CheckVirtualKey(vKey, VK_MENU, VK_LMENU, VK_RMENU)) ||
