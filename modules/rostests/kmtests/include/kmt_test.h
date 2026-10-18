@@ -22,7 +22,15 @@
 extern "C" {
 #endif
 
+/* Kernel mode: the version of the kernel itself. SharedUserData has the
+ * version that programs see, which can be a newer one (64-bit ReactOS
+ * reports Windows 10 there): the tests check the behaviour of the kernel
+ * against the version it implements. */
+#if defined(KMT_KERNEL_MODE) || defined(KMT_STANDALONE_DRIVER) || defined(KMT_FILTER_DRIVER)
+#define GetNTVersion() KmtGetKernelNTVersion()
+#else
 #define GetNTVersion() ((SharedUserData->NtMajorVersion << 8) | SharedUserData->NtMinorVersion)
+#endif
 
 typedef VOID KMT_TESTFUNC(VOID);
 typedef KMT_TESTFUNC *PKMT_TESTFUNC;
@@ -530,6 +538,15 @@ VOID KmtFreeGuarded(PVOID Pointer)
 }
 
 #endif /* defined KMT_DEFINE_TEST_FUNCTIONS */
+
+#if defined(KMT_KERNEL_MODE)
+static inline USHORT KmtGetKernelNTVersion(VOID)
+{
+    ULONG MajorVersion, MinorVersion;
+    PsGetVersion(&MajorVersion, &MinorVersion, NULL, NULL);
+    return (USHORT)((MajorVersion << 8) | MinorVersion);
+}
+#endif
 
 #define is_reactos() \
     (*(unsigned*)((size_t)0x7FFE0FFC) == 0x8EAC705)

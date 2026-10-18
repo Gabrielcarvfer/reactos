@@ -79,8 +79,7 @@ static
 VOID
 ObjectNameInformationTests(VOID)
 {
-    ULONG g_OsVersion =
-        SharedUserData->NtMajorVersion << 8 | SharedUserData->NtMinorVersion;
+    ULONG g_OsVersion = GetNTVersion();
 
     NTSTATUS Status;
     HANDLE DeviceHandle;
