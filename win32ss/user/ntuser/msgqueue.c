@@ -1971,7 +1971,7 @@ co_MsqPeekHardwareMessage(IN PTHREADINFO pti,
    BOOL AcceptMessage, NotForUs;
    PUSER_MESSAGE CurrentMessage;
    PLIST_ENTRY ListHead;
-   MSG msg;
+   MSG msg, msgQueued;
    ULONG_PTR idSave;
    DWORD QS_Flags;
    LONG_PTR ExtraInfo;
@@ -2023,13 +2023,15 @@ co_MsqPeekHardwareMessage(IN PTHREADINFO pti,
          MessageQueue->idSysPeek = (ULONG_PTR)CurrentMessage;
 
          msg = CurrentMessage->Msg;
+         msgQueued = msg;
          ExtraInfo = CurrentMessage->ExtraInfo;
          QS_Flags = CurrentMessage->QS_Flags;
          clk_msg = MessageQueue->msgDblClk;
 
          NotForUs = FALSE;
 
-         UpdateKeyStateFromMsg(MessageQueue, &msg);
+         /* (The thread's key state changes when the message is removed, see
+          * below: not when it is only looked at) */
          AcceptMessage = co_IntProcessHardwareMessage(&msg, &Remove, &NotForUs, ExtraInfo, MsgFilterLow, MsgFilterHigh);
 
          if (!NotForUs && (MsgFilterLow != 0 || MsgFilterHigh != 0))
@@ -2045,6 +2047,16 @@ co_MsqPeekHardwareMessage(IN PTHREADINFO pti,
 
          if (Remove)
          {
+             /* Like Windows (and Wine's release_hardware_message), the key
+              * state GetKeyState reports follows the input messages the
+              * thread has removed. Updating it for every message looked at
+              * (PM_NOREMOVE, or a filter that skips it) ran it ahead of the
+              * message being handled: an app peeking ahead for WM_CHAR saw
+              * Shift down or up too early, and typed "HELLO@>JS" for
+              * "hello2.js" (VS Code, Chromium). Use the message as queued
+              * (co_IntProcessHardwareMessage turns VK_LSHIFT into VK_SHIFT). */
+             if (!NotForUs)
+                UpdateKeyStateFromMsg(MessageQueue, &msgQueued);
              if (CurrentMessage->pti != NULL && (MessageQueue->idSysPeek == (ULONG_PTR)CurrentMessage))
              {
                 MsqDestroyMessage(CurrentMessage);

@@ -20,6 +20,7 @@ list(APPEND SOURCE
     EnumDisplaySettings.c
     GetClassInfo.c
     GlobalKeyboardHook.c
+    KeyStatePeek.c
     GetDCEx.c
     GetIconInfo.c
     GetKeyState.c
