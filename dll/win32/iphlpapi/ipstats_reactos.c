@@ -92,6 +92,37 @@ NTSTATUS getNthIpEntity( HANDLE tcpFile, DWORD index, TDIEntityID *ent ) {
     }
 }
 
+/* The IP entity of the interface with this interface index (the index that
+ * the interface, address and route tables give, not a position) */
+NTSTATUS getIpEntityByIfIndex( HANDLE tcpFile, DWORD ifIndex, TDIEntityID *ent ) {
+    DWORD numEntities = 0, numAddrs, j;
+    TDIEntityID *entitySet = 0;
+    IPAddrEntry *addrs;
+    NTSTATUS status = tdiGetEntityIDSet( tcpFile, &entitySet, &numEntities );
+    BOOL found = FALSE;
+    DWORD i;
+
+    if( !NT_SUCCESS(status) )
+        return status;
+
+    for( i = 0; !found && i < numEntities; i++ ) {
+        if( !isIpEntity( tcpFile, &entitySet[i] ) ||
+            !NT_SUCCESS(tdiGetIpAddrsForIpEntity( tcpFile, &entitySet[i], &addrs, &numAddrs )) )
+            continue;
+        for( j = 0; j < numAddrs; j++ ) {
+            if( addrs[j].iae_index == ifIndex ) {
+                memcpy( ent, &entitySet[i], sizeof(*ent) );
+                found = TRUE;
+                break;
+            }
+        }
+        tdiFreeThingSet( addrs );
+    }
+
+    tdiFreeThingSet( entitySet );
+    return found ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
+}
+
 static NTSTATUS
 tdiGetMibForIpEntity(
   _In_ HANDLE tcpFile,

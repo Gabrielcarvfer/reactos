@@ -297,7 +297,9 @@ BOOLEAN IPRegisterInterface(
  */
 {
     KIRQL OldIrql;
-    UINT ChosenIndex = 0;
+    /* Interface indexes start at 1, as on Windows (the loopback interface,
+       registered first, gets 1): 0 means "no interface" (NET_IFINDEX_UNSPECIFIED) */
+    UINT ChosenIndex = 1;
     BOOLEAN IndexHasBeenChosen;
     IF_LIST_ITER(Interface);
 
