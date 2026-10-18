@@ -85,10 +85,12 @@ TCPUpdateInterfaceLinkStatus(PIP_INTERFACE IF)
 
     GetInterfaceConnectionStatus(IF, &OperationalStatus);
 
+    LOCK_TCPIP_CORE();
     if (OperationalStatus == MIB_IF_OPER_STATUS_OPERATIONAL)
         netif_set_link_up(IF->TCPContext);
     else
         netif_set_link_down(IF->TCPContext);
+    UNLOCK_TCPIP_CORE();
 }
 
 err_t
@@ -125,6 +127,8 @@ TCPRegisterInterface(PIP_INTERFACE IF)
     ipaddr.addr = 0;
     netmask.addr = 0;
 
+    /* (lwIP's interface list belongs to the holder of its core lock) */
+    LOCK_TCPIP_CORE();
     IF->TCPContext = netif_add(IF->TCPContext,
                                &ipaddr,
                                &netmask,
@@ -132,12 +136,15 @@ TCPRegisterInterface(PIP_INTERFACE IF)
                                IF,
                                TCPInterfaceInit,
                                tcpip_input);
+    UNLOCK_TCPIP_CORE();
 }
 
 VOID
 TCPUnregisterInterface(PIP_INTERFACE IF)
 {
+    LOCK_TCPIP_CORE();
     netif_remove(IF->TCPContext);
+    UNLOCK_TCPIP_CORE();
 }
 
 VOID
@@ -157,6 +164,7 @@ TCPUpdateInterfaceIPInformation(PIP_INTERFACE IF)
                             ADE_ADDRMASK,
                             (PULONG)&netmask.addr);
 
+    LOCK_TCPIP_CORE();
     netif_set_addr(IF->TCPContext, &ipaddr, &netmask, &gw);
 
     if (ipaddr.addr != 0)
@@ -168,4 +176,5 @@ TCPUpdateInterfaceIPInformation(PIP_INTERFACE IF)
     {
         netif_set_down(IF->TCPContext);
     }
+    UNLOCK_TCPIP_CORE();
 }

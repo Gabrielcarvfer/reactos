@@ -7,6 +7,16 @@ typedef struct _sys_sem_t
     int Valid;
 } sys_sem_t;
 
+/* A lock its owner may take again (lwIP's core lock: tcpip calls into lwIP
+ * from its own callbacks) */
+typedef struct _sys_mutex_t
+{
+    KEVENT Event;       /* Signalled while free */
+    PKTHREAD Owner;
+    ULONG Recursion;
+    int Valid;
+} sys_mutex_t;
+
 typedef struct _sys_mbox_t
 {
     KSPIN_LOCK Lock;

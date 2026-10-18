@@ -1,16 +1,25 @@
 #include <debug.h>
 #include <lwip/sys.h>
+#include <lwip/tcpip.h>
 
 #include "lwip_glue.h"
 
 static LIST_ENTRY ThreadListHead;
 static KSPIN_LOCK ThreadListLock;
-static ERESOURCE GlobalLock;
-static ULONG GlobalLockLevel = 0;
+
+/* SYS_ARCH_PROTECT: short, non-blocking sections (pbuf reference counts) that
+ * any thread may enter: a spin lock the owner may take again */
+static KSPIN_LOCK ProtectLock;
+static PKTHREAD ProtectOwner;
+static ULONG ProtectDepth;
+
+/* (ms) */
+#define LWIP_MAX_TIMER_SLEEP 50
 
 KEVENT TerminationEvent;
 NPAGED_LOOKASIDE_LIST MessageLookasideList;
 NPAGED_LOOKASIDE_LIST QueueEntryLookasideList;
+static NPAGED_LOOKASIDE_LIST MboxContainerLookasideList;
 
 static LARGE_INTEGER StartTime;
 
@@ -38,18 +47,114 @@ u32_t sys_now(void)
 void
 sys_arch_protect(sys_prot_t *lev)
 {
-    /* Acquire the global resource to prevent other CPUs from running */
-    ExEnterCriticalRegionAndAcquireResourceExclusive(&GlobalLock);
-    *lev = ++GlobalLockLevel;
+    KIRQL OldIrql;
+
+    /* (at DISPATCH_LEVEL nothing else runs on this processor, so an owner
+     * that is the current thread is this very code path, nested) */
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    if (ProtectOwner != KeGetCurrentThread())
+    {
+        KeAcquireSpinLockAtDpcLevel(&ProtectLock);
+        ProtectOwner = KeGetCurrentThread();
+    }
+    ProtectDepth++;
+    *lev = OldIrql;
 }
 
 void
 sys_arch_unprotect(sys_prot_t lev)
 {
-    /* Release the global resource */
-    ASSERT((GlobalLockLevel > 0) && (lev == GlobalLockLevel));
-    GlobalLockLevel--;
-    ExReleaseResourceAndLeaveCriticalRegion(&GlobalLock);
+    ASSERT(ProtectOwner == KeGetCurrentThread() && ProtectDepth > 0);
+    if (--ProtectDepth == 0)
+    {
+        ProtectOwner = NULL;
+        KeReleaseSpinLockFromDpcLevel(&ProtectLock);
+    }
+    KeLowerIrql((KIRQL)lev);
+}
+
+err_t
+sys_mutex_new(sys_mutex_t *mutex)
+{
+    KeInitializeEvent(&mutex->Event, SynchronizationEvent, TRUE);
+    mutex->Owner = NULL;
+    mutex->Recursion = 0;
+    mutex->Valid = 1;
+    return ERR_OK;
+}
+
+void
+sys_mutex_lock(sys_mutex_t *mutex)
+{
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+
+    if (mutex->Owner == KeGetCurrentThread())
+    {
+        mutex->Recursion++;
+        return;
+    }
+
+    /* No suspending (APCs) while holding the lock everybody needs */
+    KeEnterCriticalRegion();
+    KeWaitForSingleObject(&mutex->Event, Executive, KernelMode, FALSE, NULL);
+    mutex->Owner = KeGetCurrentThread();
+    mutex->Recursion = 1;
+}
+
+void
+sys_mutex_unlock(sys_mutex_t *mutex)
+{
+    LIST_ENTRY Completions;
+    BOOLEAN Core = (mutex == &lock_tcpip_core);
+
+    ASSERT(mutex->Owner == KeGetCurrentThread() && mutex->Recursion > 0);
+
+    /* Requests that lwIP's callbacks finished while the core lock was held
+     * complete now, in this thread, after the lock is free: their completion
+     * routines (AFD) take their own locks and call back into tcpip. (Taken
+     * while still owning the lock once: filling receive requests may take
+     * it again) */
+    InitializeListHead(&Completions);
+    if (Core && mutex->Recursion == 1)
+        LibTCPTakeDeferredCompletions(&Completions);
+
+    if (--mutex->Recursion)
+    {
+        ASSERT(IsListEmpty(&Completions));
+        return;
+    }
+
+    mutex->Owner = NULL;
+    KeSetEvent(&mutex->Event, IO_NO_INCREMENT, FALSE);
+    KeLeaveCriticalRegion();
+
+    if (Core && !IsListEmpty(&Completions))
+        LibTCPRunDeferredCompletions(&Completions);
+}
+
+void
+sys_mutex_free(sys_mutex_t *mutex)
+{
+    mutex->Valid = 0;
+}
+
+int
+sys_mutex_valid(sys_mutex_t *mutex)
+{
+    return mutex->Valid;
+}
+
+void
+sys_mutex_set_invalid(sys_mutex_t *mutex)
+{
+    mutex->Valid = 0;
+}
+
+int
+sys_core_locked(void)
+{
+    /* (lwip_init runs before the lock exists, in the only thread using lwIP) */
+    return !lock_tcpip_core.Valid || lock_tcpip_core.Owner == KeGetCurrentThread();
 }
 
 err_t
@@ -171,7 +276,7 @@ sys_mbox_post(sys_mbox_t *mbox, void *msg)
 {
     PLWIP_MESSAGE_CONTAINER Container;
 
-    Container = ExAllocatePool(NonPagedPool, sizeof(*Container));
+    Container = ExAllocateFromNPagedLookasideList(&MboxContainerLookasideList);
     ASSERT(Container);
 
     Container->Message = msg;
@@ -195,6 +300,14 @@ sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
     KIRQL OldIrql;
     PVOID WaitObjects[] = {&mbox->Semaphore, &TerminationEvent};
 
+    /* The lwIP thread sleeps here until its next timer is due. Other threads
+     * run lwIP under the core lock now and start timers (TCP's retransmission
+     * timer, tcp_timer_needed) without waking it: never sleep longer than
+     * LWIP_MAX_TIMER_SLEEP, or those timers would wait for the next message,
+     * and lost segments would never be sent again */
+    if (timeout == 0 || timeout > LWIP_MAX_TIMER_SLEEP)
+        timeout = LWIP_MAX_TIMER_SLEEP;
+
     LargeTimeout.QuadPart = Int32x32To64(timeout, -10000);
 
     PreWaitTime.QuadPart = KeQueryInterruptTime();
@@ -205,7 +318,7 @@ sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
                                       Executive,
                                       KernelMode,
                                       FALSE,
-                                      timeout != 0 ? &LargeTimeout : NULL,
+                                      &LargeTimeout,
                                       NULL);
 
     if (Status == STATUS_WAIT_0)
@@ -217,7 +330,7 @@ sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
 
         Container = CONTAINING_RECORD(Entry, LWIP_MESSAGE_CONTAINER, ListEntry);
         Message = Container->Message;
-        ExFreePool(Container);
+        ExFreeToNPagedLookasideList(&MboxContainerLookasideList, Container);
 
         if (msg)
             *msg = Message;
@@ -314,6 +427,7 @@ sys_init(void)
 {
     KeInitializeSpinLock(&ThreadListLock);
     InitializeListHead(&ThreadListHead);
+    KeInitializeSpinLock(&ProtectLock);
 
     StartTime.QuadPart = KeQueryInterruptTime();
 
@@ -333,6 +447,14 @@ sys_init(void)
                                     0,
                                     sizeof(QUEUE_ENTRY),
                                     LWIP_QUEUE_TAG,
+                                    0);
+
+    ExInitializeNPagedLookasideList(&MboxContainerLookasideList,
+                                    NULL,
+                                    NULL,
+                                    0,
+                                    sizeof(LWIP_MESSAGE_CONTAINER),
+                                    LWIP_MESSAGE_TAG,
                                     0);
 }
 
@@ -364,4 +486,5 @@ sys_shutdown(void)
 
     ExDeleteNPagedLookasideList(&MessageLookasideList);
     ExDeleteNPagedLookasideList(&QueueEntryLookasideList);
+    ExDeleteNPagedLookasideList(&MboxContainerLookasideList);
 }

@@ -34,6 +34,155 @@ BucketCompletionWorker(PVOID Context)
     ExFreeToNPagedLookasideList(&TdiBucketLookasideList, Bucket);
 }
 
+/* Requests finished under lwIP's core lock, completed when it is released
+ * (protected by the core lock) */
+static LIST_ENTRY DeferredCompletions = { &DeferredCompletions, &DeferredCompletions };
+
+VOID
+LibTCPTakeDeferredCompletions(PLIST_ENTRY List)
+{
+    ASSERT(sys_core_locked());
+
+    if (IsListEmpty(&DeferredCompletions))
+        return;
+
+    /* Move the whole list over */
+    List->Flink = DeferredCompletions.Flink;
+    List->Blink = DeferredCompletions.Blink;
+    List->Flink->Blink = List;
+    List->Blink->Flink = List;
+    InitializeListHead(&DeferredCompletions);
+}
+
+/* Threads that hold no lock of the layers above (AFD's): the receive workers
+ * and the lwIP thread. Completion routines run inline only there. Elsewhere
+ * (a request from AFD, which holds its socket's lock while it calls us) a
+ * completion routine taking another socket's lock could deadlock with a
+ * thread doing the same the other way round */
+#define COMPLETION_CONTEXT_SLOTS 8
+static PKTHREAD CompletionContextThreads[COMPLETION_CONTEXT_SLOTS];
+static PKTHREAD LwipThread;
+
+ULONG
+TCPEnterCompletionContext(VOID)
+{
+    ULONG Slot;
+
+    for (Slot = 0; Slot < COMPLETION_CONTEXT_SLOTS; Slot++)
+    {
+        if (!InterlockedCompareExchangePointer((PVOID *)&CompletionContextThreads[Slot],
+                                               KeGetCurrentThread(),
+                                               NULL))
+        {
+            return Slot;
+        }
+    }
+
+    /* (no slot: completions go to a work item) */
+    return MAXULONG;
+}
+
+VOID
+TCPLeaveCompletionContext(ULONG Slot)
+{
+    if (Slot < COMPLETION_CONTEXT_SLOTS)
+        InterlockedExchangePointer((PVOID *)&CompletionContextThreads[Slot], NULL);
+}
+
+VOID
+LibTCPSetLwipThread(VOID)
+{
+    LwipThread = KeGetCurrentThread();
+}
+
+static
+BOOLEAN
+InCompletionContext(VOID)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+    ULONG Slot;
+
+    if (Thread == LwipThread)
+        return TRUE;
+
+    for (Slot = 0; Slot < COMPLETION_CONTEXT_SLOTS; Slot++)
+    {
+        if (CompletionContextThreads[Slot] == Thread)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+typedef struct _DEFERRED_COMPLETIONS
+{
+    LIST_ENTRY List;
+} DEFERRED_COMPLETIONS, *PDEFERRED_COMPLETIONS;
+
+static
+VOID
+RunCompletionList(PLIST_ENTRY List)
+{
+    PLIST_ENTRY Entry;
+
+    while (!IsListEmpty(List))
+    {
+        Entry = RemoveHeadList(List);
+        BucketCompletionWorker(CONTAINING_RECORD(Entry, TDI_BUCKET, Entry));
+    }
+}
+
+static
+VOID
+DeferredCompletionsWorker(PVOID Context)
+{
+    PDEFERRED_COMPLETIONS Deferred = Context;
+
+    RunCompletionList(&Deferred->List);
+    ExFreePoolWithTag(Deferred, TDI_BUCKET_TAG);
+}
+
+static
+VOID
+MoveList(PLIST_ENTRY To, PLIST_ENTRY From)
+{
+    To->Flink = From->Flink;
+    To->Blink = From->Blink;
+    To->Flink->Blink = To;
+    To->Blink->Flink = To;
+    InitializeListHead(From);
+}
+
+VOID
+LibTCPRunDeferredCompletions(PLIST_ENTRY List)
+{
+    PDEFERRED_COMPLETIONS Deferred;
+    PLIST_ENTRY Entry;
+
+    if (InCompletionContext())
+    {
+        RunCompletionList(List);
+        return;
+    }
+
+    /* All of them in one work item */
+    Deferred = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Deferred), TDI_BUCKET_TAG);
+    if (Deferred)
+    {
+        MoveList(&Deferred->List, List);
+        if (ChewCreate(DeferredCompletionsWorker, Deferred))
+            return;
+        MoveList(List, &Deferred->List);
+        ExFreePoolWithTag(Deferred, TDI_BUCKET_TAG);
+    }
+
+    while (!IsListEmpty(List))
+    {
+        Entry = RemoveHeadList(List);
+        ChewCreate(BucketCompletionWorker, CONTAINING_RECORD(Entry, TDI_BUCKET, Entry));
+    }
+}
+
 VOID
 CompleteBucket(PCONNECTION_ENDPOINT Connection, PTDI_BUCKET Bucket, const BOOLEAN Synchronous)
 {
@@ -42,6 +191,12 @@ CompleteBucket(PCONNECTION_ENDPOINT Connection, PTDI_BUCKET Bucket, const BOOLEA
     if (Synchronous)
     {
         BucketCompletionWorker(Bucket);
+    }
+    else if (sys_core_locked())
+    {
+        /* In lwIP (a received packet, a timer): complete when the core lock
+         * is released, in this thread, instead of from a work item */
+        InsertTailList(&DeferredCompletions, &Bucket->Entry);
     }
     else
     {
@@ -389,6 +544,7 @@ TCPRecvEventHandler(void *arg)
     PUCHAR RecvBuffer;
     NTSTATUS Status;
 
+    /* (called in lwIP, under its core lock) */
     LockObject(Connection);
 
     while(!IsListEmpty(&Connection->ReceiveRequest))

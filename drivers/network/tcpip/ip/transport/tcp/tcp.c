@@ -198,11 +198,16 @@ VOID TCPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
  *     This is the low level interface for receiving TCP data
  */
 {
+    ULONG Slot;
+
     TI_DbgPrint(DEBUG_TCP,("Sending packet %d (%d) to lwIP\n",
                            IPPacket->TotalSize,
                            IPPacket->HeaderSize));
 
+    /* (called by the receive workers, which hold no lock of AFD's) */
+    Slot = TCPEnterCompletionContext();
     LibIPInsertPacket(Interface->TCPContext, IPPacket->Header, IPPacket->TotalSize);
+    TCPLeaveCompletionContext(Slot);
 }
 
 NTSTATUS TCPStartup(VOID)
@@ -604,6 +609,12 @@ NTSTATUS TCPSendData
     TI_DbgPrint(DEBUG_TCP,("[IP, TCPSendData] Connection->SocketContext = %x\n",
                            Connection->SocketContext));
 
+    /* Try to send and queue the request if there is no room, under lwIP's
+     * lock: the acknowledgement that makes room (TCPSendEventHandler, in
+     * another thread) would otherwise find no request to resume, and the send
+     * would wait forever */
+    LibTCPLockCore();
+
     Status = TCPTranslateError(LibTCPSend(Connection,
                                           BufferData,
                                           SendLength,
@@ -619,6 +630,7 @@ NTSTATUS TCPSendData
         Bucket = ExAllocateFromNPagedLookasideList(&TdiBucketLookasideList);
         if (!Bucket)
         {
+            LibTCPUnlockCore();
             DereferenceObject(Connection);
             TI_DbgPrint(DEBUG_TCP,("[IP, TCPSendData] Failed to allocate bucket\n"));
             return STATUS_NO_MEMORY;
@@ -632,6 +644,8 @@ NTSTATUS TCPSendData
         TI_DbgPrint(DEBUG_TCP,("[IP, TCPSendData] Queued write irp\n"));
         UnlockObject(Connection);
     }
+
+    LibTCPUnlockCore();
 
 
     TI_DbgPrint(DEBUG_TCP, ("[IP, TCPSendData] Leaving. Status = %x\n", Status));

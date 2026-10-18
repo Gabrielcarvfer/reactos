@@ -8,10 +8,15 @@
 #define MEM_LIBC_MALLOC                 1
 #define MEMP_MEM_MALLOC                 1
 
-/* Define LWIP_COMPAT_MUTEX if the port has no mutexes and binary semaphores
- should be used instead */
-#define LWIP_COMPAT_MUTEX               1
-#define LWIP_COMPAT_MUTEX_ALLOWED       1
+/* tcpip calls lwIP under its core lock in the calling thread (received
+ * packets in the receive worker, requests in the requester's thread) instead
+ * of queueing every packet and request to the lwIP thread and waiting: those
+ * thread switches cost more than the protocol work itself. The lwIP thread
+ * only runs the timers now */
+#define LWIP_TCPIP_CORE_LOCKING         1
+#define LWIP_TCPIP_CORE_LOCKING_INPUT   1
+int sys_core_locked(void);
+#define LWIP_ASSERT_CORE_LOCKED()       LWIP_ASSERT("core locked", sys_core_locked())
 
 #define MEM_ALIGNMENT                   4
 

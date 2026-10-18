@@ -178,6 +178,11 @@ NTSTATUS TCPGetSockAddress
   PTRANSPORT_ADDRESS TransportAddress,
   BOOLEAN RemoteAddress );
 
+/* The calling thread holds no lock of the layers above: completion routines
+ * of requests lwIP finishes may run in it */
+ULONG TCPEnterCompletionContext(VOID);
+VOID TCPLeaveCompletionContext(ULONG Slot);
+
 NTSTATUS TCPStartup(
   VOID);
 

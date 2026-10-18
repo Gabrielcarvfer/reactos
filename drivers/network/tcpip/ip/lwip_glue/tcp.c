@@ -17,13 +17,13 @@ static const char * const tcp_state_str[] = {
   "TIME_WAIT"
 };
 
-/* The way that lwIP does multi-threading is really not ideal for our purposes but
- * we best go along with it unless we want another unstable TCP library. lwIP uses
- * a thread called the "tcpip thread" which is the only one allowed to call raw API
- * functions. Since this is the case, for each of our LibTCP* functions, we queue a request
- * for a callback to "tcpip thread" which calls our LibTCP*Callback functions. Yes, this is
- * a lot of unnecessary thread swapping and it could definitely be faster, but I don't want
- * to going messing around in lwIP because I have no desire to create another mess like oskittcp */
+/* lwIP's raw API may only be called by one thread at a time: the holder of its
+ * core lock (LWIP_TCPIP_CORE_LOCKING). Each LibTCP* function runs its
+ * LibTCP*Callback under that lock in the calling thread. (They used to be
+ * queued to the "tcpip thread" and waited for: two thread switches per
+ * request.) The lock may be taken again by its owner, so lwIP's callbacks can
+ * call LibTCP* functions. Requests they finish are completed when the lock is
+ * released (CompleteBucket). */
 
 extern KEVENT TerminationEvent;
 extern NPAGED_LOOKASIDE_LIST MessageLookasideList;
@@ -47,6 +47,27 @@ LibTCPDumpPcb(PVOID SocketContext)
     pcb->remote_port);
 }
 
+void
+LibTCPLockCore(void)
+{
+    LOCK_TCPIP_CORE();
+}
+
+void
+LibTCPUnlockCore(void)
+{
+    UNLOCK_TCPIP_CORE();
+}
+
+static
+void
+LibTCPCall(tcpip_callback_fn Function, struct lwip_callback_msg *msg)
+{
+    LOCK_TCPIP_CORE();
+    Function(msg);
+    UNLOCK_TCPIP_CORE();
+}
+
 static
 void
 LibTCPEmptyQueue(PCONNECTION_ENDPOINT Connection)
@@ -61,7 +82,6 @@ LibTCPEmptyQueue(PCONNECTION_ENDPOINT Connection)
         Entry = RemoveHeadList(&Connection->PacketQueue);
         qp = CONTAINING_RECORD(Entry, QUEUE_ENTRY, ListEntry);
 
-        /* We're in the tcpip thread here so this is safe */
         pbuf_free(qp->p);
 
         ExFreeToNPagedLookasideList(&QueueEntryLookasideList, qp);
@@ -140,8 +160,9 @@ NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHA
 
             if (qp != NULL)
             {
-                /* Use this special pbuf free callback function because we're outside tcpip thread */
-                pbuf_free_callback(qp->p);
+                /* (pbufs are malloc'ed, and their reference counts are
+                 * protected by SYS_ARCH_PROTECT: any thread may free them) */
+                pbuf_free(qp->p);
 
                 ExFreeToNPagedLookasideList(&QueueEntryLookasideList, qp);
             }
@@ -343,7 +364,7 @@ LibTCPSocket(void *arg)
         KeInitializeEvent(&msg->Event, NotificationEvent, FALSE);
         msg->Input.Socket.Arg = arg;
 
-        tcpip_callback_with_block(LibTCPSocketCallback, msg, 1);
+        LibTCPCall(LibTCPSocketCallback, msg);
 
         if (WaitForEventSafely(&msg->Event))
             ret = msg->Output.Socket.NewPcb;
@@ -379,7 +400,7 @@ void LibTCPFreeSocket(PTCP_PCB pcb)
     KeInitializeEvent(&msg.Event, NotificationEvent, FALSE);
     msg.Input.FreeSocket.pcb = pcb;
 
-    tcpip_callback_with_block(LibTCPFreeSocketCallback, &msg, 1);
+    LibTCPCall(LibTCPFreeSocketCallback, &msg);
 
     WaitForEventSafely(&msg.Event);
 }
@@ -425,7 +446,7 @@ LibTCPBind(PCONNECTION_ENDPOINT Connection, ip4_addr_t *const ipaddr, const u16_
         msg->Input.Bind.IpAddress = ipaddr;
         msg->Input.Bind.Port = port;
 
-        tcpip_callback_with_block(LibTCPBindCallback, msg, 1);
+        LibTCPCall(LibTCPBindCallback, msg);
 
         if (WaitForEventSafely(&msg->Event))
             ret = msg->Output.Bind.Error;
@@ -478,7 +499,7 @@ LibTCPListen(PCONNECTION_ENDPOINT Connection, const u8_t backlog)
         msg->Input.Listen.Connection = Connection;
         msg->Input.Listen.Backlog = backlog;
 
-        tcpip_callback_with_block(LibTCPListenCallback, msg, 1);
+        LibTCPCall(LibTCPListenCallback, msg);
 
         if (WaitForEventSafely(&msg->Event))
             ret = msg->Output.Listen.NewPcb;
@@ -574,10 +595,7 @@ LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const ULONG len
         msg->Input.Send.Data = dataptr;
         msg->Input.Send.DataLength = len;
 
-        if (safe)
-            LibTCPSendCallback(msg);
-        else
-            tcpip_callback_with_block(LibTCPSendCallback, msg, 1);
+        LibTCPCall(LibTCPSendCallback, msg);
 
         if (WaitForEventSafely(&msg->Event))
             ret = msg->Output.Send.Error;
@@ -639,7 +657,7 @@ LibTCPConnect(PCONNECTION_ENDPOINT Connection, ip_addr_t *const ipaddr, const u1
         msg->Input.Connect.IpAddress = ipaddr;
         msg->Input.Connect.Port = port;
 
-        tcpip_callback_with_block(LibTCPConnectCallback, msg, 1);
+        LibTCPCall(LibTCPConnectCallback, msg);
 
         if (WaitForEventSafely(&msg->Event))
         {
@@ -735,7 +753,7 @@ LibTCPShutdown(PCONNECTION_ENDPOINT Connection, const int shut_rx, const int shu
         msg->Input.Shutdown.shut_rx = shut_rx;
         msg->Input.Shutdown.shut_tx = shut_tx;
 
-        tcpip_callback_with_block(LibTCPShutdownCallback, msg, 1);
+        LibTCPCall(LibTCPShutdownCallback, msg);
 
         if (WaitForEventSafely(&msg->Event))
             ret = msg->Output.Shutdown.Error;
@@ -815,10 +833,7 @@ LibTCPClose(PCONNECTION_ENDPOINT Connection, const int safe, const int callback)
         msg->Input.Close.Connection = Connection;
         msg->Input.Close.Callback = callback;
 
-        if (safe)
-            LibTCPCloseCallback(msg);
-        else
-            tcpip_callback_with_block(LibTCPCloseCallback, msg, 1);
+        LibTCPCall(LibTCPCloseCallback, msg);
 
         if (WaitForEventSafely(&msg->Event))
             ret = msg->Output.Close.Error;

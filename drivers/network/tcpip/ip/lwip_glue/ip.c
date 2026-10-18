@@ -3,6 +3,8 @@
 
 typedef struct netif* PNETIF;
 
+VOID LibTCPSetLwipThread(VOID);
+
 void
 sys_shutdown(void);
 
@@ -29,11 +31,19 @@ LibIPInsertPacket(void *ifarg,
     }
 }
 
+static
+void
+LibIPThreadStarted(void *arg)
+{
+    /* (in the lwIP thread) */
+    LibTCPSetLwipThread();
+}
+
 void
 LibIPInitialize(void)
 {
     /* This completes asynchronously */
-    tcpip_init(NULL, NULL);
+    tcpip_init(LibIPThreadStarted, NULL);
 }
 
 void

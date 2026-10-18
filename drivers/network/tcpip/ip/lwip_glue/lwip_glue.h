@@ -93,6 +93,13 @@ struct lwip_callback_msg
 
 NTSTATUS    LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHAR RecvBuffer, UINT RecvLen, UINT *Received);
 
+/* Requests finished under lwIP's core lock (event.c) */
+VOID        LibTCPTakeDeferredCompletions(PLIST_ENTRY List);
+VOID        LibTCPRunDeferredCompletions(PLIST_ENTRY List);
+void        LibTCPLockCore(void);
+void        LibTCPUnlockCore(void);
+VOID        LibTCPSetLwipThread(VOID);
+
 /* External TCP event handlers */
 extern void TCPConnectEventHandler(void *arg, const err_t err);
 extern void TCPAcceptEventHandler(void *arg, PTCP_PCB newpcb);
