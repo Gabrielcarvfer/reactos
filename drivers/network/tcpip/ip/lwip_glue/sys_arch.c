@@ -22,11 +22,15 @@ typedef struct _thread_t
     LIST_ENTRY ListEntry;
 } *thread_t;
 
+/* Milliseconds since sys_init. The interrupt time, not the system time:
+ * the system time jumps when the clock is set (at boot, from the RTC and the
+ * time zone), and a jump backwards stopped all of lwIP's timers -
+ * retransmissions, persist probes - for as long as the jump */
 u32_t sys_now(void)
 {
     LARGE_INTEGER CurrentTime;
 
-    KeQuerySystemTime(&CurrentTime);
+    CurrentTime.QuadPart = KeQueryInterruptTime();
 
     return (CurrentTime.QuadPart - StartTime.QuadPart) / 10000;
 }
@@ -98,7 +102,7 @@ sys_arch_sem_wait(sys_sem_t* sem, u32_t timeout)
 
     LargeTimeout.QuadPart = Int32x32To64(timeout, -10000);
 
-    KeQuerySystemTime(&PreWaitTime);
+    PreWaitTime.QuadPart = KeQueryInterruptTime();
 
     Status = KeWaitForMultipleObjects(2,
                                       WaitObjects,
@@ -110,7 +114,7 @@ sys_arch_sem_wait(sys_sem_t* sem, u32_t timeout)
                                       NULL);
     if (Status == STATUS_WAIT_0)
     {
-        KeQuerySystemTime(&PostWaitTime);
+        PostWaitTime.QuadPart = KeQueryInterruptTime();
         TimeDiff = PostWaitTime.QuadPart - PreWaitTime.QuadPart;
         TimeDiff /= 10000;
 
@@ -193,7 +197,7 @@ sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
 
     LargeTimeout.QuadPart = Int32x32To64(timeout, -10000);
 
-    KeQuerySystemTime(&PreWaitTime);
+    PreWaitTime.QuadPart = KeQueryInterruptTime();
 
     Status = KeWaitForMultipleObjects(2,
                                       WaitObjects,
@@ -218,7 +222,7 @@ sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
         if (msg)
             *msg = Message;
 
-        KeQuerySystemTime(&PostWaitTime);
+        PostWaitTime.QuadPart = KeQueryInterruptTime();
         TimeDiff = PostWaitTime.QuadPart - PreWaitTime.QuadPart;
         TimeDiff /= 10000;
 
@@ -311,7 +315,7 @@ sys_init(void)
     KeInitializeSpinLock(&ThreadListLock);
     InitializeListHead(&ThreadListHead);
 
-    KeQuerySystemTime(&StartTime);
+    StartTime.QuadPart = KeQueryInterruptTime();
 
     KeInitializeEvent(&TerminationEvent, NotificationEvent, FALSE);
 
