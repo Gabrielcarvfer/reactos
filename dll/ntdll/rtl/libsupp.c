@@ -1456,3 +1456,24 @@ NtOpenKeyEx(
     Attributes.Attributes |= OBJ_OPENLINK;
     return NtOpenKey(KeyHandle, DesiredAccess, &Attributes);
 }
+
+/* (WinUI 3 / Windows App SDK: Microsoft.Internal.FrameworkUdk.dll imports it) */
+/* Is that API set in the schema of the running system? */
+NTSTATUS
+NTAPI
+ApiSetQueryApiSetPresence(
+    _In_ PCUNICODE_STRING Namespace,
+    _Out_ PBOOLEAN Present)
+{
+    UNICODE_STRING Host;
+    BOOLEAN Resolved = FALSE;
+    NTSTATUS Status;
+
+    if (!Namespace || !Present)
+        return STATUS_INVALID_PARAMETER;
+
+    /* (the schema of Windows 10, as for the API sets a program imports) */
+    Status = ApiSetResolveToHost(LdrpApisetVersion() | APISET_WIN10, Namespace, &Resolved, &Host);
+    *Present = NT_SUCCESS(Status) && Resolved;
+    return STATUS_SUCCESS;
+}
