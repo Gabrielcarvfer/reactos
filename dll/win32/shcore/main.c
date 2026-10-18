@@ -2590,7 +2590,51 @@ void WINAPI SubscribeFeatureStateChangeNotification(FEATURE_STATE_CHANGE_SUBSCRI
                                                     FEATURE_STATE_CHANGE_CALLBACK *callback, void *context)
 {
     FIXME("(%p, %p, %p) stub\n", subscription, callback, context);
+#ifdef __REACTOS__
+    /* (no feature ever changes: a subscription that never calls back) */
+    if (subscription) *subscription = (FEATURE_STATE_CHANGE_SUBSCRIPTION)(ULONG_PTR)1;
+#endif
 }
+
+#ifdef __REACTOS__
+/* The rest of the feature staging API (Windows App SDK, WinUI 3: PowerToys).
+ * ReactOS stages no features: every feature is in its default state. */
+
+/*************************************************************************
+ * UnsubscribeFeatureStateChangeNotification        [SHCORE.@]
+ */
+void WINAPI UnsubscribeFeatureStateChangeNotification(FEATURE_STATE_CHANGE_SUBSCRIPTION subscription)
+{
+    TRACE("(%p)\n", subscription);
+}
+
+/*************************************************************************
+ * GetFeatureVariant        [SHCORE.@]
+ */
+UINT32 WINAPI GetFeatureVariant(UINT32 feature, FEATURE_CHANGE_TIME change_time, UINT32 *payload_id, BOOL *has_notification)
+{
+    TRACE("(%u, %u, %p, %p)\n", feature, change_time, payload_id, has_notification);
+    if (payload_id) *payload_id = 0;
+    if (has_notification) *has_notification = FALSE;
+    return 0;
+}
+
+/*************************************************************************
+ * RecordFeatureUsage        [SHCORE.@]
+ */
+void WINAPI RecordFeatureUsage(UINT32 feature, UINT32 kind, UINT32 addend, PCSTR origin_name)
+{
+    TRACE("(%u, %u, %u, %s)\n", feature, kind, addend, debugstr_a(origin_name));
+}
+
+/*************************************************************************
+ * RecordFeatureError        [SHCORE.@]
+ */
+void WINAPI RecordFeatureError(UINT32 feature, const FEATURE_ERROR *error)
+{
+    TRACE("(%u, %p)\n", feature, error);
+}
+#endif
 
 /*************************************************************************
  * GetFeatureEnabledState        [SHCORE.@]

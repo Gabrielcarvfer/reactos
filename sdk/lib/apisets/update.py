@@ -46,6 +46,8 @@ REDIRECT_APISETS = {
     'api-ms-win-downlevel-user32-': 'user32.dll',
     'api-ms-win-downlevel-normaliz-': 'normaliz.dll',
     'api-ms-win-mm-time-': 'winmm.dll',
+    # GetFeatureEnabledState & co. are in shcore here (WinUI 3, Windows App SDK)
+    'api-ms-win-core-featurestaging-': 'shcore.dll',
 }
 
 OUTPUT_HEADER = """/*
