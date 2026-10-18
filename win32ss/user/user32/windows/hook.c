@@ -836,6 +836,15 @@ User32CallEventProcFromKernel(PVOID Arguments, ULONG ArgumentLength)
         TRACE("Loading Event Module. %S\n",module);
         Proc = (WINEVENTPROC)((char *)mod + Common->offPfn);
      }
+     else
+     {
+        /* An in-context hook whose module isn't in this process (it was set
+           by another process with its own module handle): Proc is an address
+           in that process, calling it here crashes (Chrome's GPU process).
+           Windows skips in-context hooks whose DLL it can't load. */
+        ERR("Event hook module not available in this process, event 0x%lx skipped\n", Common->event);
+        return ZwCallbackReturn(NULL, 0, STATUS_SUCCESS);
+     }
   }
 
   Proc(Common->hook,

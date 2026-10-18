@@ -70,6 +70,7 @@ list(APPEND SOURCE
     UserHandleGrantAccess.c
     VirtualKey.c
     WindowHooks.c
+    WinEventHookInContext.c
     WndProc.c
     wsprintf.c)
 
