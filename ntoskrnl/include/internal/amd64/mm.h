@@ -82,15 +82,20 @@
 #define MI_ZERO_PTES                           (32)
 #define MI_MAX_ZERO_BITS                        53
 
-/* Like on Windows, a ZeroBits value above 32 is a mask of the address bits
- * that may be set (WoW64 passes 0x7FFFFFFF); turn it into a bit count */
+/* Turn ZeroBits into the number of high bits of a 64-bit address that must
+ * be zero. Like on Windows (and Wine), a value from 1 to 31 counts the high
+ * bits of a 32-bit address (1: below 2 GB), so at most 21 is valid as on
+ * 32-bit (MI_MAX_ZERO_BITS is 32 + 21); a larger value is a mask of the
+ * address bits that may be set (WoW64 passes 0x7FFFFFFF). Found by kmtests
+ * ZwAllocateVirtualMemory and ZwMapViewOfSection. */
 FORCEINLINE
 ULONG_PTR
 MiZeroBitsFromMask(ULONG_PTR ZeroBits)
 {
     ULONG Index;
 
-    if (ZeroBits <= 32) return ZeroBits;
+    if (ZeroBits == 0) return 0;
+    if (ZeroBits < 32) return 32 + ZeroBits;
     _BitScanReverse64(&Index, ZeroBits);
     return 63 - Index;
 }
