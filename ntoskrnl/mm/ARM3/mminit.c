@@ -1804,11 +1804,15 @@ MiBuildPagedPool(VOID)
 #ifdef _M_AMD64
     //
     // On x64 the paged pool has a 128 GB range: size it with the memory (half
-    // of it, at most 4 GB) instead of keeping the 32 MB minimum, which modern
-    // programs (fonts, bitmaps, registry) use up quickly
+    // of it) instead of keeping the 32 MB minimum, which modern programs
+    // (fonts, bitmaps, registry) use up quickly. It is address space that
+    // is backed by memory only when used: give it at least 4 GB (x64 Windows
+    // gives a driver a single 2 GB paged pool block on a 2 GB machine), and
+    // at most 16 GB (its two bitmaps take 1 MB of nonpaged pool then).
     //
-    MmSizeOfPagedPoolInBytes = min((SIZE_T)MmNumberOfPhysicalPages * PAGE_SIZE / 2,
-                                   (SIZE_T)4 * 1024 * _1MB);
+    MmSizeOfPagedPoolInBytes = (SIZE_T)MmNumberOfPhysicalPages * PAGE_SIZE / 2;
+    MmSizeOfPagedPoolInBytes = max(MmSizeOfPagedPoolInBytes, (SIZE_T)4 * 1024 * _1MB);
+    MmSizeOfPagedPoolInBytes = min(MmSizeOfPagedPoolInBytes, (SIZE_T)16 * 1024 * _1MB);
 #endif
 
     //
