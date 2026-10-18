@@ -73,6 +73,7 @@ list(APPEND SOURCE
     WindowHooks.c
     WinEventHookInContext.c
     WndProc.c
+    WndProcException.c
     wsprintf.c)
 
 list(APPEND PCH_SKIP_SOURCE

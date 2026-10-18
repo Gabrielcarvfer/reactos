@@ -73,6 +73,7 @@ extern void func_VirtualKey(void);
 extern void func_WindowHooks(void);
 extern void func_WinEventHookInContext(void);
 extern void func_WndProc(void);
+extern void func_WndProcException(void);
 extern void func_wsprintfApi(void);
 
 const struct test winetest_testlist[] =
@@ -148,6 +149,7 @@ const struct test winetest_testlist[] =
     { "WindowHooks", func_WindowHooks },
     { "WinEventHookInContext", func_WinEventHookInContext },
     { "WndProc", func_WndProc },
+    { "WndProcException", func_WndProcException },
     { "wsprintfApi", func_wsprintfApi },
     { 0, 0 }
 };

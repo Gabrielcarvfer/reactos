@@ -91,6 +91,11 @@ KiUserCallbackExit:
     mov rdx, gs:[PcCurrentThread]
     HANDLE_USER_APCS rdx, rsp
 
+    /* Give KiUserCallbackDispatcher the rbp of the system call it interrupts:
+       unwinding out of the callback (an exception in a window procedure)
+       continues in that caller, and code built with frame pointers needs it. */
+    mov rbp, [rsp + KTRAP_FRAME_Rbp]
+
     /* Zero volatile registers */
     xor rax, rax
     xor rdx, rdx

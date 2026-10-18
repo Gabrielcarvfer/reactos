@@ -91,8 +91,105 @@ PUBLIC KiRaiseUserExceptionDispatcher
 
 .ENDP
 
+/*
+    EXCEPTION_DISPOSITION
+    KiUserCallbackDispatcherHandler(
+        _In_ PEXCEPTION_RECORD ExceptionRecord,
+        _In_ PVOID EstablisherFrame,
+        _In_ PCONTEXT ContextRecord,
+        _In_ PVOID DispatcherContext);
+
+    An unwind (an exception handled by code that called the system service
+    which made this callback, e.g. a C++ or .NET catch around DispatchMessage)
+    leaves the callback: tell the kernel to drop it. The system service then
+    returns to user mode here, and the unwind goes on.
+ */
+.PROC KiUserCallbackDispatcherHandler
+    /* After the kernel drops the callback, only rsp and rip come back from the
+       callback's own system call: save every non-volatile register here. */
+    push rbx
+    .PUSHREG rbx
+    push rbp
+    .PUSHREG rbp
+    push rsi
+    .PUSHREG rsi
+    push rdi
+    .PUSHREG rdi
+    push r12
+    .PUSHREG r12
+    push r13
+    .PUSHREG r13
+    push r14
+    .PUSHREG r14
+    push r15
+    .PUSHREG r15
+    sub rsp, 200
+    .ALLOCSTACK 200
+    movaps [rsp + 32], xmm6
+    .SAVEXMM128 xmm6, 32
+    movaps [rsp + 48], xmm7
+    .SAVEXMM128 xmm7, 48
+    movaps [rsp + 64], xmm8
+    .SAVEXMM128 xmm8, 64
+    movaps [rsp + 80], xmm9
+    .SAVEXMM128 xmm9, 80
+    movaps [rsp + 96], xmm10
+    .SAVEXMM128 xmm10, 96
+    movaps [rsp + 112], xmm11
+    .SAVEXMM128 xmm11, 112
+    movaps [rsp + 128], xmm12
+    .SAVEXMM128 xmm12, 128
+    movaps [rsp + 144], xmm13
+    .SAVEXMM128 xmm13, 144
+    movaps [rsp + 160], xmm14
+    .SAVEXMM128 xmm14, 160
+    movaps [rsp + 176], xmm15
+    .SAVEXMM128 xmm15, 176
+    .ENDPROLOG
+
+    /* EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND */
+    test dword ptr [rcx + EXCEPTION_RECORD_ExceptionFlags], 6
+    jz KiUserCallbackDispatcherHandlerSearch
+
+    xor ecx, ecx
+    xor edx, edx
+    mov r8d, HEX(C0000423) /* STATUS_CALLBACK_POP_STACK */
+    call ZwCallbackReturn
+
+KiUserCallbackDispatcherHandlerSearch:
+    movaps xmm6, [rsp + 32]
+    movaps xmm7, [rsp + 48]
+    movaps xmm8, [rsp + 64]
+    movaps xmm9, [rsp + 80]
+    movaps xmm10, [rsp + 96]
+    movaps xmm11, [rsp + 112]
+    movaps xmm12, [rsp + 128]
+    movaps xmm13, [rsp + 144]
+    movaps xmm14, [rsp + 160]
+    movaps xmm15, [rsp + 176]
+    add rsp, 200
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rdi
+    pop rsi
+    pop rbp
+    pop rbx
+    mov eax, 1 /* ExceptionContinueSearch */
+    ret
+.ENDP
+
 PUBLIC KiUserCallbackDispatcher
+#ifdef _USE_ML
+KiUserCallbackDispatcher PROC FRAME:KiUserCallbackDispatcherHandler
+#else
 .PROC KiUserCallbackDispatcher
+.seh_handler KiUserCallbackDispatcherHandler, @unwind
+.seh_handlerdata
+.long 0
+.seh_code
+#endif
 
     /* The stack is set up with a UCALLOUT_FRAME */
     /* The frame ends with a MACHINE_FRAME. */
@@ -137,7 +234,11 @@ StatusRaise:
     call RtlRaiseStatus
     jmp StatusRaise
 
+#ifdef _USE_ML
+KiUserCallbackDispatcher ENDP
+#else
 .ENDP
+#endif
 
 /*
     BOOLEAN
