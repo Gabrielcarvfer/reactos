@@ -13,6 +13,7 @@
 #include "lwip/pbuf.h"
 #include "lwip/tcp.h"
 #include "lwip/api.h"
+#include "lwip/tcpip.h"
 
 #include <lwip_glue/lwip_glue.h>
 
@@ -38,10 +39,69 @@ BucketCompletionWorker(PVOID Context)
  * (protected by the core lock) */
 static LIST_ENTRY DeferredCompletions = { &DeferredCompletions, &DeferredCompletions };
 
+/* Connections that got data: their receive requests are filled when the core
+ * lock is released (or at the end of a batch of received packets), with all
+ * the data that arrived meanwhile, instead of one completion per segment */
+static LIST_ENTRY RecvNotifyList = { &RecvNotifyList, &RecvNotifyList };
+static PKTHREAD ReceiveBatchThread;
+
+VOID
+TCPQueueRecvNotify(PCONNECTION_ENDPOINT Connection)
+{
+    ASSERT(sys_core_locked());
+
+    if (Connection->RecvNotifyQueued)
+        return;
+
+    Connection->RecvNotifyQueued = TRUE;
+    ReferenceObject(Connection);
+    InsertTailList(&RecvNotifyList, &Connection->RecvNotifyEntry);
+}
+
+ULONG
+TCPBeginReceiveBatch(VOID)
+{
+    ReceiveBatchThread = KeGetCurrentThread();
+    LibTCPBeginDeferOutput();
+    return TCPEnterCompletionContext();
+}
+
+VOID
+TCPEndReceiveBatch(ULONG Context)
+{
+    ReceiveBatchThread = NULL;
+
+    /* Releasing the lock fills the requests (and the readers take the data,
+     * which opens the windows)... */
+    LOCK_TCPIP_CORE();
+    UNLOCK_TCPIP_CORE();
+
+    /* ...then acknowledge the batch, with the new windows */
+    LOCK_TCPIP_CORE();
+    LibTCPEndDeferOutput();
+    UNLOCK_TCPIP_CORE();
+
+    TCPLeaveCompletionContext(Context);
+}
+
 VOID
 LibTCPTakeDeferredCompletions(PLIST_ENTRY List)
 {
+    PCONNECTION_ENDPOINT Connection;
+
     ASSERT(sys_core_locked());
+
+    if (ReceiveBatchThread != KeGetCurrentThread())
+    {
+        while (!IsListEmpty(&RecvNotifyList))
+        {
+            Connection = CONTAINING_RECORD(RemoveHeadList(&RecvNotifyList),
+                                           CONNECTION_ENDPOINT, RecvNotifyEntry);
+            Connection->RecvNotifyQueued = FALSE;
+            TCPRecvEventHandler(Connection);
+            DereferenceObject(Connection);
+        }
+    }
 
     if (IsListEmpty(&DeferredCompletions))
         return;

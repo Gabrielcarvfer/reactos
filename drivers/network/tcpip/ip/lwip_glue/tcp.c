@@ -1,5 +1,6 @@
 #include <debug.h>
 #include <lwip/tcpip.h>
+#include <lwip/priv/tcp_priv.h>
 
 #include "lwip_glue.h"
 
@@ -45,6 +46,53 @@ LibTCPDumpPcb(PVOID SocketContext)
     (addr >> 8) & 0xFF,
     addr & 0xFF,
     pcb->remote_port);
+}
+
+/* Set during a batch of received packets (TCPBeginReceiveBatch): tcp_input
+ * leaves acknowledgements and sends to the end of the batch, so a batch of
+ * segments is acknowledged once, not every second segment: each packet sent
+ * costs (a register write per packet in the network card, a VM exit when
+ * virtualized) */
+static PKTHREAD DeferOutputThread;
+static BOOLEAN OutputDeferred;
+
+void
+LibTCPBeginDeferOutput(void)
+{
+    DeferOutputThread = KeGetCurrentThread();
+}
+
+int
+LibTCPDeferOutput(struct tcp_pcb *pcb)
+{
+    if (DeferOutputThread != KeGetCurrentThread())
+        return 0;
+
+    OutputDeferred = TRUE;
+    return 1;
+}
+
+/* (under the core lock) */
+void
+LibTCPEndDeferOutput(void)
+{
+    struct tcp_pcb *pcb;
+
+    DeferOutputThread = NULL;
+    if (!OutputDeferred)
+        return;
+    OutputDeferred = FALSE;
+
+    for (pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next)
+    {
+        /* Acknowledge what the batch brought now */
+        if (pcb->flags & TF_ACK_DELAY)
+        {
+            tcp_clear_flags(pcb, TF_ACK_DELAY);
+            tcp_ack_now(pcb);
+        }
+        tcp_output(pcb);
+    }
 }
 
 void
@@ -277,7 +325,7 @@ InternalRecvEventHandler(void *arg, PTCP_PCB pcb, struct pbuf *p, const err_t er
          * data up here */
         LibTCPEnqueuePacket(Connection, p);
 
-        TCPRecvEventHandler(arg);
+        TCPQueueRecvNotify(Connection);
     }
     else if (err == ERR_OK)
     {

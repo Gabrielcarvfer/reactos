@@ -183,6 +183,11 @@ NTSTATUS TCPGetSockAddress
 ULONG TCPEnterCompletionContext(VOID);
 VOID TCPLeaveCompletionContext(ULONG Slot);
 
+/* Received packets processed between these get their connections' receive
+ * requests filled once, at the end */
+ULONG TCPBeginReceiveBatch(VOID);
+VOID TCPEndReceiveBatch(ULONG Context);
+
 NTSTATUS TCPStartup(
   VOID);
 

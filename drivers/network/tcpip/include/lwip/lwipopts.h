@@ -16,6 +16,12 @@
 #define LWIP_TCPIP_CORE_LOCKING         1
 #define LWIP_TCPIP_CORE_LOCKING_INPUT   1
 int sys_core_locked(void);
+
+/* In a batch of received packets, acknowledge and send once at the end of
+ * the batch instead of after every segment (LibTCPDeferOutput) */
+struct tcp_pcb;
+int LibTCPDeferOutput(struct tcp_pcb *pcb);
+#define LWIP_TCP_INPUT_DEFER_OUTPUT(pcb) LibTCPDeferOutput(pcb)
 #define LWIP_ASSERT_CORE_LOCKED()       LWIP_ASSERT("core locked", sys_core_locked())
 
 #define MEM_ALIGNMENT                   4

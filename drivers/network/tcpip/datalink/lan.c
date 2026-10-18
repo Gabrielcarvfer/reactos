@@ -395,13 +395,19 @@ VOID LanReceiveWorker( PVOID Context ) {
     }
 }
 
+/* At most this many packets before the receive requests of the connections
+ * they were for are filled */
+#define LAN_RECEIVE_BATCH 32
+
 static VOID LanReceiveQueueWorker(PVOID Context)
 {
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
+    ULONG Count = 0, Batch;
 
     UNREFERENCED_PARAMETER(Context);
 
+    Batch = TCPBeginReceiveBatch();
     for (;;)
     {
         KeAcquireSpinLock(&LanReceiveQueueLock, &OldIrql);
@@ -409,12 +415,19 @@ static VOID LanReceiveQueueWorker(PVOID Context)
         {
             LanReceiveWorkerActive = FALSE;
             KeReleaseSpinLock(&LanReceiveQueueLock, OldIrql);
+            TCPEndReceiveBatch(Batch);
             return;
         }
         Entry = RemoveHeadList(&LanReceiveQueue);
         KeReleaseSpinLock(&LanReceiveQueueLock, OldIrql);
 
         LanReceiveWorker(CONTAINING_RECORD(Entry, LAN_WQ_ITEM, ListEntry));
+
+        if (++Count % LAN_RECEIVE_BATCH == 0)
+        {
+            TCPEndReceiveBatch(Batch);
+            Batch = TCPBeginReceiveBatch();
+        }
     }
 }
 

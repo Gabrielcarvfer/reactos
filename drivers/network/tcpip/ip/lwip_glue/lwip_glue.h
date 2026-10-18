@@ -98,8 +98,11 @@ void        LibTCPRecved(PCONNECTION_ENDPOINT Connection, ULONG Length);
 VOID        LibTCPTakeDeferredCompletions(PLIST_ENTRY List);
 VOID        LibTCPRunDeferredCompletions(PLIST_ENTRY List);
 void        LibTCPLockCore(void);
+void        LibTCPBeginDeferOutput(void);
+void        LibTCPEndDeferOutput(void);
 void        LibTCPUnlockCore(void);
 VOID        LibTCPSetLwipThread(VOID);
+VOID        TCPQueueRecvNotify(PCONNECTION_ENDPOINT Connection);
 
 /* External TCP event handlers */
 extern void TCPConnectEventHandler(void *arg, const err_t err);

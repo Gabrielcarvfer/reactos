@@ -254,6 +254,8 @@ typedef struct _CONNECTION_ENDPOINT {
     LIST_ENTRY ShutdownRequest;/* Queued shutdown requests */
 
     LIST_ENTRY PacketQueue;    /* Queued received packets waiting to be processed */
+    LIST_ENTRY RecvNotifyEntry;/* On the list of connections with new data (lwIP core lock) */
+    BOOLEAN RecvNotifyQueued;
 
     /* Disconnect Timer */
     KTIMER DisconnectTimer;

@@ -550,6 +550,9 @@ tcp_input(struct pbuf *p, struct netif *inp)
           goto aborted;
         }
         /* Try to send something out. */
+#ifdef LWIP_TCP_INPUT_DEFER_OUTPUT
+        if (!LWIP_TCP_INPUT_DEFER_OUTPUT(pcb))
+#endif
         tcp_output(pcb);
 #if TCP_INPUT_DEBUG
 #if TCP_DEBUG
