@@ -3383,7 +3383,10 @@ UserGetAncestor(_In_ PWND pWnd, _In_ UINT uType)
                 ASSERT(pDesktop->pDeskInfo);
 
                 Parent = Parent->spwndParent;
-            } while (Parent != pDesktop->pDeskInfo->spwnd);
+                /* (a chain that does not reach the desktop: a parent of
+                   another process being destroyed, e.g. the host of a
+                   WebView2 window, has no parent any more) */
+            } while (Parent && Parent != pDesktop->pDeskInfo->spwnd);
             break;
 
         case GA_ROOTOWNER:
