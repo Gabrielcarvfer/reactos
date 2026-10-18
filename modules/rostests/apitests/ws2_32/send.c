@@ -275,6 +275,112 @@ cleanup:
     HeapFree(GetProcessHeap(), 0, Data);
 }
 
+/* A receiver that does not read stops the sender: non-blocking sends end
+ * with WSAEWOULDBLOCK once the receive window and the buffers are full
+ * (ReactOS opened the window as soon as data arrived and queued all of it),
+ * and everything sent arrives in order once the receiver reads */
+static
+VOID
+test_send_flow_control(void)
+{
+    const ULONG Chunk = 64 * 1024, Limit = 64 * 1024 * 1024;
+    SOCKET Listener, Client, Server;
+    struct sockaddr_in Address;
+    int AddressLength = sizeof(Address);
+    u_long NonBlocking = 1;
+    PUCHAR Data, Buffer;
+    ULONG Sent = 0, Received = 0, i;
+    BOOL DataOk = TRUE;
+    int ret, error = 0;
+
+    Data = HeapAlloc(GetProcessHeap(), 0, Chunk);
+    Buffer = HeapAlloc(GetProcessHeap(), 0, Chunk);
+    if (!Data || !Buffer)
+    {
+        skip("No memory\n");
+        goto free;
+    }
+
+    Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Listener != INVALID_SOCKET, "socket failed: %d\n", WSAGetLastError());
+    memset(&Address, 0, sizeof(Address));
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = inet_addr("127.0.0.1");
+    ok(bind(Listener, (struct sockaddr *)&Address, sizeof(Address)) == 0, "bind failed: %d\n", WSAGetLastError());
+    ok(listen(Listener, 1) == 0, "listen failed: %d\n", WSAGetLastError());
+    ok(getsockname(Listener, (struct sockaddr *)&Address, &AddressLength) == 0, "getsockname failed: %d\n", WSAGetLastError());
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Client != INVALID_SOCKET, "socket failed: %d\n", WSAGetLastError());
+    ret = connect(Client, (struct sockaddr *)&Address, sizeof(Address));
+    ok(ret == 0, "connect failed: %d\n", WSAGetLastError());
+    Server = accept(Listener, NULL, NULL);
+    ok(Server != INVALID_SOCKET, "accept failed: %d\n", WSAGetLastError());
+    if (ret != 0 || Server == INVALID_SOCKET)
+    {
+        skip("No connection\n");
+        goto cleanup;
+    }
+
+    ok(ioctlsocket(Client, FIONBIO, &NonBlocking) == 0, "ioctlsocket failed: %d\n", WSAGetLastError());
+
+    /* Send until the stack refuses more (give the data time to travel) */
+    while (Sent < Limit)
+    {
+        for (i = 0; i < Chunk; i++)
+            Data[i] = (UCHAR)((Sent + i) * 7);
+        ret = send(Client, (const char *)Data, Chunk, 0);
+        if (ret == SOCKET_ERROR)
+        {
+            error = WSAGetLastError();
+            if (error != WSAEWOULDBLOCK)
+                break;
+            Sleep(200);
+            ret = send(Client, (const char *)Data, Chunk, 0);
+            if (ret == SOCKET_ERROR)
+            {
+                error = WSAGetLastError();
+                break;
+            }
+            error = 0;
+        }
+        Sent += ret;
+        /* (a partial send: the rest of this chunk is not resent) */
+        if ((ULONG)ret != Chunk)
+        {
+            Sleep(50);
+        }
+    }
+    ok(error == WSAEWOULDBLOCK, "send stopped with error %d after %lu bytes\n", error, Sent);
+    ok(Sent < Limit, "%lu bytes sent to a receiver that does not read\n", Sent);
+    trace("%lu bytes sent before the receiver read\n", Sent);
+
+    /* Now read it all back */
+    while (Received < Sent)
+    {
+        ret = recv(Server, (char *)Buffer, Chunk, 0);
+        if (ret <= 0)
+            break;
+        for (i = 0; i < (ULONG)ret; i++)
+        {
+            if (Buffer[i] != (UCHAR)((Received + i) * 7))
+                DataOk = FALSE;
+        }
+        Received += ret;
+    }
+    ok(Received == Sent, "received %lu bytes, sent %lu (last recv returned %d, error %d)\n",
+       Received, Sent, ret, WSAGetLastError());
+    ok(DataOk, "received data differs from the data sent\n");
+
+cleanup:
+    if (Server != INVALID_SOCKET) closesocket(Server);
+    closesocket(Client);
+    closesocket(Listener);
+free:
+    if (Data) HeapFree(GetProcessHeap(), 0, Data);
+    if (Buffer) HeapFree(GetProcessHeap(), 0, Buffer);
+}
+
 START_TEST(send)
 {
     int ret;
@@ -285,5 +391,6 @@ START_TEST(send)
     test_send();
     test_sendto();
     test_send_large();
+    test_send_flow_control();
     WSACleanup();
 }
