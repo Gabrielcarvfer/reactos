@@ -1480,6 +1480,12 @@ static void CALLBACK connection_collector( TP_CALLBACK_INSTANCE *instance, void 
 
         LIST_FOR_EACH_ENTRY_SAFE(host, next_host, &connection_pool, struct hostdata, entry)
         {
+#ifdef __REACTOS__
+            /* Releasing the last connection of a host releases the host: keep
+               it until its list is walked (the loop reads it after the last
+               entry) */
+            host->ref++;
+#endif
             LIST_FOR_EACH_ENTRY_SAFE(netconn, next_netconn, &host->connections, struct netconn, entry)
             {
                 if (netconn->keep_until < now)
@@ -1490,6 +1496,9 @@ static void CALLBACK connection_collector( TP_CALLBACK_INSTANCE *instance, void 
                 }
                 else remaining_connections++;
             }
+#ifdef __REACTOS__
+            release_host(host);
+#endif
         }
 
         if (!remaining_connections) connection_collector_running = FALSE;
