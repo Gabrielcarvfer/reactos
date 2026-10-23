@@ -66,9 +66,17 @@ VOID SignalSocket(
 
     if (Poll)
     {
-        KeCancelTimer( &Poll->Timer );
+        /* (called with DeviceExt->Lock held) The poll's timeout may have
+         * expired already, its DPC queued or running on another processor:
+         * then that DPC frees the poll (it finds it gone from the list).
+         * Freeing it here made the DPC complete the IRP a second time, and
+         * the I/O manager copied the poll result again into the caller's
+         * buffer, freed by then (heap corruption in 32-bit programs, Chrome's
+         * updater) */
         RemoveEntryList( &Poll->ListEntry );
-        ExFreePoolWithTag(Poll, TAG_AFD_ACTIVE_POLL);
+        Poll->Irp = NULL;
+        if (KeCancelTimer( &Poll->Timer ) || KeRemoveQueueDpc( &Poll->TimeoutDpc ))
+            ExFreePoolWithTag(Poll, TAG_AFD_ACTIVE_POLL);
     }
 
     Irp->IoStatus.Status = Status;
@@ -112,14 +120,25 @@ static VOID NTAPI SelectTimeout( PKDPC Dpc,
 
     AFD_DbgPrint(MID_TRACE,("Called\n"));
 
-    Irp = Poll->Irp;
     DeviceExt = Poll->DeviceExt;
-    PollReq = Irp->AssociatedIrp.SystemBuffer;
-
-    ZeroEvents( PollReq->Handles, PollReq->HandleCount );
 
     KeAcquireSpinLock( &DeviceExt->Lock, &OldIrql );
-    SignalSocket( Poll, NULL, PollReq, STATUS_TIMEOUT );
+
+    /* Completed meanwhile (SignalSocket left the poll to us) */
+    Irp = Poll->Irp;
+    if (!Irp)
+    {
+        KeReleaseSpinLock( &DeviceExt->Lock, OldIrql );
+        ExFreePoolWithTag(Poll, TAG_AFD_ACTIVE_POLL);
+        return;
+    }
+
+    RemoveEntryList( &Poll->ListEntry );
+    ExFreePoolWithTag(Poll, TAG_AFD_ACTIVE_POLL);
+
+    PollReq = Irp->AssociatedIrp.SystemBuffer;
+    ZeroEvents( PollReq->Handles, PollReq->HandleCount );
+    SignalSocket( NULL, Irp, PollReq, STATUS_TIMEOUT );
     KeReleaseSpinLock( &DeviceExt->Lock, OldIrql );
 
     AFD_DbgPrint(MID_TRACE,("Timeout\n"));

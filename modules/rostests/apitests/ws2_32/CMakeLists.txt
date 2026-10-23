@@ -17,6 +17,7 @@ list(APPEND SOURCE
     open_osfhandle.c
     recv.c
     RecvFromCancel.c
+    SelectTimeout.c
     send.c
     SkipCompletionPort.c
     SocketNames.c
