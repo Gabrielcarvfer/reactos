@@ -2376,6 +2376,40 @@ MiRemoveNode(
     IN PMM_AVL_TABLE Table
 );
 
+/*
+ * NodeFreeHint of a process VAD table (64-bit): "no free range of at least
+ * MI_FREE_HINT_PAGES pages starts at an address aligned to
+ * MM_VIRTMEM_GRANULARITY below MI_FREE_HINT_VPN" (0: nothing known). A
+ * bottom-up search for at least that many pages starts there, instead of
+ * walking every VAD from the lowest one: a process making many allocations
+ * of one size slowed down quadratically. Freeing address space below the
+ * hint drops it (the freed range may join a free range below).
+ */
+#ifdef _WIN64
+#define MI_FREE_HINT_ALIGNMENT_VPN (MM_VIRTMEM_GRANULARITY >> PAGE_SHIFT)
+#define MI_FREE_HINT_VPN_BITS 36
+#define MI_FREE_HINT_MAX_PAGES ((1ULL << (64 - MI_FREE_HINT_VPN_BITS)) - 1)
+#define MI_FREE_HINT_VPN(Table) ((ULONG_PTR)(Table)->NodeFreeHint & ((1ULL << MI_FREE_HINT_VPN_BITS) - 1))
+#define MI_FREE_HINT_PAGES(Table) ((ULONG_PTR)(Table)->NodeFreeHint >> MI_FREE_HINT_VPN_BITS)
+#define MI_SET_FREE_HINT(Table, Vpn, Pages) \
+    ((Table)->NodeFreeHint = (PVOID)((Vpn) | ((ULONG_PTR)(Pages) << MI_FREE_HINT_VPN_BITS)))
+#endif
+
+FORCEINLINE
+VOID
+MiDropFreeHint(
+    _Inout_ PMM_AVL_TABLE Table,
+    _In_ ULONG_PTR FreedVpn)
+{
+#ifdef _WIN64
+    if (FreedVpn < MI_FREE_HINT_VPN(Table))
+        Table->NodeFreeHint = NULL;
+#else
+    UNREFERENCED_PARAMETER(Table);
+    UNREFERENCED_PARAMETER(FreedVpn);
+#endif
+}
+
 PMMADDRESS_NODE
 NTAPI
 MiGetPreviousNode(

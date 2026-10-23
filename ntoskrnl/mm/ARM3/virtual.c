@@ -6008,6 +6008,7 @@ NtFreeVirtualMemory(IN HANDLE ProcessHandle,
                                                                 Process);
                     Vad->u.VadFlags.CommitCharge -= CommitReduction;
                     Vad->StartingVpn = (EndingAddress + 1) >> PAGE_SHIFT;
+                    MiDropFreeHint(&Process->VadRoot, StartingAddress >> PAGE_SHIFT);
 
                     //
                     // After analyzing the VAD, set it to NULL so that we don't
@@ -6038,6 +6039,7 @@ NtFreeVirtualMemory(IN HANDLE ProcessHandle,
                                                                 Process);
                     Vad->u.VadFlags.CommitCharge -= CommitReduction;
                     Vad->EndingVpn = (StartingAddress - 1) >> PAGE_SHIFT;
+                    MiDropFreeHint(&Process->VadRoot, StartingAddress >> PAGE_SHIFT);
                 }
                 else
                 {
@@ -6093,6 +6095,7 @@ NtFreeVirtualMemory(IN HANDLE ProcessHandle,
                     // Adjust the end of the original VAD (first chunk).
                     //
                     Vad->EndingVpn = (StartingAddress - 1) >> PAGE_SHIFT;
+                    MiDropFreeHint(&Process->VadRoot, StartingAddress >> PAGE_SHIFT);
 
                     //
                     // Now the addresses for both VADs are consistent,

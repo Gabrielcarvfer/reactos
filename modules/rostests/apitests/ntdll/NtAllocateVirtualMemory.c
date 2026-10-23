@@ -796,6 +796,107 @@ CheckSomeDefaultAddresses(VOID)
 
 #define RUNS 32
 
+/* Reserving many regions must not slow down with their number: free address
+ * space is found from a hint, not by walking every VAD from the lowest one.
+ * Freed space (whole regions or a part of one) must be found again. */
+#define MANY_REGIONS 16384
+static
+VOID
+CheckManyReservations(VOID)
+{
+    static PVOID Regions[MANY_REGIONS];
+    LARGE_INTEGER Frequency, Start, End;
+    LONGLONG Ticks[4];
+    NTSTATUS Status;
+    ULONG i, Count, Batch;
+    PVOID Base, Freed;
+    SIZE_T Size;
+
+    QueryPerformanceFrequency(&Frequency);
+    Count = 0;
+    for (Batch = 0; Batch < 4; Batch++)
+    {
+        QueryPerformanceCounter(&Start);
+        for (i = 0; i < MANY_REGIONS / 4; i++)
+        {
+            Base = NULL;
+            Size = 0x10000;
+            Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Base, 0, &Size, MEM_RESERVE, PAGE_READWRITE);
+            if (!NT_SUCCESS(Status))
+                break;
+            Regions[Count++] = Base;
+        }
+        QueryPerformanceCounter(&End);
+        Ticks[Batch] = End.QuadPart - Start.QuadPart;
+        if (i < MANY_REGIONS / 4)
+            break;
+    }
+
+    if (Count == MANY_REGIONS)
+    {
+        trace("Reserving %u regions: %I64d %I64d %I64d %I64d ms per quarter\n", MANY_REGIONS,
+              Ticks[0] * 1000 / Frequency.QuadPart, Ticks[1] * 1000 / Frequency.QuadPart,
+              Ticks[2] * 1000 / Frequency.QuadPart, Ticks[3] * 1000 / Frequency.QuadPart);
+        /* A walk over all VADs makes the last quarter about 7 times as slow
+         * as the first one; allow some noise. (Only 64-bit ReactOS keeps a
+         * free address space hint so far.) */
+#ifdef _WIN64
+        ok(Ticks[3] < 3 * Ticks[0] + Frequency.QuadPart / 100,
+#else
+        ok(Ticks[3] < 3 * Ticks[0] + Frequency.QuadPart / 100 || is_reactos(),
+#endif
+           "The last %u reservations took %I64d ticks, the first %I64d\n",
+           MANY_REGIONS / 4, Ticks[3], Ticks[0]);
+
+        /* A region freed in the middle is found again (it is the lowest free
+         * one, unless there was a hole further down already) */
+        Freed = Regions[MANY_REGIONS / 2];
+        Size = 0;
+        Status = NtFreeVirtualMemory(NtCurrentProcess(), &Regions[MANY_REGIONS / 2], &Size, MEM_RELEASE);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        Base = NULL;
+        Size = 0x10000;
+        Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Base, 0, &Size, MEM_RESERVE, PAGE_READWRITE);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        ok(Base <= Freed, "Got %p, expected the freed region %p or lower\n", Base, Freed);
+        Regions[MANY_REGIONS / 2] = Base;
+    }
+    else
+    {
+        skip("Only %lu regions could be reserved\n", Count);
+    }
+
+    /* The same for the first part of a region released alone */
+    Base = NULL;
+    Size = 0x40000;
+    Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Base, 0, &Size, MEM_RESERVE, PAGE_READWRITE);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Freed = Base;
+        Size = 0x10000;
+        Status = NtFreeVirtualMemory(NtCurrentProcess(), &Freed, &Size, MEM_RELEASE);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        Freed = Base;
+        Base = NULL;
+        Size = 0x10000;
+        Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Base, 0, &Size, MEM_RESERVE, PAGE_READWRITE);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        ok(Base <= Freed, "Got %p, expected the released part %p or lower\n", Base, Freed);
+        Size = 0;
+        NtFreeVirtualMemory(NtCurrentProcess(), &Base, &Size, MEM_RELEASE);
+        Base = (PUCHAR)Freed + 0x10000;
+        Size = 0;
+        NtFreeVirtualMemory(NtCurrentProcess(), &Base, &Size, MEM_RELEASE);
+    }
+
+    for (i = 0; i < Count; i++)
+    {
+        Size = 0;
+        NtFreeVirtualMemory(NtCurrentProcess(), &Regions[i], &Size, MEM_RELEASE);
+    }
+}
+
 START_TEST(NtAllocateVirtualMemory)
 {
     PVOID Mem1, Mem2;
@@ -805,6 +906,7 @@ START_TEST(NtAllocateVirtualMemory)
     CheckAlignment();
     CheckAdjacentVADs();
     CheckSomeDefaultAddresses();
+    CheckManyReservations();
 
     Size1 = 32;
     Mem1 = Allocate(Size1);

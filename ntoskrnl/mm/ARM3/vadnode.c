@@ -385,6 +385,16 @@ MiInsertVadEx(
     CurrentProcess->VadRoot.NodeHint = Vad;
     MiInsertNode(&CurrentProcess->VadRoot, (PVOID)Vad, Parent, Result);
 
+#ifdef _WIN64
+    /* Allocated where the hint points: no aligned address in it is free now */
+    if (Vad->StartingVpn == MI_FREE_HINT_VPN(&CurrentProcess->VadRoot))
+    {
+        MI_SET_FREE_HINT(&CurrentProcess->VadRoot,
+                         ALIGN_UP_BY(Vad->EndingVpn + 1, MI_FREE_HINT_ALIGNMENT_VPN),
+                         MI_FREE_HINT_PAGES(&CurrentProcess->VadRoot));
+    }
+#endif
+
     /* Release the working set */
     MiUnlockProcessWorkingSetUnsafe(CurrentProcess, CurrentThread);
 
@@ -425,6 +435,9 @@ MiRemoveNode(IN PMMADDRESS_NODE Node,
              IN PMM_AVL_TABLE Table)
 {
     ASSERT_LOCKED_FOR_WRITE(Table);
+
+    /* Its address space becomes free */
+    MiDropFreeHint(Table, Node->StartingVpn);
 
     /* Call the AVL code */
     RtlpDeleteAvlTreeNode(Table, Node);
@@ -536,6 +549,9 @@ MiFindEmptyAddressRangeInTreeEx(
 {
     PMMADDRESS_NODE Node, PreviousNode;
     ULONG_PTR PageCount, AlignmentVpn, LowVpn, HighestVpn;
+#ifdef _WIN64
+    BOOLEAN UseHint, UpdateHint;
+#endif
     ASSERT(Length != 0);
 
     ASSERT_LOCKED_FOR_READ(Table);
@@ -559,12 +575,47 @@ MiFindEmptyAddressRangeInTreeEx(
         return TableEmptyTree;
     }
 
-    /* Otherwise, follow the leftmost child of the right root node's child */
-    Node = RtlRightChildAvl(&Table->BalancedRoot);
-    while (RtlLeftChildAvl(Node)) Node = RtlLeftChildAvl(Node);
+    PreviousNode = NULL;
+    Node = NULL;
+#ifdef _WIN64
+    /* Process address space, the usual granularity (or a multiple of it) */
+    UseHint = (Table->Unused == 0) && ((AlignmentVpn % MI_FREE_HINT_ALIGNMENT_VPN) == 0) &&
+              (PageCount <= MI_FREE_HINT_MAX_PAGES);
+    /* (with a larger alignment, the search skips the addresses in between) */
+    UpdateHint = UseHint && (AlignmentVpn == MI_FREE_HINT_ALIGNMENT_VPN);
+    if (UseHint && (MI_FREE_HINT_VPN(Table) > LowVpn) && (PageCount >= MI_FREE_HINT_PAGES(Table)))
+    {
+        ULONG_PTR HintVpn = MI_FREE_HINT_VPN(Table);
+        PMMADDRESS_NODE Child = RtlRightChildAvl(&Table->BalancedRoot);
+
+        /* No range this large starts below the hint: continue the search with
+         * the last node that begins at or below it (found in O(log n)) */
+        LowVpn = ALIGN_UP_BY(HintVpn, AlignmentVpn);
+        while (Child != NULL)
+        {
+            if (Child->StartingVpn <= HintVpn)
+            {
+                Node = Child;
+                Child = RtlRightChildAvl(Child);
+            }
+            else
+            {
+                Child = RtlLeftChildAvl(Child);
+            }
+        }
+        if (Node != NULL) PreviousNode = MiGetPreviousNode(Node);
+    }
+#endif
+
+    if (Node == NULL)
+    {
+        /* Otherwise, follow the leftmost child of the right root node's child */
+        Node = RtlRightChildAvl(&Table->BalancedRoot);
+        while (RtlLeftChildAvl(Node)) Node = RtlLeftChildAvl(Node);
+        PreviousNode = NULL;
+    }
 
     /* Start a search to find a gap */
-    PreviousNode = NULL;
     while (Node != NULL)
     {
         /* Check if the gap below the current node is suitable */
@@ -572,6 +623,11 @@ MiFindEmptyAddressRangeInTreeEx(
         {
             /* There is enough space to add our node */
             *Base = LowVpn << PAGE_SHIFT;
+#ifdef _WIN64
+            /* Nothing this large starts below it (it takes it now, see
+             * MiInsertVadEx) */
+            if (UpdateHint) MI_SET_FREE_HINT(Table, LowVpn, PageCount);
+#endif
 
             /* Can we use the current node as parent? */
             if (RtlLeftChildAvl(Node) == NULL)
@@ -610,6 +666,10 @@ MiFindEmptyAddressRangeInTreeEx(
     {
         HighestVpn = ALIGN_UP_BY((ULONG_PTR)(LONG_PTR)-1 >> PAGE_SHIFT, AlignmentVpn);
     }
+
+#ifdef _WIN64
+    if (UpdateHint) MI_SET_FREE_HINT(Table, LowVpn, PageCount);
+#endif
 
     if (HighestVpn >= LowVpn + PageCount)
     {
