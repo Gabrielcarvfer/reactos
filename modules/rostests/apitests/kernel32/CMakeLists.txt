@@ -9,6 +9,7 @@ list(APPEND SOURCE
     ConsoleVT.c
     CreateEventEx.c
     CreateProcess.c
+    CurrentPackage.c
     DefaultActCtx.c
     DeviceIoControl.c
     dosdev.c

@@ -610,14 +610,19 @@ SetSystemFileCacheSize(IN SIZE_T MinimumFileCacheSize,
 }
 
 /*
- * @unimplemented
+ * @implemented
+ *
+ * No ReactOS process runs from an app package. As on Windows, the answer is
+ * only the return value: the last error stays as it was (Paint.NET's launcher
+ * reads it afterwards and failed with ERROR_CALL_NOT_IMPLEMENTED).
  */
 LONG
 WINAPI
 GetCurrentPackageId(UINT32 *BufferLength,
                     BYTE *Buffer)
 {
-    STUB;
+    if (!BufferLength)
+        return ERROR_INVALID_PARAMETER;
     return APPMODEL_ERROR_NO_PACKAGE;
 }
 
