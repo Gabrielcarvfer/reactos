@@ -76,6 +76,7 @@ extern void func_StackGuard(void);
 extern void func_SuspendedChildPeb(void);
 extern void func_SystemFirmware(void);
 extern void func_TerminateProcess(void);
+extern void func_ThreadExitStress(void);
 extern void func_Toolhelp32(void);
 extern void func_TunnelCache(void);
 extern void func_UEFIFirmware(void);
@@ -163,6 +164,7 @@ const struct test winetest_testlist[] =
     { "SuspendedChildPeb",           func_SuspendedChildPeb },
     { "SystemFirmware",              func_SystemFirmware },
     { "TerminateProcess",            func_TerminateProcess },
+    { "ThreadExitStress",            func_ThreadExitStress },
     { "Toolhelp32",                  func_Toolhelp32 },
     { "TunnelCache",                 func_TunnelCache },
     { "UEFIFirmware",                func_UEFIFirmware },

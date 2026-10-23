@@ -184,6 +184,21 @@ PspReapRoutine(IN PVOID Context)
             /* Get the first Thread Entry */
             Thread = CONTAINING_RECORD(NextEntry, ETHREAD, ReaperLink);
 
+#ifdef CONFIG_SMP
+            /*
+             * The thread queued itself here before its last context switch
+             * (KeTerminateThread), and another processor may still be in
+             * that switch: running on its stack, or saving its extended
+             * state (XSAVE area) at the top of it. SwapBusy stays set until
+             * the switch no longer uses the old stack: wait for it.
+             */
+            while (*(volatile UCHAR *)&Thread->Tcb.SwapBusy)
+            {
+                YieldProcessor();
+            }
+            KeMemoryBarrier();
+#endif
+
             /* Delete this entry's kernel stack */
             MmDeleteKernelStack((PVOID)Thread->Tcb.StackBase,
                                 Thread->Tcb.LargeStack);

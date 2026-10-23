@@ -79,6 +79,7 @@ list(APPEND SOURCE
     SuspendedChildPeb.c
     SystemFirmware.c
     TerminateProcess.c
+    ThreadExitStress.c
     Toolhelp32.c
     TunnelCache.c
     UEFIFirmware.c
