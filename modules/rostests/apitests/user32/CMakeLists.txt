@@ -4,6 +4,7 @@ list(APPEND SOURCE
     AttachThreadInput.c
     ../include/msgtrace.c
     CharFuncs.c
+    ClassInstance.c
     CloseWindow.c
     CopyImage.c
     CreateDialog.c

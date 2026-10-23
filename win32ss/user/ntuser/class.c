@@ -1273,8 +1273,11 @@ IntFindClass(IN RTL_ATOM Atom,
     Class = *PrevLink;
     while (Class != NULL)
     {
+        /* The low word of the instance handle doesn't count (as on Windows:
+           AnyDesk registers its classes with its image base + 0x4000) */
         if (Class->atomClassName == Atom &&
-            (hInstance == NULL || Class->hModule == hInstance) &&
+            (hInstance == NULL ||
+             ((ULONG_PTR)Class->hModule & ~(ULONG_PTR)0xFFFF) == ((ULONG_PTR)hInstance & ~(ULONG_PTR)0xFFFF)) &&
             !(Class->CSF_flags & CSF_WOWDEFERDESTROY))
         {
             ASSERT(Class->pclsBase == Class);

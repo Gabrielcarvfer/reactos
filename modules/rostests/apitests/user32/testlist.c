@@ -4,6 +4,7 @@
 
 extern void func_AttachThreadInput(void);
 extern void func_CharFuncs(void);
+extern void func_ClassInstance(void);
 extern void func_CloseWindow(void);
 extern void func_CopyImage(void);
 extern void func_CreateDialog(void);
@@ -80,6 +81,7 @@ const struct test winetest_testlist[] =
 {
     { "AttachThreadInput", func_AttachThreadInput },
     { "CharFuncs", func_CharFuncs },
+    { "ClassInstance", func_ClassInstance },
     { "CloseWindow", func_CloseWindow },
     { "CopyImage", func_CopyImage },
     { "CreateDialog", func_CreateDialog },
