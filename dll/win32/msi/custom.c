@@ -574,11 +574,13 @@ UINT CDECL __wine_msi_call_dll_function(DWORD client_pid, const GUID *guid)
         {
             r = custom_proc_wrapper( fn, hPackage );
         }
-        __EXCEPT_PAGE_FAULT
+        __EXCEPT_ALL
         {
-            ERR( "Custom action (%s:%s) caused a page fault: %#lx\n",
+            /* Windows fails the action on any exception (a C++ throw
+             * included) and keeps the custom action server running */
+            ERR( "Custom action (%s:%s) raised exception %#lx\n",
                  debugstr_w(dll), debugstr_a(proc), GetExceptionCode() );
-            r = ERROR_SUCCESS;
+            r = ERROR_INSTALL_FAILURE;
         }
         __ENDTRY;
     }
