@@ -217,11 +217,17 @@ NpQueryNameInfo(IN PNP_CCB Ccb,
                 IN OUT PULONG Length)
 {
     PFILE_NAME_INFORMATION InfoBuffer = Buffer;
-    USHORT NameLength;
+    USHORT NameLength, CopyLength;
     NTSTATUS Status;
     PWCHAR Name;
 
-    *Length -= sizeof(*InfoBuffer);
+    /* The name follows FileNameLength directly: sizeof(*InfoBuffer) also
+     * counts the padding after FileName[0], which made the length wrap
+     * below zero (and the copy run past the buffer) when FILE_ALL_INFORMATION
+     * had room for less than that (kmtest NpfsFileInfo) */
+    if (*Length < FIELD_OFFSET(FILE_NAME_INFORMATION, FileName))
+        return STATUS_BUFFER_OVERFLOW;
+    *Length -= FIELD_OFFSET(FILE_NAME_INFORMATION, FileName);
 
     if (Ccb->NodeType == NPFS_NTC_ROOT_DCB_CCB)
     {
@@ -237,17 +243,19 @@ NpQueryNameInfo(IN PNP_CCB Ccb,
     if (*Length < NameLength)
     {
         Status = STATUS_BUFFER_OVERFLOW;
-        NameLength = (USHORT)*Length;
+        CopyLength = (USHORT)*Length;
     }
     else
     {
         Status = STATUS_SUCCESS;
+        CopyLength = NameLength;
     }
 
-    RtlCopyMemory(InfoBuffer->FileName, Name, NameLength);
+    /* Like Windows, report the full length even when the name is cut */
+    RtlCopyMemory(InfoBuffer->FileName, Name, CopyLength);
     InfoBuffer->FileNameLength = NameLength;
 
-    *Length -= NameLength;
+    *Length -= CopyLength;
     return Status;
 }
 
