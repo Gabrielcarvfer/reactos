@@ -4,6 +4,7 @@ add_subdirectory(redirptest)
 add_message_headers(ANSI FormatMessage.mc)
 
 list(APPEND SOURCE
+    CacheReclaim.c
     ConsoleCP.c
     ConsoleCtrlEvent.c
     ConsoleVT.c

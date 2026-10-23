@@ -3,6 +3,7 @@
 #include <apitest.h>
 
 extern void func_ActCtxWithXmlNamespaces(void);
+extern void func_CacheReclaim(void);
 extern void func_ConsoleCP(void);
 extern void func_ConsoleCtrlEvent(void);
 extern void func_ConsoleVT(void);
@@ -91,6 +92,7 @@ extern void func_WriteProcessMemoryCow(void);
 const struct test winetest_testlist[] =
 {
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
+    { "CacheReclaim", func_CacheReclaim },
     { "ConsoleCP",                   func_ConsoleCP },
     { "ConsoleCtrlEvent",            func_ConsoleCtrlEvent },
     { "ConsoleVT",                   func_ConsoleVT },

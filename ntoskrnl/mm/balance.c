@@ -45,8 +45,11 @@ MmInitializeBalancer(ULONG NrAvailablePages, ULONG NrSystemPages)
 {
     memset(MiMemoryConsumers, 0, sizeof(MiMemoryConsumers));
 
-    /* Set up targets. */
-    MiMinimumAvailablePages = 256;
+    /* Set up targets. Keep some memory free (1/64 of it, 1 to 32 MB): the
+     * balancer only frees pages, such as the cached pages of closed files,
+     * when fewer than this are available. Waiting for the last megabyte left
+     * every allocation to stall in the meantime. */
+    MiMinimumAvailablePages = (ULONG)min(max(NrAvailablePages / 64, 256), (32 * _1MB) / PAGE_SIZE);
     MiMinimumPagesPerRun = 256;
     MiMemoryConsumers[MC_USER].PagesTarget = NrAvailablePages / 2;
 }
@@ -299,9 +302,21 @@ VOID
 NTAPI
 MmRebalanceMemoryConsumersAndWait(VOID)
 {
-    ASSERT(PsGetCurrentProcess()->AddressCreationLock.Owner != KeGetCurrentThread());
-    ASSERT(!MM_ANY_WS_LOCK_HELD(PsGetCurrentThread()));
     ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
+    /* A page fault with the address space lock held (e.g. while a system call
+     * copies to or from user memory) can't wait for the balancer: it may need
+     * that lock to page out. Wake it up and let the caller try again. */
+    if (PsGetCurrentProcess()->AddressCreationLock.Owner == KeGetCurrentThread() ||
+        MM_ANY_WS_LOCK_HELD(PsGetCurrentThread()))
+    {
+        LARGE_INTEGER Delay;
+
+        MmRebalanceMemoryConsumers();
+        Delay.QuadPart = -10 * 1000 * 10; /* 10 ms */
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+        return;
+    }
 
     KeResetEvent(&MiBalancerDoneEvent);
     MmRebalanceMemoryConsumers();
