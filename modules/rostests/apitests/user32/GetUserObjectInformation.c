@@ -155,7 +155,6 @@ TestGetUserObjectInfoW(void)
         return;
     }
 
-    TestUserObjectInfo(Desktop, 5,         NULL,             0,                       FALSE, ERROR_INVALID_PARAMETER,   0);
     TestUserObjectInfo(Desktop, UOI_FLAGS, NULL,             0,                       FALSE, ERROR_INSUFFICIENT_BUFFER, sizeof(USEROBJECTFLAGS));
     TestUserObjectInfo(Desktop, UOI_FLAGS, UlongToPtr(1),    0,                       FALSE, ERROR_INSUFFICIENT_BUFFER, sizeof(USEROBJECTFLAGS));
     TestUserObjectInfo(Desktop, UOI_FLAGS, NULL,             1,                       FALSE, ERROR_NOACCESS,            NOTSET);
@@ -391,7 +390,6 @@ TestGetUserObjectInfoA(void)
         return;
     }
 
-    TestUserObjectInfo(Desktop, 5,         NULL,             0,                       FALSE, ERROR_INVALID_PARAMETER,   0);
     TestUserObjectInfo(Desktop, UOI_FLAGS, NULL,             0,                       FALSE, ERROR_INSUFFICIENT_BUFFER, sizeof(USEROBJECTFLAGS));
     TestUserObjectInfo(Desktop, UOI_FLAGS, (PVOID)1,         0,                       FALSE, ERROR_INSUFFICIENT_BUFFER, sizeof(USEROBJECTFLAGS));
     TestUserObjectInfo(Desktop, UOI_FLAGS, NULL,             1,                       FALSE, ERROR_NOACCESS,            NOTSET);
@@ -414,8 +412,55 @@ TestGetUserObjectInfoA(void)
     FreeGuarded(Buffer);
 }
 
+/* UOI_HEAPSIZE and UOI_IO (Vista+): desktops only. Remote desktop programs
+   (AnyDesk) follow the input desktop with UOI_IO. */
+static
+void
+TestHeapSizeAndIo(void)
+{
+    HDESK Desktop = GetThreadDesktop(GetCurrentThreadId());
+    HWINSTA WinSta = GetProcessWindowStation();
+    HDESK Other;
+    DWORD Value, Needed;
+    BOOL Ret;
+
+    Value = Needed = 0xdeadbeef;
+    Ret = GetUserObjectInformationW(Desktop, 5 /* UOI_HEAPSIZE */, &Value, sizeof(Value), &Needed);
+    ok(Ret, "UOI_HEAPSIZE failed: %lu\n", GetLastError());
+    ok(Value > 0 && Value != 0xdeadbeef, "UOI_HEAPSIZE: %lu KB\n", Value);
+    ok(Needed == sizeof(DWORD), "UOI_HEAPSIZE: needed %lu\n", Needed);
+
+    Value = Needed = 0xdeadbeef;
+    Ret = GetUserObjectInformationW(Desktop, 6 /* UOI_IO */, &Value, sizeof(Value), &Needed);
+    ok(Ret, "UOI_IO failed: %lu\n", GetLastError());
+    ok(Value == TRUE, "UOI_IO of the input desktop: %lu\n", Value);
+
+    SetLastError(0xdeadbeef);
+    Ret = GetUserObjectInformationW(Desktop, 6 /* UOI_IO */, NULL, 0, &Needed);
+    ok(!Ret && GetLastError() == ERROR_INSUFFICIENT_BUFFER, "UOI_IO without buffer: %d %lu\n", Ret, GetLastError());
+    ok(Needed == sizeof(DWORD), "UOI_IO: needed %lu\n", Needed);
+
+    SetLastError(0xdeadbeef);
+    Ret = GetUserObjectInformationW(WinSta, 6 /* UOI_IO */, &Value, sizeof(Value), &Needed);
+    ok(!Ret && GetLastError() == ERROR_INVALID_FUNCTION, "UOI_IO of a window station: %d %lu\n", Ret, GetLastError());
+    SetLastError(0xdeadbeef);
+    Ret = GetUserObjectInformationW(WinSta, 5 /* UOI_HEAPSIZE */, &Value, sizeof(Value), &Needed);
+    ok(!Ret && GetLastError() == ERROR_INVALID_FUNCTION, "UOI_HEAPSIZE of a window station: %d %lu\n", Ret, GetLastError());
+
+    Other = CreateDesktopW(L"GetUserObjectInformationTest", NULL, NULL, 0, GENERIC_ALL, NULL);
+    ok(Other != NULL, "CreateDesktopW failed: %lu\n", GetLastError());
+    if (Other)
+    {
+        Value = 0xdeadbeef;
+        ok(GetUserObjectInformationW(Other, 6 /* UOI_IO */, &Value, sizeof(Value), &Needed), "UOI_IO failed: %lu\n", GetLastError());
+        ok(Value == FALSE, "UOI_IO of another desktop: %lu\n", Value);
+        CloseDesktop(Other);
+    }
+}
+
 START_TEST(GetUserObjectInformation)
 {
     TestGetUserObjectInfoW();
     TestGetUserObjectInfoA();
+    TestHeapSizeAndIo();
 }

@@ -2453,6 +2453,7 @@ UserInitializeDesktop(PDESKTOP pdesk, PUNICODE_STRING DesktopName, PWINSTATION_O
 
     /* Create the desktop heap */
     pdesk->hsectionDesktop = NULL;
+    pdesk->ulHeapSize = HeapSize;
     pdesk->pheapDesktop = UserCreateHeap(&pdesk->hsectionDesktop,
                                          &DesktopHeapSystemBase,
                                          HeapSize);

@@ -1344,6 +1344,7 @@ NtUserGetObjectInformation(
     POBJECT_HEADER_NAME_INFO NameInfo;
     OBJECT_HANDLE_INFORMATION HandleInfo;
     USEROBJECTFLAGS ObjectFlags;
+    DWORD Value;
     PUNICODE_STRING pStrNameU = NULL;
     PVOID pvData = NULL;
     SIZE_T nDataSize = 0;
@@ -1480,6 +1481,27 @@ NtUserGetObjectInformation(
             Status = STATUS_NOT_IMPLEMENTED;
             ERR("UOI_USER_SID unimplemented!\n");
             break;
+
+        case 5: /* UOI_HEAPSIZE */
+        case 6: /* UOI_IO */
+        {
+            /* Desktops only, as on Windows: the desktop heap size in KB, and
+               whether the desktop receives the user's input (remote desktop
+               programs, AnyDesk, follow the input desktop with this) */
+            if (DesktopObject == NULL)
+            {
+                Status = STATUS_INVALID_DEVICE_REQUEST;
+                break;
+            }
+            if (nIndex == 5 /* UOI_HEAPSIZE */)
+                Value = (DWORD)(DesktopObject->ulHeapSize / 1024);
+            else
+                Value = (DesktopObject == gpdeskInputDesktop);
+            pvData = &Value;
+            nDataSize = sizeof(Value);
+            Status = STATUS_SUCCESS;
+            break;
+        }
 
         default:
             Status = STATUS_INVALID_PARAMETER;
