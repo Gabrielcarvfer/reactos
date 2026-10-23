@@ -374,7 +374,7 @@ typedef enum
 #define ISR_STACK_SIZE 0x6000
 
 /* Number of bytes reserved for syscall parameters */
-#define MAX_SYSCALL_PARAM_SIZE (16 * 8)
+#define MAX_SYSCALL_PARAM_SIZE (20 * 8) /* (Windows: NtAccessCheckByTypeResultListAndAuditAlarmByHandle has 17) */
 
 //
 // Synchronization-level IRQL

@@ -135,7 +135,7 @@ Exit:
     }
 }
 
-#define MAX_SYSCALL_PARAMS 16
+#define MAX_SYSCALL_PARAMS (MAX_SYSCALL_PARAM_SIZE / 8)
 
 NTSTATUS
 NtSyscallFailure(void)
@@ -244,6 +244,10 @@ KiSystemCallHandler(
     {
         switch (Count)
         {
+            case 20: KernelParams[19] = UserParams[19];
+            case 19: KernelParams[18] = UserParams[18];
+            case 18: KernelParams[17] = UserParams[17];
+            case 17: KernelParams[16] = UserParams[16];
             case 16: KernelParams[15] = UserParams[15];
             case 15: KernelParams[14] = UserParams[14];
             case 14: KernelParams[13] = UserParams[13];
