@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     devclass.c
     DevQuery.c
+    PciIrqShare.c
     SetupDiInstallClassExA.c
     SetupDiGetActualModelsSection.c
     SetupInstallServicesFromInfSectionEx.c
