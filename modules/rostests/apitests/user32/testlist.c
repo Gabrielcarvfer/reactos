@@ -2,6 +2,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_AlphaIcon(void);
 extern void func_AttachThreadInput(void);
 extern void func_CharFuncs(void);
 extern void func_ClassInstance(void);
@@ -79,6 +80,7 @@ extern void func_wsprintfApi(void);
 
 const struct test winetest_testlist[] =
 {
+    { "AlphaIcon", func_AlphaIcon },
     { "AttachThreadInput", func_AttachThreadInput },
     { "CharFuncs", func_CharFuncs },
     { "ClassInstance", func_ClassInstance },

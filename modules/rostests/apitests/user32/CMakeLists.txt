@@ -1,6 +1,7 @@
 add_subdirectory(makeimg)
 
 list(APPEND SOURCE
+    AlphaIcon.c
     AttachThreadInput.c
     ../include/msgtrace.c
     CharFuncs.c
@@ -88,7 +89,7 @@ add_executable(user32_apitest
 
 target_link_libraries(user32_apitest wine ${PSEH_LIB})
 set_module_type(user32_apitest win32cui)
-add_importlibs(user32_apitest advapi32 imm32 gdi32 user32 msvcrt kernel32 ntdll)
+add_importlibs(user32_apitest advapi32 comctl32 imm32 gdi32 user32 msvcrt kernel32 ntdll)
 add_pch(user32_apitest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET user32_apitest)
 

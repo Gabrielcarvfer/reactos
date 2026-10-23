@@ -518,8 +518,10 @@ static void stretch_blt_icon(HDC hdc_dst, int dst_width, int dst_height, HBITMAP
         info->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         info->bmiHeader.biWidth = bm.bmWidth;
         info->bmiHeader.biHeight = bm.bmHeight;
-        info->bmiHeader.biPlanes = GetDeviceCaps( hdc_dst, PLANES );
-        info->bmiHeader.biBitCount = GetDeviceCaps( hdc_dst, BITSPIXEL );
+        /* 32 bpp keeps the alpha channel of 32 bpp icons (their bitmap can be 32 bpp
+         * when the screen is not) */
+        info->bmiHeader.biPlanes = 1;
+        info->bmiHeader.biBitCount = 32;
         info->bmiHeader.biCompression = BI_RGB;
         info->bmiHeader.biSizeImage = get_dib_image_size( bm.bmWidth, bm.bmHeight, info->bmiHeader.biBitCount );
         info->bmiHeader.biXPelsPerMeter = 0;
@@ -852,6 +854,15 @@ get_best_icon_file_offset(
 
 /************* IMPLEMENTATION CORE ****************/
 
+/* A 32 bpp bitmap that can still be selected into a DC of the screen when the
+ * screen runs at another depth (thanks to the undocumented CreateDIBitmap flag),
+ * for icons with an alpha channel */
+static HBITMAP create_32bpp_bitmap(HDC hdcScreen, int width, int height)
+{
+    BITMAPINFO bmi = { { sizeof(BITMAPINFOHEADER), width, height, 1, 32, BI_RGB } };
+    return CreateDIBitmap(hdcScreen, NULL, 2, NULL, &bmi, DIB_RGB_COLORS);
+}
+
 static BOOL CURSORICON_GetCursorDataFromBMI(
     _Inout_ CURSORDATA* pdata,
     _In_    const BITMAPINFO *pbmi
@@ -942,8 +953,15 @@ static BOOL CURSORICON_GetCursorDataFromBMI(
     }
     else
     {
-        /* Create the bitmap. It has to be compatible with the screen surface */
-        pdata->hbmColor = CreateCompatibleBitmap(hdcScreen, pdata->cx, pdata->cy);
+        /* Create the bitmap. It has to be compatible with the screen surface,
+         * except for icons with an alpha channel: those keep 32 bpp like on
+         * Windows, so that GetIconInfo (e.g. image lists) still gets the alpha
+         * channel when the screen is at 16 or 24 bpp */
+        pdata->hbmAlpha = create_alpha_bitmap(NULL, pbmiCopy, pvColor, pdata->cx, pdata->cy);
+        if (pdata->hbmAlpha)
+            pdata->hbmColor = create_32bpp_bitmap(hdcScreen, pdata->cx, pdata->cy);
+        else
+            pdata->hbmColor = CreateCompatibleBitmap(hdcScreen, pdata->cx, pdata->cy);
         if(!pdata->hbmColor)
             goto done;
         /* Create the 1bpp mask bitmap */
@@ -957,8 +975,7 @@ static BOOL CURSORICON_GetCursorDataFromBMI(
                   0, 0, width, height,
                   pvColor, pbmiCopy, DIB_RGB_COLORS, SRCCOPY))
             goto done;
-        pdata->bpp = GetDeviceCaps(hdcScreen, BITSPIXEL);
-        pdata->hbmAlpha = create_alpha_bitmap(NULL, pbmiCopy, pvColor, pdata->cx, pdata->cy);
+        pdata->bpp = pdata->hbmAlpha ? 32 : GetDeviceCaps(hdcScreen, BITSPIXEL);
 
         /* Now convert the info to monochrome for the mask bits */
         if (pbmiCopy->bmiHeader.biSize != sizeof(BITMAPCOREHEADER))
@@ -1015,6 +1032,7 @@ static BOOL CURSORICON_GetCursorDataFromIconInfo(
         /* We must convert the color bitmap to screen format */
         HDC hdcScreen, hdcMem;
         HBITMAP hbmpPrev;
+        BITMAP bmColor;
 
         /* The mask dictates its dimensions */
         if (!GetObject(pIconInfo->hbmMask, sizeof(bm), &bm))
@@ -1028,7 +1046,12 @@ static BOOL CURSORICON_GetCursorDataFromIconInfo(
             DeleteDC(hdcScreen);
             return FALSE;
         }
-        pCursorData->hbmColor = CreateCompatibleBitmap(hdcScreen, bm.bmWidth, bm.bmHeight);
+        /* A 32 bpp color bitmap stays 32 bpp, so its alpha channel survives
+         * when the screen is at 16 or 24 bpp (like on Windows) */
+        if (GetObject(pIconInfo->hbmColor, sizeof(bmColor), &bmColor) && bmColor.bmBitsPixel == 32)
+            pCursorData->hbmColor = create_32bpp_bitmap(hdcScreen, bm.bmWidth, bm.bmHeight);
+        else
+            pCursorData->hbmColor = CreateCompatibleBitmap(hdcScreen, bm.bmWidth, bm.bmHeight);
         DeleteDC(hdcScreen);
         if (!pCursorData->hbmColor)
         {
