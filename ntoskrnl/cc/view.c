@@ -390,6 +390,14 @@ CcRosWriteVacbRange(
         PageOffset.QuadPart = Offset;
         Status = MmFlushSegment(SectionObjectPointers, &PageOffset, PAGE_SIZE, &PageIosb);
 
+        /* Written: nothing pinned on that page is waiting for a write anymore
+         * (no pin changed anything meanwhile: the gate is closed) */
+        if (NT_SUCCESS(Status) && Closed)
+        {
+            InterlockedAnd64(&Vacb->PinnedDirtyPages,
+                             ~CcRosVacbPageMask(Vacb, Offset, PAGE_SIZE));
+        }
+
         if (Closed)
             CcRosOpenVacbGate(Vacb);
 
@@ -1229,6 +1237,7 @@ CcRosCreateVacb (
     current->ReferenceCount = 0;
     current->ActivePins = 0;
     current->WriteState = CC_VACB_WRITE_OPEN;
+    current->PinnedDirtyPages = 0;
     KeInitializeEvent(&current->WriteDone, NotificationEvent, TRUE);
     KeInitializeEvent(&current->PinsGone, NotificationEvent, FALSE);
     KeInitializeEvent(&current->WriterLock, SynchronizationEvent, TRUE);

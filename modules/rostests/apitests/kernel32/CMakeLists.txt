@@ -15,6 +15,7 @@ list(APPEND SOURCE
     dosdev.c
     EnumSystemCodePages.c
     FastFail.c
+    FatFlushVolume.c
     FatFreeClusters.c
     FatStress.c
     FindActCtxSectionStringW.c

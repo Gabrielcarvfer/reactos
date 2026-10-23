@@ -247,6 +247,9 @@ typedef struct _ROS_VACB
     KEVENT WriterLock;
     /* The pins the current writer holds itself */
     LONG WriterOwnPins;
+    /* Pages changed through a pin and not written yet, one bit per page:
+     * PIN_IF_BCB finds them (Windows keeps such BCBs until they are written) */
+    volatile LONG64 PinnedDirtyPages;
     /* Pointer to the next VACB in a chain. */
 } ROS_VACB, *PROS_VACB;
 
@@ -346,6 +349,31 @@ CcRosFlushVacb(
 #define CC_WRITE_UNGATED 0
 #define CC_WRITE_GATED 1
 #define CC_WRITE_BUSY 2
+
+/* The bits of PinnedDirtyPages for a byte range of a view */
+FORCEINLINE
+LONG64
+CcRosVacbPageMask(
+    _In_ PROS_VACB Vacb,
+    _In_ LONGLONG FileOffset,
+    _In_ ULONG Length)
+{
+    LONGLONG Start = FileOffset - Vacb->FileOffset.QuadPart;
+    LONGLONG End = Start + Length;
+    ULONG First, Last;
+
+    C_ASSERT(VACB_MAPPING_GRANULARITY / PAGE_SIZE <= 64);
+
+    if (Start < 0)
+        Start = 0;
+    if (End > VACB_MAPPING_GRANULARITY)
+        End = VACB_MAPPING_GRANULARITY;
+    if (Length == 0 || Start >= End)
+        return 0;
+    First = (ULONG)(Start / PAGE_SIZE);
+    Last = (ULONG)((End - 1) / PAGE_SIZE);
+    return (LONG64)(((Last == 63) ? ~0ULL : ((1ULL << (Last + 1)) - 1)) & ~((1ULL << First) - 1));
+}
 
 BOOLEAN
 CcRosEnterVacbPin(

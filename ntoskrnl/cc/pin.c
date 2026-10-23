@@ -278,13 +278,30 @@ CcpPinData(
 
         KeReleaseSpinLock(&SharedCacheMap->BcbSpinLock, OldIrql);
 
-        if (BooleanFlagOn(Flags, PIN_IF_BCB))
-        {
-            return FALSE;
-        }
-
         /* Properly round offset and call internal helper for getting a VACB */
         ROffset = ROUND_DOWN(FileOffset->QuadPart, VACB_MAPPING_GRANULARITY);
+
+        if (BooleanFlagOn(Flags, PIN_IF_BCB))
+        {
+            /* On Windows, the BCB of data changed through a pin stays until the
+             * data is written: file systems flush such data with PIN_IF_BCB
+             * (FastFAT's FatFlushFat). Ours go with the last unpin: look at the
+             * pages that were changed through a pin instead */
+            BOOLEAN Found = FALSE;
+
+            Vacb = CcRosLookupVacb(SharedCacheMap, ROffset);
+            if (Vacb != NULL)
+            {
+                Found = (Vacb->PinnedDirtyPages &
+                         CcRosVacbPageMask(Vacb, FileOffset->QuadPart, Length)) != 0;
+                CcRosReleaseVacb(SharedCacheMap, Vacb, FALSE, FALSE);
+            }
+
+            if (!Found)
+            {
+                return FALSE;
+            }
+        }
         Status = CcRosGetVacb(SharedCacheMap, ROffset, &Vacb);
         if (!NT_SUCCESS(Status))
         {
@@ -584,6 +601,11 @@ CcSetDirtyPinnedData (
     MmMakeSegmentDirty(Vacb->SharedCacheMap->FileObject->SectionObjectPointer,
                        iBcb->PFCB.MappedFileOffset.QuadPart,
                        iBcb->PFCB.MappedLength);
+
+    /* Until it's written, PIN_IF_BCB finds it */
+    InterlockedOr64(&Vacb->PinnedDirtyPages,
+                    CcRosVacbPageMask(Vacb, iBcb->PFCB.MappedFileOffset.QuadPart,
+                                      iBcb->PFCB.MappedLength));
 
     if (!Vacb->Dirty)
     {

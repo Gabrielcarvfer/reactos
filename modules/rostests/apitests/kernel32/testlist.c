@@ -14,6 +14,7 @@ extern void func_DeviceIoControl(void);
 extern void func_dosdev(void);
 extern void func_EnumSystemCodePages(void);
 extern void func_FastFail(void);
+extern void func_FatFlushVolume(void);
 extern void func_FatFreeClusters(void);
 extern void func_FatStress(void);
 extern void func_FindActCtxSectionStringW(void);
@@ -98,6 +99,7 @@ const struct test winetest_testlist[] =
     { "dosdev",                      func_dosdev },
     { "EnumSystemCodePages",         func_EnumSystemCodePages },
     { "FastFail",                    func_FastFail },
+    { "FatFlushVolume",               func_FatFlushVolume },
     { "FatFreeClusters",              func_FatFreeClusters },
     { "FatStress",                   func_FatStress },
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
