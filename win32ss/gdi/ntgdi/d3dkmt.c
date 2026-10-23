@@ -694,10 +694,22 @@ APIENTRY
 NtGdiDdDDIWaitForVerticalBlankEvent(_In_ const D3DKMT_WAITFORVERTICALBLANKEVENT* unnamedParam1)
 {
     if (!unnamedParam1)
-        STATUS_INVALID_PARAMETER;
+        return STATUS_INVALID_PARAMETER;
 
     if (!DxgAdapterCallbacks.RxgkIntPfnWaitForVerticalBlankEvent)
-        return STATUS_PROCEDURE_NOT_FOUND;
+    {
+        /* No display miniport interrupt to wait for: wait for the next
+           refresh of a 60 Hz display, as the frame loops of Chromium
+           (VSyncThreadWin), ANGLE and DXGI programs pace themselves on this.
+           Failing made them stop drawing. */
+        const ULONGLONG Period = 10000000ULL / 60; /* (100 ns units) */
+        ULONGLONG Now = KeQueryInterruptTime();
+        LARGE_INTEGER Delay;
+
+        Delay.QuadPart = -(LONGLONG)(Period - Now % Period);
+        KeDelayExecutionThread(UserMode, FALSE, &Delay);
+        return STATUS_SUCCESS;
+    }
 
     return DxgAdapterCallbacks.RxgkIntPfnWaitForVerticalBlankEvent(unnamedParam1);
 }

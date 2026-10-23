@@ -17,6 +17,11 @@
  */
 
 #include "dxgi_private.h"
+#ifdef __REACTOS__
+/* (gdi32; the layout of D3DKMT_WAITFORVERTICALBLANKEVENT) */
+typedef struct { UINT hAdapter; UINT hDevice; UINT VidPnSourceId; } ROS_WAITFORVBLANK;
+LONG WINAPI D3DKMTWaitForVerticalBlankEvent(const ROS_WAITFORVBLANK *);
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(dxgi);
 
@@ -363,6 +368,13 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_FindClosestMatchingMode(IDXGIOutput
 
 static HRESULT STDMETHODCALLTYPE dxgi_output_WaitForVBlank(IDXGIOutput6 *iface)
 {
+#ifdef __REACTOS__
+    /* (win32k waits for the next refresh) */
+    ROS_WAITFORVBLANK wait = { 0 };
+
+    TRACE("iface %p.\n", iface);
+    return D3DKMTWaitForVerticalBlankEvent(&wait) ? DXGI_ERROR_DEVICE_REMOVED : S_OK;
+#else
     static BOOL once = FALSE;
 
     if (!once++)
@@ -371,6 +383,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_WaitForVBlank(IDXGIOutput6 *iface)
         TRACE("iface %p stub!\n", iface);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE dxgi_output_TakeOwnership(IDXGIOutput6 *iface, IUnknown *device, BOOL exclusive)

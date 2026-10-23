@@ -20,6 +20,7 @@ list(APPEND SOURCE
     CreateIconIndirect.c
     CreatePen.c
     CreateRectRgn.c
+    D3DKMTWaitForVerticalBlankEvent.c
     DPtoLP.c
     EngAcquireSemaphore.c
     EngCreateSemaphore.c
