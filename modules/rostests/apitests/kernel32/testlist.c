@@ -65,6 +65,7 @@ extern void func_QueryPerformanceCounter(void);
 extern void func_QueueUserAPC(void);
 extern void func_ReadDirectoryChanges(void);
 extern void func_ReadOnlySection(void);
+extern void func_SchedStress(void);
 extern void func_SecurityLabel(void);
 extern void func_SetComputerNameExW(void);
 extern void func_SetConsoleWindowInfo(void);
@@ -150,6 +151,7 @@ const struct test winetest_testlist[] =
     { "QueueUserAPC",                func_QueueUserAPC },
     { "ReadDirectoryChanges",        func_ReadDirectoryChanges },
     { "ReadOnlySection",             func_ReadOnlySection },
+    { "SchedStress",                 func_SchedStress },
     { "SecurityLabel", func_SecurityLabel },
     { "SetComputerNameExW",          func_SetComputerNameExW },
     { "SetConsoleWindowInfo",        func_SetConsoleWindowInfo },

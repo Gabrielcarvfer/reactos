@@ -67,6 +67,7 @@ list(APPEND SOURCE
     ReadDirectoryChanges.c
     ReadFile.c
     ReadOnlySection.c
+    SchedStress.c
     SecurityLabel.c
     SetComputerNameExW.c
     SetConsoleWindowInfo.c
