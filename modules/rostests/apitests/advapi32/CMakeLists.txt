@@ -19,6 +19,7 @@ list(APPEND SOURCE
     RegOpenKeyExW.c
     RegQueryInfoKey.c
     RegQueryValueExW.c
+    RegStress.c
     RegWow64Views.c
     RestrictedToken.c
     RtlEncryptMemory.c

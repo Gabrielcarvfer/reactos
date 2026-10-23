@@ -158,6 +158,7 @@ CmpInitializeHive(
     /* Setup hive locks */
     ExInitializePushLock(&Hive->HiveLock);
     Hive->HiveLockOwner = NULL;
+    Hive->HiveLockRecursion = 0;
     ExInitializePushLock(&Hive->WriterLock);
     Hive->WriterLockOwner = NULL;
     ExInitializePushLock(&Hive->SecurityLock);
@@ -236,6 +237,48 @@ CmpInitializeHive(
     /* Return the hive and success */
     *CmHive = Hive;
     return STATUS_SUCCESS;
+}
+
+/*
+ * The lock of a hive's cell allocator and dirty vector (see hivecell.c):
+ * writers of different keys of the same hive run at the same time.
+ * Recursive for the owner; a leaf lock (nothing else is acquired under it).
+ */
+VOID
+NTAPI
+CmpLockHiveCells(
+    _In_ PHHIVE Hive)
+{
+    PCMHIVE CmHive = CONTAINING_RECORD(Hive, CMHIVE, Hive);
+    PKTHREAD Thread = KeGetCurrentThread();
+
+    if (CmHive->HiveLockOwner == Thread)
+    {
+        CmHive->HiveLockRecursion++;
+        return;
+    }
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&CmHive->HiveLock);
+    ASSERT(CmHive->HiveLockOwner == NULL);
+    CmHive->HiveLockOwner = Thread;
+    CmHive->HiveLockRecursion = 1;
+}
+
+VOID
+NTAPI
+CmpUnlockHiveCells(
+    _In_ PHHIVE Hive)
+{
+    PCMHIVE CmHive = CONTAINING_RECORD(Hive, CMHIVE, Hive);
+
+    ASSERT(CmHive->HiveLockOwner == KeGetCurrentThread());
+    if (--CmHive->HiveLockRecursion != 0)
+        return;
+
+    CmHive->HiveLockOwner = NULL;
+    ExReleasePushLockExclusive(&CmHive->HiveLock);
+    KeLeaveCriticalRegion();
 }
 
 NTSTATUS

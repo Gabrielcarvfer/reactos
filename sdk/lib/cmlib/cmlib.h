@@ -327,6 +327,7 @@ typedef struct _CMHIVE
     LIST_ENTRY HiveList;
     EX_PUSH_LOCK HiveLock;
     PKTHREAD HiveLockOwner;
+    ULONG HiveLockRecursion;
     PKGUARDED_MUTEX ViewLock;
     PKTHREAD ViewLockOwner;
     EX_PUSH_LOCK WriterLock;
@@ -572,6 +573,17 @@ HvpAddBin(
    PHHIVE RegistryHive,
    ULONG Size,
    HSTORAGE_TYPE Storage);
+
+PHMAP_ENTRY CMAPI
+HvpAllocateBlockList(
+   _In_ PHHIVE Hive,
+   _In_ ULONG Capacity,
+   _In_ BOOLEAN Paged);
+
+VOID CMAPI
+HvpFreeBlockList(
+   _In_ PHHIVE Hive,
+   _In_opt_ PHMAP_ENTRY BlockList);
 
 NTSTATUS CMAPI
 HvpCreateHiveFreeCellList(

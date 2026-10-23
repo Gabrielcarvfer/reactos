@@ -15,7 +15,31 @@
 VOID
 NTAPI
 CmpLazyFlush(VOID);
+
+/*
+ * Writers of different keys of one hive run at the same time (they hold the
+ * registry lock shared and only their own keys' KCB locks): the cell
+ * allocator (free lists, bins, block list) and the dirty vector need a lock
+ * of their own. Recursive (HvReallocateCell calls HvAllocateCell...).
+ */
+VOID
+NTAPI
+CmpLockHiveCells(
+    _In_ PHHIVE Hive);
+
+VOID
+NTAPI
+CmpUnlockHiveCells(
+    _In_ PHHIVE Hive);
+#else
+#define CmpLockHiveCells(Hive)   ((VOID)0)
+#define CmpUnlockHiveCells(Hive) ((VOID)0)
 #endif
+
+static VOID CMAPI
+HvpFreeCellUnlocked(
+    PHHIVE RegistryHive,
+    HCELL_INDEX CellIndex);
 
 /* FUNCTIONS *****************************************************************/
 
@@ -125,9 +149,11 @@ HvMarkCellDirty(
     CellBlock     = HvGetCellBlock(CellIndex);
     CellLastBlock = HvGetCellBlock(CellIndex + HBLOCK_SIZE - 1);
 
+    CmpLockHiveCells(RegistryHive);
     RtlSetBits(&RegistryHive->DirtyVector,
                CellBlock, CellLastBlock - CellBlock);
     RegistryHive->DirtyCount++;
+    CmpUnlockHiveCells(RegistryHive);
 
     /*
      * FIXME: Querying a lazy flush operation is needed to
@@ -163,8 +189,10 @@ HvIsCellDirty(IN PHHIVE Hive,
         return TRUE;
 
     /* Check if the dirty bit is set */
+    CmpLockHiveCells(Hive);
     if (RtlCheckBit(&Hive->DirtyVector, Cell / HBLOCK_SIZE))
         IsDirty = TRUE;
+    CmpUnlockHiveCells(Hive);
 
     /* Return result as boolean*/
     return IsDirty;
@@ -353,8 +381,8 @@ HvpCreateHiveFreeCellList(
     return STATUS_SUCCESS;
 }
 
-HCELL_INDEX CMAPI
-HvAllocateCell(
+static HCELL_INDEX CMAPI
+HvpAllocateCellUnlocked(
     PHHIVE RegistryHive,
     ULONG Size,
     HSTORAGE_TYPE Storage,
@@ -417,8 +445,8 @@ HvAllocateCell(
     return FreeCellOffset;
 }
 
-HCELL_INDEX CMAPI
-HvReallocateCell(
+static HCELL_INDEX CMAPI
+HvpReallocateCellUnlocked(
     PHHIVE RegistryHive,
     HCELL_INDEX CellIndex,
     ULONG Size)
@@ -449,14 +477,14 @@ HvReallocateCell(
      */
     if (Size > (ULONG)OldCellSize)
     {
-        NewCellIndex = HvAllocateCell(RegistryHive, Size, Storage, HCELL_NIL);
+        NewCellIndex = HvpAllocateCellUnlocked(RegistryHive, Size, Storage, HCELL_NIL);
         if (NewCellIndex == HCELL_NIL)
             return HCELL_NIL;
 
         NewCell = HvGetCell(RegistryHive, NewCellIndex);
         RtlCopyMemory(NewCell, OldCell, (SIZE_T)OldCellSize);
 
-        HvFreeCell(RegistryHive, CellIndex);
+        HvpFreeCellUnlocked(RegistryHive, CellIndex);
 
         return NewCellIndex;
     }
@@ -464,8 +492,8 @@ HvReallocateCell(
     return CellIndex;
 }
 
-VOID CMAPI
-HvFreeCell(
+static VOID CMAPI
+HvpFreeCellUnlocked(
     PHHIVE RegistryHive,
     HCELL_INDEX CellIndex)
 {
@@ -544,6 +572,46 @@ HvFreeCell(
 
     if (CellType == Stable)
         HvMarkCellDirty(RegistryHive, CellIndex, FALSE);
+}
+
+
+HCELL_INDEX CMAPI
+HvAllocateCell(
+    PHHIVE RegistryHive,
+    ULONG Size,
+    HSTORAGE_TYPE Storage,
+    HCELL_INDEX Vicinity)
+{
+    HCELL_INDEX Cell;
+
+    CmpLockHiveCells(RegistryHive);
+    Cell = HvpAllocateCellUnlocked(RegistryHive, Size, Storage, Vicinity);
+    CmpUnlockHiveCells(RegistryHive);
+    return Cell;
+}
+
+HCELL_INDEX CMAPI
+HvReallocateCell(
+    PHHIVE RegistryHive,
+    HCELL_INDEX CellIndex,
+    ULONG Size)
+{
+    HCELL_INDEX Cell;
+
+    CmpLockHiveCells(RegistryHive);
+    Cell = HvpReallocateCellUnlocked(RegistryHive, CellIndex, Size);
+    CmpUnlockHiveCells(RegistryHive);
+    return Cell;
+}
+
+VOID CMAPI
+HvFreeCell(
+    PHHIVE RegistryHive,
+    HCELL_INDEX CellIndex)
+{
+    CmpLockHiveCells(RegistryHive);
+    HvpFreeCellUnlocked(RegistryHive, CellIndex);
+    CmpUnlockHiveCells(RegistryHive);
 }
 
 

@@ -21,6 +21,7 @@ extern void func_RegNotifyChangeKeyValue(void);
 extern void func_RegOpenKeyExW(void);
 extern void func_RegQueryInfoKey(void);
 extern void func_RegQueryValueExW(void);
+extern void func_RegStress(void);
 extern void func_RegWow64Views(void);
 extern void func_RestrictedToken(void);
 extern void func_RtlEncryptMemory(void);
@@ -50,6 +51,7 @@ const struct test winetest_testlist[] =
     { "RegQueryInfoKey", func_RegQueryInfoKey },
     { "RegOpenKeyExW", func_RegOpenKeyExW },
     { "RegQueryValueExW", func_RegQueryValueExW },
+    { "RegStress", func_RegStress },
     { "RegWow64Views", func_RegWow64Views },
     { "RestrictedToken", func_RestrictedToken },
     { "RtlEncryptMemory", func_RtlEncryptMemory },

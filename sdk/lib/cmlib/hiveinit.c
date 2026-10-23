@@ -110,8 +110,8 @@ HvpFreeHiveBins(
             Hive->Storage[Storage].BlockList[i].BlockAddress = (ULONG_PTR)NULL;
         }
 
-        if (Hive->Storage[Storage].Length)
-            Hive->Free(Hive->Storage[Storage].BlockList, 0);
+        HvpFreeBlockList(Hive, Hive->Storage[Storage].BlockList);
+        Hive->Storage[Storage].BlockList = NULL;
     }
 }
 
@@ -355,8 +355,7 @@ HvpInitializeMemoryHive(
 
     Hive->Storage[Stable].Length = (ULONG)(ChunkSize / HBLOCK_SIZE);
     Hive->Storage[Stable].BlockList =
-        Hive->Allocate(Hive->Storage[Stable].Length *
-                       sizeof(HMAP_ENTRY), FALSE, TAG_CM);
+        HvpAllocateBlockList(Hive, Hive->Storage[Stable].Length, FALSE);
     if (Hive->Storage[Stable].BlockList == NULL)
     {
         DPRINT1("Allocating block list failed\n");
@@ -382,7 +381,7 @@ HvpInitializeMemoryHive(
             {
                 DPRINT1("Invalid bin at BlockIndex %lu, Signature 0x%x, Size 0x%x. Self-heal not possible!\n",
                     (unsigned long)BlockIndex, (unsigned)Bin->Signature, (unsigned)Bin->Size);
-                Hive->Free(Hive->Storage[Stable].BlockList, 0);
+                HvpFreeBlockList(Hive, Hive->Storage[Stable].BlockList);
                 Hive->Free(Hive->BaseBlock, Hive->BaseBlockAlloc);
                 return STATUS_REGISTRY_CORRUPT;
             }
@@ -398,7 +397,7 @@ HvpInitializeMemoryHive(
         NewBin = Hive->Allocate(Bin->Size, TRUE, TAG_CM);
         if (NewBin == NULL)
         {
-            Hive->Free(Hive->Storage[Stable].BlockList, 0);
+            HvpFreeBlockList(Hive, Hive->Storage[Stable].BlockList);
             Hive->Free(Hive->BaseBlock, Hive->BaseBlockAlloc);
             return STATUS_NO_MEMORY;
         }
