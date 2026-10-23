@@ -1672,4 +1672,173 @@ PsQueryTotalCycleTimeProcess(
     return TotalCycleTime;
 }
 
+/*
+ * NtGetNextProcess and NtGetNextThread (Vista): walk the processes of the
+ * system or the threads of a process, opening each one. Entries the caller
+ * may not open with the access it asks for are skipped.
+ */
+NTSTATUS
+NTAPI
+NtGetNextProcess(
+    _In_opt_ HANDLE ProcessHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ ULONG HandleAttributes,
+    _In_ ULONG Flags,
+    _Out_ PHANDLE NewProcessHandle)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PEPROCESS Process = NULL;
+    HANDLE Handle = NULL;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    /* Bit 0 asks for the previous process instead: not supported */
+    if (Flags != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (PreviousMode != KernelMode)
+        HandleAttributes &= ~OBJ_KERNEL_HANDLE;
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+            ProbeForWriteHandle(NewProcessHandle);
+        *NewProcessHandle = NULL;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if (ProcessHandle)
+    {
+        Status = ObReferenceObjectByHandle(ProcessHandle, 0, PsProcessType, PreviousMode, (PVOID *)&Process, NULL);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+
+    for (;;)
+    {
+        /* This dereferences the previous process */
+        Process = PsGetNextProcess(Process);
+        if (!Process)
+            return STATUS_NO_MORE_ENTRIES;
+
+        Status = ObOpenObjectByPointer(Process, HandleAttributes, NULL, DesiredAccess,
+                                       PsProcessType, PreviousMode, &Handle);
+        if (NT_SUCCESS(Status))
+            break;
+        if (Status != STATUS_ACCESS_DENIED)
+        {
+            ObDereferenceObject(Process);
+            return Status;
+        }
+    }
+    ObDereferenceObject(Process);
+
+    _SEH2_TRY
+    {
+        *NewProcessHandle = Handle;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        ObCloseHandle(Handle, PreviousMode);
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+NtGetNextThread(
+    _In_ HANDLE ProcessHandle,
+    _In_opt_ HANDLE ThreadHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ ULONG HandleAttributes,
+    _In_ ULONG Flags,
+    _Out_ PHANDLE NewThreadHandle)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PEPROCESS Process;
+    PETHREAD Thread = NULL;
+    HANDLE Handle = NULL;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    if (Flags != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (PreviousMode != KernelMode)
+        HandleAttributes &= ~OBJ_KERNEL_HANDLE;
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+            ProbeForWriteHandle(NewThreadHandle);
+        *NewThreadHandle = NULL;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    Status = ObReferenceObjectByHandle(ProcessHandle, PROCESS_QUERY_INFORMATION, PsProcessType,
+                                       PreviousMode, (PVOID *)&Process, NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (ThreadHandle)
+    {
+        Status = ObReferenceObjectByHandle(ThreadHandle, 0, PsThreadType, PreviousMode, (PVOID *)&Thread, NULL);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(Process);
+            return Status;
+        }
+        if (Thread->ThreadsProcess != Process)
+        {
+            ObDereferenceObject(Thread);
+            ObDereferenceObject(Process);
+            return STATUS_INVALID_PARAMETER;
+        }
+    }
+
+    for (;;)
+    {
+        /* This dereferences the previous thread */
+        Thread = PsGetNextProcessThread(Process, Thread);
+        if (!Thread)
+        {
+            ObDereferenceObject(Process);
+            return STATUS_NO_MORE_ENTRIES;
+        }
+
+        Status = ObOpenObjectByPointer(Thread, HandleAttributes, NULL, DesiredAccess,
+                                       PsThreadType, PreviousMode, &Handle);
+        if (NT_SUCCESS(Status))
+            break;
+        if (Status != STATUS_ACCESS_DENIED)
+        {
+            ObDereferenceObject(Thread);
+            ObDereferenceObject(Process);
+            return Status;
+        }
+    }
+    ObDereferenceObject(Thread);
+    ObDereferenceObject(Process);
+
+    _SEH2_TRY
+    {
+        *NewThreadHandle = Handle;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        ObCloseHandle(Handle, PreviousMode);
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    return Status;
+}
+
 /* EOF */

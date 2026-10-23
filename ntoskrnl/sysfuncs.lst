@@ -299,3 +299,5 @@ NtCancelIoFileEx 3
 NtAllocateVirtualMemoryEx 7
 NtMapViewOfSectionEx 9
 NtUnmapViewOfSectionEx 3
+NtGetNextProcess 5
+NtGetNextThread 6
