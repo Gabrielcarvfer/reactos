@@ -993,6 +993,11 @@ NoUserApcPending:
     mov rcx, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rip]
     mov r11, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_EFlags]
 
+    /* rbp from the trap frame: SetThreadContext may have changed it while
+       the thread was in the call (the other non-volatiles are restored by the
+       callees' epilogues from where the unwinder found them) */
+    mov rbp, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rbp]
+
     /* Load user mode stack (It was copied to the trap frame) */
     mov rsp, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rsp]
 

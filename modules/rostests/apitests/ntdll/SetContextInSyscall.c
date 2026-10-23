@@ -10,10 +10,12 @@
 /*
  * A thread is suspended, gets a new instruction pointer (and maybe new values
  * in every general register) with SetThreadContext, and is resumed. It must
- * come out at the new address with all the registers as set. Cygwin/MSYS2
- * deliver signals this way (Git for Windows' bash). 64-bit ReactOS left system
- * calls with sysretq, which reloads only RIP, RSP and EFLAGS, and WOW64 put the
- * call's status in EAX.
+ * come out at the new address with the registers as set. Cygwin/MSYS2 deliver
+ * signals this way (Git for Windows' bash). A thread blocked in a system call
+ * returns as from the call, as on Windows (checked on Windows 11, 64-bit and
+ * WOW64): the new instruction and stack pointers and non-volatile registers,
+ * but the call's status in rax/eax, and rcx, rdx, r8-r11 (ecx, edx) not the
+ * context's.
  */
 
 #if defined(__GNUC__)
@@ -162,16 +164,30 @@ Redirect(HANDLE Thread, PCONTEXT Context, const BOOLEAN *Known, PCSTR Case)
     return TRUE;
 }
 
+/* The registers that a thread in a system call does not take from a new
+   context, as on Windows: it returns with sysretq, the call's status in
+   rax/eax, rcx and r11 (and in 32-bit code ecx, edx) belong to the return */
+#ifdef _WIN64
+static const BOOLEAN SyscallVolatile[NREG] = { 1,1,1,0, 0,0,0,0, 1,1,1,1, 0,0,0,0 };
+#else
+static const BOOLEAN SyscallVolatile[NREG] = { 1,1,1,0, 0,0,0,0 };
+#endif
+
 static
 VOID
-CheckLanded(PCONTEXT Context, BOOLEAN ControlOnly, PCSTR Case)
+CheckLanded(PCONTEXT Context, BOOLEAN ControlOnly, BOOLEAN InSyscall, PCSTR Case)
 {
     ULONG i;
 
+    /* The interrupted wait returns its own status (it was satisfied) */
+    if (InSyscall)
+        ok(SetCtxSaved[0] == 0, "%s: %s = %p, expected the wait's status 0\n", Case, Names[0], (PVOID)SetCtxSaved[0]);
     for (i = 0; i < NREG; i++)
     {
         /* With CONTEXT_CONTROL only the stack pointer is known */
         if (ControlOnly && i != 4)
+            continue;
+        if (InSyscall && SyscallVolatile[i])
             continue;
         ok(SetCtxSaved[i] == GetReg(Context, i), "%s: %s = %p, expected %p\n", Case, Names[i],
            (PVOID)SetCtxSaved[i], (PVOID)GetReg(Context, i));
@@ -217,7 +233,7 @@ TestWaitNewRegisters(BOOLEAN AllRegisters)
 
         ok(WaitForSingleObject(Thread, 5000) == WAIT_OBJECT_0, "%s: the thread did not end\n", Case);
         ok(SetCtxWaitReturned == 0, "%s: the thread went on after its wait\n", Case);
-        CheckLanded(&Context, !AllRegisters, Case);
+        CheckLanded(&Context, !AllRegisters, TRUE, Case);
     }
 
     TerminateThread(Thread, 0);
@@ -253,7 +269,7 @@ TestWaitReadBack(VOID)
         SetEvent(SetCtxEvent);
         ok(WaitForSingleObject(Thread, 5000) == WAIT_OBJECT_0, "%s: the thread did not end\n", Case);
         ok(SetCtxWaitReturned == 0, "%s: the thread went on after its wait\n", Case);
-        CheckLanded(&Context, FALSE, Case);
+        CheckLanded(&Context, FALSE, TRUE, Case);
     }
 
     TerminateThread(Thread, 0);
@@ -287,7 +303,7 @@ TestBusyReadBack(VOID)
         ok(SetThreadContext(Thread, &Context), "SetThreadContext failed: %lu\n", GetLastError());
         ResumeThread(Thread);
         ok(WaitForSingleObject(Thread, 5000) == WAIT_OBJECT_0, "%s: the thread did not end\n", Case);
-        CheckLanded(&Context, FALSE, Case);
+        CheckLanded(&Context, FALSE, FALSE, Case);
     }
 
     TerminateThread(Thread, 0);

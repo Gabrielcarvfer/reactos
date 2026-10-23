@@ -260,12 +260,10 @@ __ASM_GLOBAL_FUNC( syscall_32to64,
                    "movq %rax,%rcx\n\t"         /* syscall number */
                    "leaq 8(%r14),%rdx\n\t"      /* parameters */
                    "call " __ASM_NAME("Wow64SystemServiceEx") "\n\t"
-                   /* A context set during the call (RESET_STATE: SetThreadContext from
-                      another thread) has its own Eax, not the call's result */
-                   "btl $0,-4(%r13)\n\t"        /* cpu->Flags & WOW64_CPURESERVED_FLAG_RESET_STATE */
-                   "jc 1f\n\t"
-                   "movl %eax,0xb0(%r13)\n"     /* context->Eax */
-                   "1:\n\t"
+                   /* The call's status, also when the context was set during the
+                      call (RESET_STATE), as on Windows: an interrupted wait must
+                      return STATUS_USER_APC, not the Eax of the context */
+                   "movl %eax,0xb0(%r13)\n\t"   /* context->Eax */
 
                    "syscall_32to64_return:\n\t"
 #ifdef __REACTOS__
