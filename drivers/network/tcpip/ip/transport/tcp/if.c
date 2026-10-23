@@ -165,10 +165,10 @@ TCPGatherSegment(PNEIGHBOR_CACHE_ENTRY NCE, struct pbuf *p)
             LargeSend.HeaderLength == HeaderLength &&
             Seq == LargeSend.NextSeq && DataLength <= LargeSend.Mss &&
             LargeSend.Length + DataLength <= NCE->Interface->LargeSendMax &&
-            RtlEqualMemory(LargeSend.Frame + 12, Ip + 12, 8) &&
-            RtlEqualMemory(PendingTcp, Tcp, 4) &&
-            RtlEqualMemory(PendingTcp + 8, Tcp + 8, 5) &&
-            RtlEqualMemory(PendingTcp + 14, Tcp + 14, 2))
+            RtlCompareMemory(LargeSend.Frame + 12, Ip + 12, 8) == 8 &&
+            RtlCompareMemory(PendingTcp, Tcp, 4) == 4 &&
+            RtlCompareMemory(PendingTcp + 8, Tcp + 8, 5) == 5 &&
+            RtlCompareMemory(PendingTcp + 14, Tcp + 14, 2) == 2)
         {
             pbuf_copy_partial(p, LargeSend.Frame + LargeSend.Length, DataLength, HeaderLength);
             LargeSend.Length += DataLength;
