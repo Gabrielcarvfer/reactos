@@ -10,6 +10,7 @@ extern void func_eventlog_supp(void);
 extern void func_FileSecurity(void);
 extern void func_Hash(void);
 extern void func_HKEY_CLASSES_ROOT(void);
+extern void func_InitiateShutdown(void);
 extern void func_IsTextUnicode(void);
 extern void func_LockServiceDatabase(void);
 extern void func_QueryServiceConfig2(void);
@@ -41,6 +42,7 @@ const struct test winetest_testlist[] =
     { "FileSecurity", func_FileSecurity },
     { "Hash", func_Hash },
     { "HKEY_CLASSES_ROOT", func_HKEY_CLASSES_ROOT },
+    { "InitiateShutdown", func_InitiateShutdown },
     { "IsTextUnicode" , func_IsTextUnicode },
     { "LockServiceDatabase" , func_LockServiceDatabase },
     { "QueryServiceConfig2", func_QueryServiceConfig2 },

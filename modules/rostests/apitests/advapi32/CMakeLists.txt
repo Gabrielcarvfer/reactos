@@ -8,6 +8,7 @@ list(APPEND SOURCE
     FileSecurity.c
     Hash.c
     HKEY_CLASSES_ROOT.c
+    InitiateShutdown.c
     IsTextUnicode.c
     LockServiceDatabase.c
     QueryServiceConfig2.c

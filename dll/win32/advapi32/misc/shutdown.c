@@ -292,7 +292,10 @@ InitiateSystemShutdownExW(LPWSTR lpMachineName,
 /******************************************************************************
  * InitiateShutdownW [ADVAPI32.@]
  *
- * @unimplemented
+ * @implemented
+ *
+ * The Vista form of InitiateSystemShutdownExW: the flags choose a restart
+ * and whether other sessions' programs are closed. Returns an error code.
  */
 DWORD WINAPI
 InitiateShutdownW(LPWSTR lpMachineName,
@@ -301,7 +304,20 @@ InitiateShutdownW(LPWSTR lpMachineName,
                   DWORD dwShutdownFlags,
                   DWORD dwReason)
 {
-    UNIMPLEMENTED;
+#ifndef SHUTDOWN_FORCE_OTHERS
+#define SHUTDOWN_FORCE_OTHERS 0x1
+#define SHUTDOWN_FORCE_SELF 0x2
+#define SHUTDOWN_RESTART 0x4
+#endif
+    if (!InitiateSystemShutdownExW(lpMachineName,
+                                   lpMessage,
+                                   dwGracePeriod,
+                                   !!(dwShutdownFlags & (SHUTDOWN_FORCE_OTHERS | SHUTDOWN_FORCE_SELF)),
+                                   !!(dwShutdownFlags & SHUTDOWN_RESTART),
+                                   dwReason))
+    {
+        return GetLastError();
+    }
     return ERROR_SUCCESS;
 }
 
