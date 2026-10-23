@@ -1,5 +1,5 @@
 
-add_executable(d2d1_apitest ColorContext.c CustomEffect.c DrawState.c testlist.c)
+add_executable(d2d1_apitest ColorContext.c CustomEffect.c DrawState.c EffectGraph.c testlist.c)
 target_link_libraries(d2d1_apitest wine uuid dxguid)
 add_dependencies(d2d1_apitest d3d_idl_headers psdk)
 set_module_type(d2d1_apitest win32cui)
