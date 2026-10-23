@@ -117,7 +117,7 @@ static void test_StructSizes(void)
 }
 
 typedef HPROPSHEETPAGE (WINAPI *FN_CreatePropertySheetPageW)(LPCPROPSHEETPAGEW);
-typedef int (WINAPI *FN_PropertySheetW)(LPCPROPSHEETHEADERW);
+typedef INT_PTR (WINAPI *FN_PropertySheetW)(LPCPROPSHEETHEADERW);
 static FN_CreatePropertySheetPageW pCreatePropertySheetPageW;
 static FN_PropertySheetW pPropertySheetW;
 
@@ -147,6 +147,64 @@ static void test_ApplyButtonDisabled(void)
 }
 
 
+static INT_PTR CALLBACK
+EmptyPageDlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    return 0;
+}
+
+// An exterior wizard page (watermark, no header) paints its own background
+// and answers WM_CTLCOLORSTATIC itself: it must also give the system text
+// color, or the labels stay black when COLOR_WINDOW is dark
+static void test_WizardExteriorCtlColor(void)
+{
+    PROPSHEETPAGEW psp = {0};
+    PROPSHEETHEADERW header = {0};
+    HPROPSHEETPAGE hpsp[1];
+    HWND hwndSheet, hwndPage, hwndEdit;
+    HDC hdc;
+    HBRUSH hbr;
+    HBITMAP hbmWatermark;
+
+    hbmWatermark = LoadBitmapW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(5));
+    ok(hbmWatermark != NULL, "LoadBitmapW failed\n");
+
+    psp.dwSize = sizeof(psp);
+    psp.dwFlags = PSP_HIDEHEADER;
+    psp.hInstance = GetModuleHandleW(NULL);
+    psp.pszTemplate = MAKEINTRESOURCEW(1);
+    psp.pfnDlgProc = EmptyPageDlgProc;
+    hpsp[0] = pCreatePropertySheetPageW(&psp);
+    ok(hpsp[0] != NULL, "hpsp[0] was NULL.\n");
+
+    header.dwSize = sizeof(header);
+    header.dwFlags = PSH_WIZARD97 | PSH_WATERMARK | PSH_USEHBMWATERMARK | PSH_MODELESS;
+    header.hInstance = GetModuleHandleW(NULL);
+    header.nPages = ARRAYSIZE(hpsp);
+    header.phpage = hpsp;
+    header.hbmWatermark = hbmWatermark;
+    hwndSheet = (HWND)(INT_PTR)pPropertySheetW(&header);
+    ok(IsWindow(hwndSheet), "PropertySheet failed\n");
+    if (!IsWindow(hwndSheet))
+        return;
+
+    hwndPage = PropSheet_GetCurrentPageHwnd(hwndSheet);
+    ok(hwndPage != NULL, "no page\n");
+    hwndEdit = GetDlgItem(hwndPage, edt1);
+
+    hdc = GetDC(hwndPage);
+    SetTextColor(hdc, RGB(1, 2, 3));
+    SetBkColor(hdc, RGB(4, 5, 6));
+    hbr = (HBRUSH)SendMessageW(hwndPage, WM_CTLCOLORSTATIC, (WPARAM)hdc, (LPARAM)hwndEdit);
+    ok(hbr == GetSysColorBrush(COLOR_WINDOW), "brush %p\n", hbr);
+    ok_hex(GetBkColor(hdc), GetSysColor(COLOR_WINDOW));
+    ok_hex(GetTextColor(hdc), GetSysColor(COLOR_WINDOWTEXT));
+    ReleaseDC(hwndPage, hdc);
+
+    DestroyWindow(hwndSheet);
+    DeleteObject(hbmWatermark);
+}
+
 START_TEST(propsheetv6)
 {
     HMODULE hComCtl32;
@@ -166,6 +224,7 @@ START_TEST(propsheetv6)
 
     test_StructSizes();
     test_ApplyButtonDisabled();
+    test_WizardExteriorCtlColor();
 
     FreeLibrary(hComCtl32);
 }

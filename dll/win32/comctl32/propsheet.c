@@ -1214,6 +1214,11 @@ PROPSHEET_WizardSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
       return TRUE;
 
     case WM_CTLCOLORSTATIC:
+#ifdef __REACTOS__
+      /* The brush skips DefWindowProc, which sets the text color: set it
+       * here, or the text stays black on a dark COLOR_WINDOW */
+      SetTextColor((HDC)wParam, GetSysColor(COLOR_WINDOWTEXT));
+#endif
       SetBkColor((HDC)wParam, GetSysColor(COLOR_WINDOW));
       return (INT_PTR)GetSysColorBrush(COLOR_WINDOW);
   }
@@ -3439,7 +3444,12 @@ static LRESULT PROPSHEET_Paint(HWND hwnd, HDC hdcParam)
             SelectObject(hdcSrc, hbmp);
         }
 
+#ifdef __REACTOS__
+	/* The header is painted with COLOR_WINDOW: use its text color */
+	clrOld = SetTextColor (hdc, GetSysColor(COLOR_WINDOWTEXT));
+#else
 	clrOld = SetTextColor (hdc, 0x00000000);
+#endif
 	oldBkMode = SetBkMode (hdc, TRANSPARENT); 
 
 	if (ppshpage->dwFlags & PSP_USEHEADERTITLE) {
