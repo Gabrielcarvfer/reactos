@@ -234,6 +234,19 @@ typedef struct _ROS_VACB
     volatile ULONG ReferenceCount;
     /* Pointer to the shared cache map for the file which this view maps data for. */
     PROS_SHARED_CACHE_MAP SharedCacheMap;
+    /* Pins held on this view (a pinned range is being changed by its owner) */
+    volatile LONG ActivePins;
+    /* CC_VACB_WRITE_*: a write of the view waits for the pins to go, or is in
+     * progress (new pins wait for it), see CcRosWriteVacbRange */
+    volatile LONG WriteState;
+    /* Signaled when the view isn't being written */
+    KEVENT WriteDone;
+    /* Signaled when a pin goes while a write waits */
+    KEVENT PinsGone;
+    /* Serializes the writes of the view */
+    KEVENT WriterLock;
+    /* The pins the current writer holds itself */
+    LONG WriterOwnPins;
     /* Pointer to the next VACB in a chain. */
 } ROS_VACB, *PROS_VACB;
 
@@ -325,6 +338,23 @@ CcRosFlushVacb(
     _In_ PROS_VACB Vacb,
     _Out_opt_ PIO_STATUS_BLOCK Iosb
 );
+
+#define CC_VACB_WRITE_OPEN 0
+#define CC_VACB_WRITE_WAITING 1
+#define CC_VACB_WRITE_CLOSED 2
+
+#define CC_WRITE_UNGATED 0
+#define CC_WRITE_GATED 1
+#define CC_WRITE_BUSY 2
+
+BOOLEAN
+CcRosEnterVacbPin(
+    _In_ PROS_VACB Vacb,
+    _In_ BOOLEAN Wait);
+
+VOID
+CcRosLeaveVacbPin(
+    _In_ PROS_VACB Vacb);
 
 NTSTATUS
 CcRosGetVacb(

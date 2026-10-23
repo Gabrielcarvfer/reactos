@@ -303,11 +303,25 @@ WriteSegment:
     Segment = MmGetSectionAssociation(Page, &SegmentOffset);
     if (Segment)
     {
-        BOOLEAN Released;
+        BOOLEAN Released = FALSE;
+        ULONG_PTR Entry;
 
         MmLockSectionSegment(Segment);
 
-        Released = MmCheckDirtySegment(Segment, &SegmentOffset, FALSE, TRUE);
+        /*
+         * A file page that is still mapped (the mappings of processes were
+         * removed above, so by a cache view) can't be released anyway, and
+         * writing it here would bypass the cache manager, which doesn't write
+         * a view while a file system has it pinned and is changing it (see
+         * CcRosEnterVacbWrite). The cache writes it (or this does, once the
+         * view is gone).
+         */
+        Entry = MmGetPageEntrySectionSegment(Segment, &SegmentOffset);
+        if (!(FlagOn(*Segment->Flags, MM_DATAFILE_SEGMENT) &&
+              !IS_SWAP_FROM_SSE(Entry) && (SHARE_COUNT_FROM_SSE(Entry) > 0)))
+        {
+            Released = MmCheckDirtySegment(Segment, &SegmentOffset, FALSE, TRUE);
+        }
 
         MmUnlockSectionSegment(Segment);
         MmDereferenceSegment(Segment);

@@ -250,6 +250,13 @@ CcpPinData(
         ++NewBcb->RefCount;
         KeReleaseSpinLock(&SharedCacheMap->BcbSpinLock, OldIrql);
 
+        /* Not while the view is being written (see CcRosEnterVacbWrite) */
+        if (!CcRosEnterVacbPin(NewBcb->Vacb, BooleanFlagOn(Flags, PIN_WAIT)))
+        {
+            CcpDereferenceBcb(SharedCacheMap, NewBcb);
+            return FALSE;
+        }
+
         if (BooleanFlagOn(Flags, PIN_EXCLUSIVE))
             Result = ExAcquireResourceExclusiveLite(&NewBcb->Lock, BooleanFlagOn(Flags, PIN_WAIT));
         else
@@ -257,6 +264,7 @@ CcpPinData(
 
         if (!Result)
         {
+            CcRosLeaveVacbPin(NewBcb->Vacb);
             CcpDereferenceBcb(SharedCacheMap, NewBcb);
             return FALSE;
         }
@@ -286,9 +294,17 @@ CcpPinData(
             return FALSE;
         }
 
+        /* Not while the view is being written (see CcRosEnterVacbWrite) */
+        if (!CcRosEnterVacbPin(Vacb, BooleanFlagOn(Flags, PIN_WAIT)))
+        {
+            CcRosReleaseVacb(SharedCacheMap, Vacb, FALSE, FALSE);
+            return FALSE;
+        }
+
         NewBcb = CcpGetAppropriateBcb(SharedCacheMap, Vacb, FileOffset, Length, Flags, TRUE);
         if (NewBcb == NULL)
         {
+            CcRosLeaveVacbPin(Vacb);
             CcRosReleaseVacb(SharedCacheMap, Vacb, FALSE, FALSE);
             return FALSE;
         }
@@ -606,6 +622,7 @@ CcUnpinDataForThread (
         ASSERT(iBcb->PinCount > 0);
         InterlockedDecrement(&iBcb->PinCount);
         ExReleaseResourceForThreadLite(&iBcb->Lock, ResourceThreadId);
+        CcRosLeaveVacbPin(iBcb->Vacb);
     }
 
     CcpDereferenceBcb(iBcb->Vacb->SharedCacheMap, iBcb);
@@ -672,6 +689,7 @@ CcUnpinRepinnedBcb (
         {
             InterlockedDecrement(&iBcb->PinCount);
             ExReleaseResourceLite(&iBcb->Lock);
+            CcRosLeaveVacbPin(iBcb->Vacb);
             ASSERT(iBcb->PinCount == 0);
         }
 

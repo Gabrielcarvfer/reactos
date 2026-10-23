@@ -162,10 +162,307 @@ CcRosTraceCacheMap (
 #endif
 }
 
-NTSTATUS
-CcRosFlushVacb (
+/*
+ * Writing a view while its data is pinned.
+ *
+ * A file system pins a range (CcPinRead, CcPreparePinWrite), marks it dirty
+ * (CcSetDirtyPinnedData), changes it and unpins it. The Windows cache manager
+ * does not write a pinned range in the meantime: its writes take the BCBs of
+ * the range exclusive. File systems depend on that: FastFAT, for one, marks a
+ * FAT sector in its own dirty list before changing it, writes only the listed
+ * sectors when the cache writes the FAT, and removes them from the list after
+ * the write. A write between the two lost the change for good: the sector
+ * left the list with its old contents on the disk, and when the page was
+ * later read again the FAT went back in time (the free cluster counts no
+ * longer matched the FAT, and clusters were handed out twice).
+ *
+ * Here a write of a view, for each page, first waits until no pin of the view
+ * is held (but its own), then closes the view's gate: new pins wait until the
+ * page is written. The lazy writer doesn't wait long for pins: it leaves pinned views
+ * for its next pass, as on Windows. All waits are bounded and complain when
+ * they time out, so an unknown lock order costs a delay, not a deadlock.
+ */
+
+/* How long a write waits for the pins of a view, and a pin for a write */
+#define CC_WRITE_WAITS_FOR_PINS_MS 1000
+/* (The lazy writer doesn't wait long: like on Windows, it leaves pinned data for later) */
+#define CC_LAZY_WRITE_WAITS_FOR_PINS_MS 50
+#define CC_PIN_WAITS_FOR_WRITE_MS 5000
+#define CC_WRITE_WAITS_FOR_WRITE_MS 5000
+
+/* The pins the current thread holds on a view (a write doesn't wait for them) */
+static
+ULONG
+CcRosPinsOfThisThread(
+    _In_ PROS_VACB Vacb)
+{
+    PROS_SHARED_CACHE_MAP SharedCacheMap = Vacb->SharedCacheMap;
+    PLIST_ENTRY Entry;
+    ULONG Count = 0;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&SharedCacheMap->BcbSpinLock, &OldIrql);
+    for (Entry = SharedCacheMap->BcbList.Flink;
+         Entry != &SharedCacheMap->BcbList;
+         Entry = Entry->Flink)
+    {
+        PINTERNAL_BCB Bcb = CONTAINING_RECORD(Entry, INTERNAL_BCB, BcbEntry);
+
+        if (Bcb->Vacb == Vacb && Bcb->Pinned && Bcb->PinCount > 0)
+            Count += ExIsResourceAcquiredSharedLite(&Bcb->Lock);
+    }
+    KeReleaseSpinLock(&SharedCacheMap->BcbSpinLock, OldIrql);
+
+    return Count;
+}
+
+static
+LONGLONG
+CcRosTimeLeft(
+    _In_ ULONGLONG Deadline)
+{
+    ULONGLONG Now = KeQueryInterruptTime();
+    return (Now >= Deadline) ? 0 : (LONGLONG)(Deadline - Now);
+}
+
+/*
+ * Like an exclusive acquisition of the view's BCBs with ExAcquireSharedStarveExclusive
+ * pins (as on Windows): while a write waits, new pins still go through, so a
+ * thread that holds pins (of this view or another one) never waits for a write
+ * that waits for pins; once there is no pin left the gate closes, and pins wait
+ * until the page is written. The gate is closed for one page at a time (Mm
+ * writes the pages of a view one by one). Writes of a view are serialized.
+ */
+
+/* Start writing a view. CC_WRITE_UNGATED: another write of the view took too
+ * long, write without the gate; CC_WRITE_BUSY (MayGiveUp): leave it for later */
+static
+LONG
+CcRosEnterVacbWrite(
     _In_ PROS_VACB Vacb,
+    _In_ BOOLEAN MayGiveUp)
+{
+    LARGE_INTEGER Timeout;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+
+    Timeout.QuadPart = -(LONGLONG)(MayGiveUp ? CC_LAZY_WRITE_WAITS_FOR_PINS_MS : CC_WRITE_WAITS_FOR_WRITE_MS) * 10000;
+    Status = KeWaitForSingleObject(&Vacb->WriterLock, Executive, KernelMode, FALSE, &Timeout);
+    if (Status == STATUS_TIMEOUT)
+    {
+        if (MayGiveUp)
+            return CC_WRITE_BUSY;
+        DPRINT1("CC: writing %p offset %I64x while it is being written\n",
+                Vacb->SharedCacheMap->FileObject, Vacb->FileOffset.QuadPart);
+        return CC_WRITE_UNGATED;
+    }
+
+    /* (They can't go away meanwhile: we hold them) */
+    Vacb->WriterOwnPins = (LONG)CcRosPinsOfThisThread(Vacb);
+    return CC_WRITE_GATED;
+}
+
+static
+VOID
+CcRosLeaveVacbWrite(
+    _In_ PROS_VACB Vacb,
+    _In_ LONG Entered)
+{
+    if (Entered == CC_WRITE_GATED)
+        KeSetEvent(&Vacb->WriterLock, IO_NO_INCREMENT, FALSE);
+}
+
+/* Wait until no pin is held (but the writer's own) and close the gate.
+ * FALSE (only if MayGiveUp): pins stayed, the gate is open */
+static
+BOOLEAN
+CcRosCloseVacbGate(
+    _In_ PROS_VACB Vacb,
+    _In_ BOOLEAN MayGiveUp)
+{
+    LARGE_INTEGER Timeout;
+    ULONGLONG Deadline;
+    LONG OwnPins = Vacb->WriterOwnPins;
+
+    InterlockedExchange(&Vacb->WriteState, CC_VACB_WRITE_WAITING);
+    Deadline = KeQueryInterruptTime() +
+               (MayGiveUp ? CC_LAZY_WRITE_WAITS_FOR_PINS_MS : CC_WRITE_WAITS_FOR_PINS_MS) * 10000ULL;
+    for (;;)
+    {
+        KeClearEvent(&Vacb->PinsGone);
+        if (Vacb->ActivePins <= OwnPins)
+        {
+            /* Close, then look again: a pin may have come meanwhile
+             * (it looks at the state after counting itself) */
+            KeClearEvent(&Vacb->WriteDone);
+            InterlockedExchange(&Vacb->WriteState, CC_VACB_WRITE_CLOSED);
+            if (Vacb->ActivePins <= OwnPins)
+                return TRUE;
+            InterlockedExchange(&Vacb->WriteState, CC_VACB_WRITE_WAITING);
+            KeSetEvent(&Vacb->WriteDone, IO_NO_INCREMENT, FALSE);
+            continue;
+        }
+
+        Timeout.QuadPart = -CcRosTimeLeft(Deadline);
+        if (Timeout.QuadPart == 0)
+        {
+            if (MayGiveUp)
+            {
+                /* Leave it for later */
+                InterlockedExchange(&Vacb->WriteState, CC_VACB_WRITE_OPEN);
+                KeSetEvent(&Vacb->WriteDone, IO_NO_INCREMENT, FALSE);
+                return FALSE;
+            }
+
+            DPRINT1("CC: writing %p offset %I64x while %ld pin(s) are held\n",
+                    Vacb->SharedCacheMap->FileObject, Vacb->FileOffset.QuadPart, Vacb->ActivePins);
+            KeClearEvent(&Vacb->WriteDone);
+            InterlockedExchange(&Vacb->WriteState, CC_VACB_WRITE_CLOSED);
+            return TRUE;
+        }
+        KeWaitForSingleObject(&Vacb->PinsGone, Executive, KernelMode, FALSE, &Timeout);
+    }
+}
+
+static
+VOID
+CcRosOpenVacbGate(
+    _In_ PROS_VACB Vacb)
+{
+    InterlockedExchange(&Vacb->WriteState, CC_VACB_WRITE_OPEN);
+    KeSetEvent(&Vacb->WriteDone, IO_NO_INCREMENT, FALSE);
+}
+
+/*
+ * Write the dirty pages of [Offset, Offset + Length) of a view (one view at
+ * most), see above. STATUS_LOCK_NOT_GRANTED (MayGiveUp): pinned, some pages
+ * left for later.
+ */
+static
+NTSTATUS
+CcRosWriteVacbRange(
+    _In_ PROS_VACB Vacb,
+    _In_ LONGLONG Offset,
+    _In_ ULONG Length,
+    _In_ BOOLEAN MayGiveUp,
     _Out_opt_ PIO_STATUS_BLOCK Iosb)
+{
+    PSECTION_OBJECT_POINTERS SectionObjectPointers = Vacb->SharedCacheMap->FileObject->SectionObjectPointer;
+    LONGLONG End = Offset + Length;
+    NTSTATUS Status = STATUS_SUCCESS;
+    LONG Entered;
+
+    ASSERT(Offset >= Vacb->FileOffset.QuadPart);
+    ASSERT(End <= Vacb->FileOffset.QuadPart + VACB_MAPPING_GRANULARITY);
+
+    if (Iosb)
+    {
+        Iosb->Status = STATUS_SUCCESS;
+        Iosb->Information = 0;
+    }
+
+    Entered = CcRosEnterVacbWrite(Vacb, MayGiveUp);
+    if (Entered == CC_WRITE_BUSY)
+    {
+        if (Iosb)
+            Iosb->Status = STATUS_LOCK_NOT_GRANTED;
+        return STATUS_LOCK_NOT_GRANTED;
+    }
+
+    Offset = PAGE_ROUND_DOWN_64(Offset);
+    while (Offset < End)
+    {
+        LARGE_INTEGER PageOffset;
+        IO_STATUS_BLOCK PageIosb;
+        BOOLEAN Closed = FALSE;
+
+        if (Entered == CC_WRITE_GATED)
+        {
+            if (!CcRosCloseVacbGate(Vacb, MayGiveUp))
+            {
+                Status = STATUS_LOCK_NOT_GRANTED;
+                break;
+            }
+            Closed = TRUE;
+        }
+
+        PageOffset.QuadPart = Offset;
+        Status = MmFlushSegment(SectionObjectPointers, &PageOffset, PAGE_SIZE, &PageIosb);
+
+        if (Closed)
+            CcRosOpenVacbGate(Vacb);
+
+        if (!NT_SUCCESS(Status))
+            break;
+
+        if (Iosb)
+            Iosb->Information += PageIosb.Information;
+        Offset += PAGE_SIZE;
+    }
+
+    CcRosLeaveVacbWrite(Vacb, Entered);
+
+    if (Iosb)
+        Iosb->Status = Status;
+    return Status;
+}
+
+/* Called before a pin takes the lock of its BCB. FALSE: the view is being
+ * written and the caller can't wait */
+BOOLEAN
+CcRosEnterVacbPin(
+    _In_ PROS_VACB Vacb,
+    _In_ BOOLEAN Wait)
+{
+    LARGE_INTEGER Timeout;
+    ULONGLONG Deadline = 0;
+
+    for (;;)
+    {
+        InterlockedIncrement(&Vacb->ActivePins);
+        /* (Interlocked: counted before this read, see CcRosEnterVacbWrite) */
+        if (*(volatile LONG *)&Vacb->WriteState != CC_VACB_WRITE_CLOSED)
+            return TRUE;
+        CcRosLeaveVacbPin(Vacb);
+
+        if (!Wait)
+            return FALSE;
+
+        if (Deadline == 0)
+            Deadline = KeQueryInterruptTime() + CC_PIN_WAITS_FOR_WRITE_MS * 10000ULL;
+        Timeout.QuadPart = -CcRosTimeLeft(Deadline);
+        if (Timeout.QuadPart == 0)
+        {
+            DPRINT1("CC: pinning %p offset %I64x while it is being written\n",
+                    Vacb->SharedCacheMap->FileObject, Vacb->FileOffset.QuadPart);
+            InterlockedIncrement(&Vacb->ActivePins);
+            return TRUE;
+        }
+        KeWaitForSingleObject(&Vacb->WriteDone, Executive, KernelMode, FALSE, &Timeout);
+    }
+}
+
+/* Called after a pin released the lock of its BCB */
+VOID
+CcRosLeaveVacbPin(
+    _In_ PROS_VACB Vacb)
+{
+    ASSERT(Vacb->ActivePins > 0);
+    InterlockedDecrement(&Vacb->ActivePins);
+    if (*(volatile LONG *)&Vacb->WriteState != CC_VACB_WRITE_OPEN)
+    {
+        KeSetEvent(&Vacb->PinsGone, IO_NO_INCREMENT, FALSE);
+    }
+}
+
+/* MayGiveUp: the lazy writer, which leaves pinned data for later (STATUS_LOCK_NOT_GRANTED) */
+static
+NTSTATUS
+CcRosFlushVacbEx (
+    _In_ PROS_VACB Vacb,
+    _Out_opt_ PIO_STATUS_BLOCK Iosb,
+    _In_ BOOLEAN MayGiveUp)
 {
     NTSTATUS Status;
     BOOLEAN HaveLock = FALSE;
@@ -193,10 +490,13 @@ CcRosFlushVacb (
         HaveLock = TRUE;
     }
 
-    Status = MmFlushSegment(SharedCacheMap->FileObject->SectionObjectPointer,
-                            &Vacb->FileOffset,
-                            VACB_MAPPING_GRANULARITY,
-                            Iosb);
+    /* Don't write data that is being changed: wait for the pins
+     * (after the file system's lock, like the BCBs on Windows) */
+    Status = CcRosWriteVacbRange(Vacb,
+                                 Vacb->FileOffset.QuadPart,
+                                 VACB_MAPPING_GRANULARITY,
+                                 MayGiveUp,
+                                 Iosb);
 
     if (HaveLock)
     {
@@ -226,6 +526,14 @@ quit:
     }
 
     return Status;
+}
+
+NTSTATUS
+CcRosFlushVacb (
+    _In_ PROS_VACB Vacb,
+    _Out_opt_ PIO_STATUS_BLOCK Iosb)
+{
+    return CcRosFlushVacbEx(Vacb, Iosb, FALSE);
 }
 
 static
@@ -357,6 +665,7 @@ CcRosFlushDirtyPages (
     NTSTATUS Status;
     KIRQL OldIrql;
     BOOLEAN FlushAll = (Target == MAXULONG);
+    ULONG Skipped = 0;
 
     DPRINT("CcRosFlushDirtyPages(Target %lu)\n", Target);
 
@@ -371,7 +680,8 @@ CcRosFlushDirtyPages (
         DPRINT("No Dirty pages\n");
     }
 
-    while (((current_entry != &DirtyVacbListHead) && (Target > 0)) || FlushAll)
+    while ((((current_entry != &DirtyVacbListHead) && (Target > 0)) || FlushAll) &&
+           (Skipped < 16))
     {
         PROS_SHARED_CACHE_MAP SharedCacheMap;
         PROS_VACB current;
@@ -440,7 +750,14 @@ CcRosFlushDirtyPages (
         }
 
         IO_STATUS_BLOCK Iosb;
-        Status = CcRosFlushVacb(current, &Iosb);
+        Status = CcRosFlushVacbEx(current, &Iosb, !FlushAll);
+        if (Status == STATUS_LOCK_NOT_GRANTED)
+        {
+            /* Pinned: left for later (it's at the end of the dirty list now) */
+            Skipped++;
+            Status = STATUS_SUCCESS;
+            Iosb.Information = 0;
+        }
 
         SharedCacheMap->Callbacks->ReleaseFromLazyWrite(SharedCacheMap->LazyWriteContext);
 
@@ -910,6 +1227,11 @@ CcRosCreateVacb (
     current->SharedCacheMap = SharedCacheMap;
     current->MappedCount = 0;
     current->ReferenceCount = 0;
+    current->ActivePins = 0;
+    current->WriteState = CC_VACB_WRITE_OPEN;
+    KeInitializeEvent(&current->WriteDone, NotificationEvent, TRUE);
+    KeInitializeEvent(&current->PinsGone, NotificationEvent, FALSE);
+    KeInitializeEvent(&current->WriterLock, SynchronizationEvent, TRUE);
     InitializeListHead(&current->CacheMapVacbListEntry);
     InitializeListHead(&current->DirtyVacbListEntry);
     InitializeListHead(&current->VacbLruListEntry);
@@ -1275,17 +1597,29 @@ CcFlushCache (
         {
             IO_STATUS_BLOCK MmIosb;
             LARGE_INTEGER MmOffset;
+            ULONG MmLength;
 
             MmOffset.QuadPart = FlushStart;
 
             if (FlushEnd - (FlushEnd % VACB_MAPPING_GRANULARITY) <= FlushStart)
             {
                 /* The whole range fits within a VACB chunk. */
-                Status = MmFlushSegment(SectionObjectPointers, &MmOffset, FlushEnd - FlushStart, &MmIosb);
+                MmLength = (ULONG)(FlushEnd - FlushStart);
             }
             else
             {
-                ULONG MmLength = VACB_MAPPING_GRANULARITY - (FlushStart % VACB_MAPPING_GRANULARITY);
+                MmLength = VACB_MAPPING_GRANULARITY - (FlushStart % VACB_MAPPING_GRANULARITY);
+            }
+
+            /* (The view may still be mapped, and pinned: see CcRosWriteVacbRange) */
+            vacb = CcRosLookupVacb(SharedCacheMap, FlushStart);
+            if (vacb != NULL)
+            {
+                Status = CcRosWriteVacbRange(vacb, FlushStart, MmLength, FALSE, &MmIosb);
+                CcRosReleaseVacb(SharedCacheMap, vacb, FALSE, FALSE);
+            }
+            else
+            {
                 Status = MmFlushSegment(SectionObjectPointers, &MmOffset, MmLength, &MmIosb);
             }
 
