@@ -47,6 +47,7 @@ extern void func_LockedReadWrite(void);
 extern void func_lstrcpynW(void);
 extern void func_lstrlen(void);
 extern void func_MailslotRead(void);
+extern void func_ManyCachedFiles(void);
 extern void func_MultiByteToWideChar(void);
 extern void func_NestedJobs(void);
 extern void func_NewApis(void);
@@ -129,6 +130,7 @@ const struct test winetest_testlist[] =
     { "lstrcpynW",                   func_lstrcpynW },
     { "lstrlen",                     func_lstrlen },
     { "MailslotRead",                func_MailslotRead },
+    { "ManyCachedFiles",              func_ManyCachedFiles },
     { "MultiByteToWideChar",         func_MultiByteToWideChar },
     { "NestedJobs",                  func_NestedJobs },
     { "NewApis",                     func_NewApis },

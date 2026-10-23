@@ -48,6 +48,7 @@ list(APPEND SOURCE
     lstrcpynW.c
     lstrlen.c
     Mailslot.c
+    ManyCachedFiles.c
     MultiByteToWideChar.c
     NestedJobs.c
     NewApis.c

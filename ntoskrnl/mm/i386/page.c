@@ -624,6 +624,74 @@ MmCreatePageFileMapping(PEPROCESS Process,
 }
 
 
+#if _MI_PAGING_LEVELS == 4
+/*
+ * The ReactOS Mm maps kernel views (the cache manager's VACBs) in kernel memory
+ * areas, which it places in the gap after KUSER_SHARED_DATA
+ * (0xFFFFF78000001000 and up). Nothing created the page directories of that
+ * range: the first GB has one (for KUSER_SHARED_DATA), and the first page
+ * mapped above it, once the cache had more than 1 GB of views, crashed with
+ * PAGE_FAULT_IN_NONPAGED_AREA on the PTE address. Create the missing page
+ * directory and page table here. (The PXE is shared by all the processes:
+ * it must already be valid.)
+ */
+static
+VOID
+MiMakeSystemPageTableValid(
+    _In_ PVOID Address)
+{
+    PMMPXE PointerPxe = MiAddressToPxe(Address);
+    PMMPPE PointerPpe = MiAddressToPpe(Address);
+    PMMPDE PointerPde = MiAddressToPde(Address);
+    PFN_NUMBER PageFrameIndex;
+    KIRQL OldIrql;
+
+    /* (The PDE can only be read once the PPE is valid) */
+    if (PointerPpe->u.Hard.Valid && PointerPde->u.Hard.Valid)
+        return;
+
+    if (!PointerPxe->u.Hard.Valid)
+    {
+        DPRINT1("No PXE for the kernel mapping at %p\n", Address);
+        KeBugCheckEx(MEMORY_MANAGEMENT, 0x6001, (ULONG_PTR)Address, 0, 0);
+    }
+
+    OldIrql = MiAcquirePfnLock();
+
+    if (!PointerPpe->u.Hard.Valid)
+    {
+        MMPPE TempPpe = ValidKernelPpe;
+
+        MI_SET_USAGE(MI_USAGE_PAGE_DIRECTORY);
+        MI_SET_PROCESS2("Kernel");
+        PageFrameIndex = MiRemoveZeroPage(MI_GET_NEXT_COLOR());
+        ASSERT(PageFrameIndex);
+        TempPpe.u.Hard.PageFrameNumber = PageFrameIndex;
+        MiInitializePfnForOtherProcess(PageFrameIndex,
+                                       (PMMPTE)PointerPpe,
+                                       PFN_FROM_PXE(PointerPxe));
+        MI_WRITE_VALID_PPE(PointerPpe, TempPpe);
+    }
+
+    if (!PointerPde->u.Hard.Valid)
+    {
+        MMPDE TempPde = ValidKernelPde;
+
+        MI_SET_USAGE(MI_USAGE_PAGE_TABLE);
+        MI_SET_PROCESS2("Kernel");
+        PageFrameIndex = MiRemoveZeroPage(MI_GET_NEXT_COLOR());
+        ASSERT(PageFrameIndex);
+        TempPde.u.Hard.PageFrameNumber = PageFrameIndex;
+        MiInitializePfnForOtherProcess(PageFrameIndex,
+                                       (PMMPTE)PointerPde,
+                                       PFN_FROM_PPE(PointerPpe));
+        MI_WRITE_VALID_PDE(PointerPde, TempPde);
+    }
+
+    MiReleasePfnLock(OldIrql);
+}
+#endif
+
 NTSTATUS
 NTAPI
 MmCreateVirtualMappingUnsafeEx(
@@ -664,6 +732,8 @@ MmCreateVirtualMappingUnsafeEx(
 #if _MI_PAGING_LEVELS == 2
         if (!MiSynchronizeSystemPde(MiAddressToPde(Address)))
             MiFillSystemPageDirectory(Address, PAGE_SIZE);
+#elif _MI_PAGING_LEVELS == 4
+        MiMakeSystemPageTableValid(Address);
 #endif
     }
     else
