@@ -6,6 +6,7 @@ extern void func_CloseThemeData(void);
 extern void func_DrawThemeParentBackground(void);
 extern void func_GetThemeParseErrorInfo(void);
 extern void func_NcPaintRegion(void);
+extern void func_PanningFeedback(void);
 extern void func_SetThemeAppProperties(void);
 extern void func_SetWindowTheme(void);
 
@@ -15,6 +16,7 @@ const struct test winetest_testlist[] =
     { "DrawThemeParentBackground", func_DrawThemeParentBackground },
     { "GetThemeParseErrorInfo", func_GetThemeParseErrorInfo },
     { "NcPaintRegion", func_NcPaintRegion },
+    { "PanningFeedback", func_PanningFeedback },
     { "SetWindowTheme", func_SetWindowTheme },
     { "SetThemeAppProperties", func_SetThemeAppProperties },
     { 0, 0 }

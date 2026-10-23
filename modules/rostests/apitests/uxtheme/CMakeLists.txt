@@ -4,6 +4,7 @@ list(APPEND SOURCE
     DrawThemeParentBackground.c
     GetThemeParseErrorInfo.c
     NcPaintRegion.c
+    PanningFeedback.c
     SetWindowTheme.c
     SetThemeAppProperties.c
     ../include/msgtrace.c

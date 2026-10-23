@@ -1589,3 +1589,59 @@ HRESULT WINAPI CheckThemeSignature(LPCWSTR pszThemeFileName)
     MSSTYLES_CloseThemeFile(pt);
     return S_OK;
 }
+
+/***********************************************************************
+ *      Panning feedback (Windows 7)
+ *
+ * When a touch pan reaches the end of the content, the window follows the
+ * finger past the edge and goes back when the pan ends. The window's
+ * position before the pan is kept in a window property.
+ */
+static const WCHAR szPanningOrigin[] = L"UxThemePanningOrigin";
+
+BOOL WINAPI BeginPanningFeedback(HWND hwnd)
+{
+    RECT rc;
+    HWND parent;
+
+    TRACE("(%p)\n", hwnd);
+
+    if (!IsWindow(hwnd) || !GetWindowRect(hwnd, &rc))
+        return FALSE;
+    if ((parent = GetAncestor(hwnd, GA_PARENT)) && (GetWindowLongW(hwnd, GWL_STYLE) & WS_CHILD))
+        MapWindowPoints(HWND_DESKTOP, parent, (POINT *)&rc, 1);
+    return SetPropW(hwnd, szPanningOrigin, (HANDLE)(ULONG_PTR)MAKELONG((SHORT)rc.left, (SHORT)rc.top));
+}
+
+static BOOL MoveToPanningOrigin(HWND hwnd, LONG dx, LONG dy)
+{
+    ULONG_PTR origin;
+
+    if (!GetPropW(hwnd, szPanningOrigin))
+        return FALSE;
+    origin = (ULONG_PTR)GetPropW(hwnd, szPanningOrigin);
+    return SetWindowPos(hwnd, NULL, (SHORT)LOWORD(origin) + dx, (SHORT)HIWORD(origin) + dy, 0, 0,
+                        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+BOOL WINAPI UpdatePanningFeedback(HWND hwnd, LONG lTotalOverpanOffsetX, LONG lTotalOverpanOffsetY, BOOL fInInertia)
+{
+    TRACE("(%p, %ld, %ld, %d)\n", hwnd, lTotalOverpanOffsetX, lTotalOverpanOffsetY, fInInertia);
+
+    if (!IsWindow(hwnd))
+        return FALSE;
+    return MoveToPanningOrigin(hwnd, lTotalOverpanOffsetX, lTotalOverpanOffsetY);
+}
+
+BOOL WINAPI EndPanningFeedback(HWND hwnd, BOOL fAnimateBack)
+{
+    BOOL ret;
+
+    TRACE("(%p, %d)\n", hwnd, fAnimateBack);
+
+    if (!IsWindow(hwnd))
+        return FALSE;
+    ret = MoveToPanningOrigin(hwnd, 0, 0);
+    RemovePropW(hwnd, szPanningOrigin);
+    return ret;
+}

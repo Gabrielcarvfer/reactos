@@ -126,3 +126,6 @@
 126 stdcall ThemeInitApiHook(long ptr)
 
 @ stdcall OpenThemeDataForDpi(ptr wstr long) ;win7
+@ stdcall BeginPanningFeedback(ptr) ;win7
+@ stdcall UpdatePanningFeedback(ptr long long long) ;win7
+@ stdcall EndPanningFeedback(ptr long) ;win7
