@@ -1084,6 +1084,13 @@ NTSTATUS WINAPI Wow64SystemServiceEx( UINT num, UINT *args )
         TRACE( "  rect %ld,%ld-%ld,%ld\n", rc[0], rc[1], rc[2], rc[3] );
     }
 #endif
+#ifdef __REACTOS__
+    /* win32k sets the last error in the (64-bit) TEB: give the 32-bit code
+       what win32k set (and nothing else: 32-bit callbacks during the call
+       may have set it too) */
+    ULONG last_error = get_teb32()->LastErrorValue;
+    if ((num >> 12) == 1) NtCurrentTeb()->LastErrorValue = last_error;
+#endif
     __TRY
     {
         syscall_thunk thunk = (syscall_thunk)table->ServiceTable[id];
@@ -1095,6 +1102,8 @@ NTSTATUS WINAPI Wow64SystemServiceEx( UINT num, UINT *args )
     }
     __ENDTRY
 #ifdef __REACTOS__
+    if ((num >> 12) == 1 && NtCurrentTeb()->LastErrorValue != last_error)
+        get_teb32()->LastErrorValue = NtCurrentTeb()->LastErrorValue;
     TRACE( "%04x %s -> %08lx\n", num, name, status );
     if (TRACE_ON(wow) && (!strcmp( name, "NtUserGetMessage" ) || !strcmp( name, "NtUserPeekMessage" )) && status)
     {
