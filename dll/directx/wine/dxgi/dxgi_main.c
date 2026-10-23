@@ -243,6 +243,23 @@ HRESULT WINAPI DXGID3D10RegisterLayers(const struct dxgi_device_layer *layers, U
     return S_OK;
 }
 
+#ifdef __REACTOS__
+/* Windows 10 1903: the program handles adapter removal itself (Paint.NET 5
+ * calls it at startup). Nothing to change here: always succeed. */
+HRESULT WINAPI DXGIDeclareAdapterRemovalSupport(void)
+{
+    TRACE("\n");
+    return S_OK;
+}
+
+/* Windows 11: no virtual vblanks for this process. There are none here. */
+HRESULT WINAPI DXGIDisableVBlankVirtualization(void)
+{
+    TRACE("\n");
+    return S_OK;
+}
+#endif
+
 HRESULT WINAPI DXGIGetDebugInterface1(UINT flags, REFIID iid, void **debug)
 {
     TRACE("flags %#x, iid %s, debug %p.\n", flags, debugstr_guid(iid), debug);
