@@ -188,6 +188,9 @@ int acpi_pci_bind_root (struct acpi_device *device, struct acpi_pci_id *id, stru
 
 #endif /*CONFIG_ACPI_PCI*/
 
+/* Spread the PCI interrupt links over their possible IRQs (pci_irq.c) */
+VOID acpi_pci_balance_links (VOID);
+
 
 /* --------------------------------------------------------------------------
                                   Power Resource

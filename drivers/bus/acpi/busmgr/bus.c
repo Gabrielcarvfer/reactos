@@ -1765,6 +1765,10 @@ acpi_init (void)
 
 	result = acpi_bus_init();
 
+	/* Before the PCI driver reads the devices' interrupt lines */
+	if (!result)
+		acpi_pci_balance_links();
+
 	//if (!result) {
 		//pci_mmcfg_late_init();
 		//if (!(pm_flags & PM_APM))
