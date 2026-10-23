@@ -488,6 +488,12 @@ ExDestroyHandleTable(
     IN PVOID DestroyHandleProcedure OPTIONAL
 );
 
+VOID
+NTAPI
+ExRemoveHandleTable(
+    IN PHANDLE_TABLE HandleTable
+);
+
 BOOLEAN
 NTAPI
 ExDestroyHandle(

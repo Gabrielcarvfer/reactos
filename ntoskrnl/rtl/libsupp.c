@@ -556,7 +556,12 @@ BOOLEAN
 RtlpCreateAtomHandleTable(PRTL_ATOM_TABLE AtomTable)
 {
    AtomTable->ExHandleTable = ExCreateHandleTable(NULL);
-   return (AtomTable->ExHandleTable != NULL);
+   if (!AtomTable->ExHandleTable)
+      return FALSE;
+
+   /* Its entries are atoms, not object handles: keep it out of the handle lists */
+   ExRemoveHandleTable(AtomTable->ExHandleTable);
+   return TRUE;
 }
 
 BOOLEAN

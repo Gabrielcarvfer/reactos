@@ -459,6 +459,11 @@ PspInitPhase0(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     PspCidTable = ExCreateHandleTable(NULL);
     if (!PspCidTable) return FALSE;
 
+    /* Its entries are processes and threads, not object handles: keep it out
+     * of the handle lists (NtQuerySystemInformation's SystemHandleInformation
+     * read its entries as object headers) */
+    ExRemoveHandleTable(PspCidTable);
+
     /* FIXME: Initialize LDT/VDM support */
 
     /* Setup the reaper */

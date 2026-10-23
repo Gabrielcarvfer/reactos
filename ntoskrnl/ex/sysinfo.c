@@ -1417,12 +1417,8 @@ QSI_DEF(SystemHandleInformation)
 
                         HandleInformation->Handles[Index].CreatorBackTraceIndex = 0;
 
-#if 0 /* FIXME!!! Type field corrupted */
                         HandleInformation->Handles[Index].ObjectTypeIndex =
                             (UCHAR) ObjectHeader->Type->Index;
-#else
-                        HandleInformation->Handles[Index].ObjectTypeIndex = 0;
-#endif
 
                         HandleInformation->Handles[Index].HandleAttributes =
                             HandleTableEntry->ObAttributes & OBJ_HANDLE_ATTRIBUTES;
@@ -1444,7 +1440,8 @@ QSI_DEF(SystemHandleInformation)
             }
 
             /* Go to the next entry */
-            Handle.Value += sizeof(HANDLE);
+            /* (Next handle: handle values go up by 4, also on 64-bit) */
+            Handle.Index++;
         }
     }
 
@@ -2664,12 +2661,8 @@ QSI_DEF(SystemExtendedHandleInformation)
 
                         HandleInformation->Handles[Index].CreatorBackTraceIndex = 0;
 
-#if 0 /* FIXME!!! Type field corrupted */
                         HandleInformation->Handles[Index].ObjectTypeIndex =
                             (UCHAR) ObjectHeader->Type->Index;
-#else
-                        HandleInformation->Handles[Index].ObjectTypeIndex = 0;
-#endif
 
                         HandleInformation->Handles[Index].HandleAttributes =
                             HandleTableEntry->ObAttributes & OBJ_HANDLE_ATTRIBUTES;
@@ -2693,7 +2686,8 @@ QSI_DEF(SystemExtendedHandleInformation)
             }
 
             /* Go to the next entry */
-            Handle.Value += sizeof(HANDLE);
+            /* (Next handle: handle values go up by 4, also on 64-bit) */
+            Handle.Index++;
         }
     }
 
