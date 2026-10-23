@@ -466,10 +466,12 @@ NtMapViewOfSectionEx(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    /* The size of the range to look for: the view, or the section from the offset */
+    /* The size of the range to look for: the view, or the section from the offset.
+       (The handle may only allow mapping, e.g. FILE_MAP_READ without SECTION_QUERY
+       as Chromium and .NET pass them on: mapping checks the access) */
     if (!Size)
     {
-        Status = ObReferenceObjectByHandle(SectionHandle, SECTION_QUERY, MmSectionObjectType,
+        Status = ObReferenceObjectByHandle(SectionHandle, 0, MmSectionObjectType,
                                            PreviousMode, (PVOID*)&Section, NULL);
         if (!NT_SUCCESS(Status))
             return Status;

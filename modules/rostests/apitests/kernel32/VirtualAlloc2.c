@@ -2,7 +2,7 @@
  * PROJECT:     ReactOS api tests
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:     KernelBase.dll by name and path, VirtualAlloc2 and MapViewOfFile3 with
- *              MEM_ADDRESS_REQUIREMENTS
+ *              MEM_ADDRESS_REQUIREMENTS (also with a section handle that may only map)
  *
  * Cygwin/MSYS2 (Git for Windows' bash.exe) load KernelBase.dll by name and
  * place thread stacks and mmap regions with these when Windows reports build
@@ -57,7 +57,8 @@ START_TEST(VirtualAlloc2)
     PMAPVIEWOFFILE3 pMapViewOfFile3;
     PVOID First, Second, Bottom, View;
     HMODULE KernelBase;
-    HANDLE Mapping;
+    HANDLE Mapping, MapOnly;
+    MEMORY_BASIC_INFORMATION Info = { 0 };
 
     KernelBase = LoadLibraryW(L"KernelBase.dll");
     ok(KernelBase != NULL, "KernelBase.dll not loaded: %lu\n", GetLastError());
@@ -97,6 +98,28 @@ START_TEST(VirtualAlloc2)
     {
         ((volatile UCHAR *)View)[0x2ffff] = 1;
         UnmapViewOfFile(View);
+    }
+
+    /* A handle that may only map (no SECTION_QUERY), the size from the section.
+       (Windows takes no alignment for views) */
+    Requirements.Alignment = 0;
+    if (Mapping && DuplicateHandle(GetCurrentProcess(), Mapping, GetCurrentProcess(), &MapOnly,
+                                   FILE_MAP_READ | FILE_MAP_WRITE, FALSE, 0))
+    {
+        View = pMapViewOfFile3(MapOnly, GetCurrentProcess(), NULL, 0, 0, 0, PAGE_READWRITE, &Parameter, 1);
+        ok(View != NULL && (ULONG_PTR)View >= Low && (ULONG_PTR)View + 0x30000 - 1 <= High,
+           "MapViewOfFile3 with a map-only handle: %p (%lu)\n", View, GetLastError());
+        if (View)
+        {
+            ok(VirtualQuery(View, &Info, sizeof(Info)) && Info.RegionSize == 0x30000,
+               "view size 0x%Ix\n", Info.RegionSize);
+            UnmapViewOfFile(View);
+        }
+        /* Mapping still needs the access */
+        View = pMapViewOfFile3(MapOnly, GetCurrentProcess(), NULL, 0, 0, 0, PAGE_EXECUTE_READWRITE, &Parameter, 1);
+        ok(View == NULL && GetLastError() == ERROR_ACCESS_DENIED, "executable view of a map-only handle: %p (%lu)\n",
+           View, GetLastError());
+        CloseHandle(MapOnly);
     }
     CloseHandle(Mapping);
 
