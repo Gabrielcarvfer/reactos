@@ -26,6 +26,7 @@ extern void func_RegWow64Views(void);
 extern void func_RestrictedToken(void);
 extern void func_RtlEncryptMemory(void);
 extern void func_SaferIdentifyLevel(void);
+extern void func_SetEntriesInAcl(void);
 extern void func_ServiceArgs(void);
 extern void func_ServiceEnv(void);
 extern void func_ServiceNetwork(void);
@@ -56,6 +57,7 @@ const struct test winetest_testlist[] =
     { "RestrictedToken", func_RestrictedToken },
     { "RtlEncryptMemory", func_RtlEncryptMemory },
     { "SaferIdentifyLevel", func_SaferIdentifyLevel },
+    { "SetEntriesInAcl", func_SetEntriesInAcl },
     { "ServiceArgs", func_ServiceArgs },
     { "ServiceEnv", func_ServiceEnv },
     { "ServiceNetwork", func_ServiceNetwork },

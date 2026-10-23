@@ -24,6 +24,7 @@ list(APPEND SOURCE
     RestrictedToken.c
     RtlEncryptMemory.c
     SaferIdentifyLevel.c
+    SetEntriesInAcl.c
     ServiceArgs.c
     ServiceEnv.c
     ServiceNetwork.c

@@ -1380,16 +1380,28 @@ AccRewriteSetEntriesInAcl(ULONG cCountOfExplicitEntries,
                           PACL OldAcl,
                           PACL* NewAcl)
 {
+    /*
+     * The new ACL, as on Windows: the new deny entries, the existing explicit
+     * deny ACEs, the new allow entries, the other existing explicit ACEs,
+     * then the existing inherited ACEs. GRANT_ACCESS (and DENY_ACCESS) merge
+     * the rights into the trustee's existing allow (deny) ACE with the same
+     * inheritance, in place, when there is one; SET_ACCESS replaces all of the
+     * trustee's allow and deny ACEs; REVOKE_ACCESS removes its allow ACEs.
+     * (The existing ACEs used to be dropped altogether: AnyDesk, which adds
+     * the rights of its processes one at a time, ended up with only the last.)
+     */
     PACL pNew = NULL;
     ACL_SIZE_INFORMATION SizeInformation;
     PACE_HEADER pAce;
-    BOOLEAN KeepAceBuf[8];
     BOOLEAN *pKeepAce = NULL;
-    GUID ObjectTypeGuid, InheritedObjectTypeGuid;
-    DWORD ObjectsPresent;
-    BOOL needToClean;
-    PSID pSid1, pSid2;
-    ULONG i, j;
+    ACCESS_MASK *pAddMask = NULL;
+    BOOLEAN *pMerged = NULL;
+    PSID *pSids = NULL;
+    BOOL *pAllocated = NULL;
+    ACCESS_MASK *pMasks = NULL;
+    DWORD ObjectsPresent, AclSize, AclRevision = ACL_REVISION;
+    UCHAR Flags;
+    ULONG i, j, Pass;
     LSA_HANDLE PolicyHandle = NULL;
     BOOL bRet;
     DWORD LastErr;
@@ -1401,6 +1413,7 @@ AccRewriteSetEntriesInAcl(ULONG cCountOfExplicitEntries,
     *NewAcl = NULL;
 
     /* Get information about previous ACL */
+    ZeroMemory(&SizeInformation, sizeof(ACL_SIZE_INFORMATION));
     if (OldAcl)
     {
         if (!GetAclInformation(OldAcl, &SizeInformation, sizeof(ACL_SIZE_INFORMATION), AclSizeInformation))
@@ -1408,70 +1421,98 @@ AccRewriteSetEntriesInAcl(ULONG cCountOfExplicitEntries,
             Ret = GetLastError();
             goto Cleanup;
         }
-
-        if (SizeInformation.AceCount > sizeof(KeepAceBuf) / sizeof(KeepAceBuf[0]))
-        {
-            pKeepAce = (BOOLEAN *)LocalAlloc(LMEM_FIXED, SizeInformation.AceCount * sizeof(*pKeepAce));
-            if (!pKeepAce)
-            {
-                Ret = ERROR_NOT_ENOUGH_MEMORY;
-                goto Cleanup;
-            }
-        }
-        else
-            pKeepAce = KeepAceBuf;
-
-        memset(pKeepAce, TRUE, SizeInformation.AceCount * sizeof(*pKeepAce));
+        if (OldAcl->AclRevision > AclRevision)
+            AclRevision = OldAcl->AclRevision;
     }
-    else
+
+    pKeepAce = (BOOLEAN *)LocalAlloc(LMEM_FIXED, (SizeInformation.AceCount + 1) * sizeof(*pKeepAce));
+    pSids = (PSID *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, (cCountOfExplicitEntries + 1) * sizeof(*pSids));
+    pAllocated = (BOOL *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, (cCountOfExplicitEntries + 1) * sizeof(*pAllocated));
+    pMasks = (ACCESS_MASK *)LocalAlloc(LMEM_FIXED, (cCountOfExplicitEntries + 1) * sizeof(*pMasks));
+    pAddMask = (ACCESS_MASK *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, (SizeInformation.AceCount + 1) * sizeof(*pAddMask));
+    pMerged = (BOOLEAN *)LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, (cCountOfExplicitEntries + 1) * sizeof(*pMerged));
+    if (!pKeepAce || !pSids || !pAllocated || !pMasks || !pAddMask || !pMerged)
     {
-        ZeroMemory(&SizeInformation, sizeof(ACL_SIZE_INFORMATION));
-        SizeInformation.AclBytesInUse = sizeof(ACL);
+        Ret = ERROR_NOT_ENOUGH_MEMORY;
+        goto Cleanup;
     }
+    memset(pKeepAce, TRUE, SizeInformation.AceCount * sizeof(*pKeepAce));
 
-    /* Get size required for new entries */
+    /* Resolve the trustees, and see which existing ACEs they replace */
     for (i = 0; i < cCountOfExplicitEntries; i++)
     {
+        ACCESS_MODE Mode = pListOfExplicitEntries[i].grfAccessMode;
+
         Ret = AccpGetTrusteeSid(&pListOfExplicitEntries[i].Trustee,
                                 &PolicyHandle,
-                                &pSid1,
-                                &needToClean);
+                                &pSids[i],
+                                &pAllocated[i]);
         if (Ret != ERROR_SUCCESS)
             goto Cleanup;
 
-        ObjectsPresent = AccpGetTrusteeObjects(&pListOfExplicitEntries[i].Trustee,
-                                               NULL,
-                                               NULL);
+        pMasks[i] = pListOfExplicitEntries[i].grfAccessPermissions;
+        Flags = (UCHAR)(pListOfExplicitEntries[i].grfInheritance & VALID_INHERIT_FLAGS);
 
+        for (j = 0; j < SizeInformation.AceCount; j++)
+        {
+            if (!pKeepAce[j])
+                continue;
+            if (!GetAce(OldAcl, j, (PVOID*)&pAce))
+            {
+                Ret = GetLastError();
+                goto Cleanup;
+            }
+            if ((pAce->AceFlags & INHERITED_ACE) || AccpIsObjectAce(pAce) ||
+                !RtlEqualSid(pSids[i], AccpGetAceSid(pAce)))
+                continue;
+
+            switch (Mode)
+            {
+                case SET_ACCESS:
+                    if (pAce->AceType == ACCESS_ALLOWED_ACE_TYPE || pAce->AceType == ACCESS_DENIED_ACE_TYPE)
+                        pKeepAce[j] = FALSE;
+                    break;
+                case REVOKE_ACCESS:
+                    if (pAce->AceType == ACCESS_ALLOWED_ACE_TYPE)
+                        pKeepAce[j] = FALSE;
+                    break;
+                case GRANT_ACCESS:
+                case DENY_ACCESS:
+                    if (!pMerged[i] &&
+                        pAce->AceType == ((Mode == GRANT_ACCESS) ? ACCESS_ALLOWED_ACE_TYPE : ACCESS_DENIED_ACE_TYPE) &&
+                        (pAce->AceFlags & VALID_INHERIT_FLAGS) == Flags)
+                    {
+                        /* Add the rights to this ACE, in place */
+                        pAddMask[j] |= pMasks[i];
+                        pMerged[i] = TRUE;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    /* The size of the new ACL */
+    AclSize = sizeof(ACL);
+    for (j = 0; j < SizeInformation.AceCount; j++)
+    {
+        if (pKeepAce[j] && GetAce(OldAcl, j, (PVOID*)&pAce))
+            AclSize += pAce->AceSize;
+    }
+    for (i = 0; i < cCountOfExplicitEntries; i++)
+    {
         switch (pListOfExplicitEntries[i].grfAccessMode)
         {
-            case REVOKE_ACCESS:
             case SET_ACCESS:
-                /* Discard all accesses for the trustee... */
-                for (j = 0; j < SizeInformation.AceCount; j++)
-                {
-                    if (!pKeepAce[j])
-                        continue;
-                    if (!GetAce(OldAcl, j, (PVOID*)&pAce))
-                    {
-                        Ret = GetLastError();
-                        goto Cleanup;
-                    }
-
-                    pSid2 = AccpGetAceSid(pAce);
-                    if (RtlEqualSid(pSid1, pSid2))
-                    {
-                        pKeepAce[j] = FALSE;
-                        SizeInformation.AclBytesInUse -= pAce->AceSize;
-                    }
-                }
-                if (pListOfExplicitEntries[i].grfAccessMode == REVOKE_ACCESS)
-                    break;
-                /* ...and replace by the current access */
             case GRANT_ACCESS:
             case DENY_ACCESS:
-                /* Add to ACL */
-                SizeInformation.AclBytesInUse += AccpCalcNeededAceSize(pSid1, ObjectsPresent);
+                if (pMerged[i])
+                    break;
+                ObjectsPresent = AccpGetTrusteeObjects(&pListOfExplicitEntries[i].Trustee, NULL, NULL);
+                AclSize += AccpCalcNeededAceSize(pSids[i], ObjectsPresent);
+                break;
+            case REVOKE_ACCESS:
                 break;
             case SET_AUDIT_SUCCESS:
             case SET_AUDIT_FAILURE:
@@ -1482,126 +1523,108 @@ AccRewriteSetEntriesInAcl(ULONG cCountOfExplicitEntries,
                 DPRINT1("Unknown access mode 0x%x. Ignoring it\n", pListOfExplicitEntries[i].grfAccessMode);
                 break;
         }
-
-        if (needToClean)
-            LocalFree((HLOCAL)pSid1);
     }
 
-    /* Succeed, if no ACL needs to be allocated */
-    if (SizeInformation.AclBytesInUse == 0)
-        goto Cleanup;
-
     /* OK, now create the new ACL */
-    DPRINT("Allocating %u bytes for the new ACL\n", SizeInformation.AclBytesInUse);
-    pNew = (PACL)LocalAlloc(LMEM_FIXED, SizeInformation.AclBytesInUse);
+    DPRINT("Allocating %u bytes for the new ACL\n", AclSize);
+    pNew = (PACL)LocalAlloc(LMEM_FIXED, AclSize);
     if (!pNew)
     {
         Ret = ERROR_NOT_ENOUGH_MEMORY;
         goto Cleanup;
     }
-    if (!InitializeAcl(pNew, SizeInformation.AclBytesInUse, ACL_REVISION))
+    if (!InitializeAcl(pNew, AclSize, AclRevision))
     {
         Ret = GetLastError();
         goto Cleanup;
     }
 
-    /* Fill it */
-    /* 1a) New audit entries (SET_AUDIT_SUCCESS, SET_AUDIT_FAILURE) */
-    /* FIXME */
-
-    /* 1b) Existing audit entries */
-    /* FIXME */
-
-    /* 2a) New denied entries (DENY_ACCESS) */
-    for (i = 0; i < cCountOfExplicitEntries; i++)
+    /* Pass 0: new deny entries; 1: existing explicit deny ACEs; 2: new allow
+       entries; 3: the other existing explicit ACEs; 4: existing inherited ACEs */
+    for (Pass = 0; Pass < 5; Pass++)
     {
-        if (pListOfExplicitEntries[i].grfAccessMode == DENY_ACCESS)
+        if (Pass == 0 || Pass == 2)
         {
-            /* FIXME: take care of pListOfExplicitEntries[i].grfInheritance */
-            Ret = AccpGetTrusteeSid(&pListOfExplicitEntries[i].Trustee,
-                                    &PolicyHandle,
-                                    &pSid1,
-                                    &needToClean);
-            if (Ret != ERROR_SUCCESS)
-                goto Cleanup;
-
-            ObjectsPresent = AccpGetTrusteeObjects(&pListOfExplicitEntries[i].Trustee,
-                                                   &ObjectTypeGuid,
-                                                   &InheritedObjectTypeGuid);
-
-            if (ObjectsPresent == 0)
+            for (i = 0; i < cCountOfExplicitEntries; i++)
             {
-                /* FIXME: Call AddAccessDeniedAceEx instead! */
-                bRet = AddAccessDeniedAce(pNew, ACL_REVISION, pListOfExplicitEntries[i].grfAccessPermissions, pSid1);
+                ACCESS_MODE Mode = pListOfExplicitEntries[i].grfAccessMode;
+
+                if ((Pass == 0) ? (Mode != DENY_ACCESS) : (Mode != SET_ACCESS && Mode != GRANT_ACCESS))
+                    continue;
+                if (pMerged[i])
+                    continue;
+
+                ObjectsPresent = AccpGetTrusteeObjects(&pListOfExplicitEntries[i].Trustee, NULL, NULL);
+                if (ObjectsPresent != 0)
+                {
+                    /* FIXME: Call AddAccessAllowed/DeniedObjectAce */
+                    DPRINT1("Object ACEs not yet supported!\n");
+                    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+                    bRet = FALSE;
+                }
+                else
+                {
+                    Flags = (UCHAR)(pListOfExplicitEntries[i].grfInheritance & VALID_INHERIT_FLAGS);
+                    bRet = (Pass == 0) ? AddAccessDeniedAceEx(pNew, AclRevision, Flags, pMasks[i], pSids[i])
+                                       : AddAccessAllowedAceEx(pNew, AclRevision, Flags, pMasks[i], pSids[i]);
+                }
+                if (!bRet)
+                {
+                    Ret = GetLastError();
+                    goto Cleanup;
+                }
             }
-            else
+        }
+        else
+        {
+            for (j = 0; j < SizeInformation.AceCount; j++)
             {
-                /* FIXME: Call AddAccessDeniedObjectAce */
-                DPRINT1("Object ACEs not yet supported!\n");
-                SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-                bRet = FALSE;
-            }
+                BOOL Inherited, Deny;
 
-            if (needToClean) LocalFree((HLOCAL)pSid1);
-            if (!bRet)
-            {
-                Ret = GetLastError();
-                goto Cleanup;
+                if (!pKeepAce[j] || !GetAce(OldAcl, j, (PVOID*)&pAce))
+                    continue;
+                Inherited = !!(pAce->AceFlags & INHERITED_ACE);
+                Deny = (pAce->AceType == ACCESS_DENIED_ACE_TYPE ||
+                        pAce->AceType == ACCESS_DENIED_OBJECT_ACE_TYPE ||
+                        pAce->AceType == ACCESS_DENIED_CALLBACK_ACE_TYPE ||
+                        pAce->AceType == ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE);
+                if ((Pass == 1 && (Inherited || !Deny)) ||
+                    (Pass == 3 && (Inherited || Deny)) ||
+                    (Pass == 4 && !Inherited))
+                    continue;
+                if (!AddAce(pNew, AclRevision, MAXDWORD, pAce, pAce->AceSize))
+                {
+                    Ret = GetLastError();
+                    goto Cleanup;
+                }
+                if (pAddMask[j])
+                {
+                    /* The ACE just added: merge the granted (denied) rights */
+                    PACE_HEADER pAdded;
+                    if (GetAce(pNew, pNew->AceCount - 1, (PVOID*)&pAdded))
+                        *((PACCESS_MASK)(pAdded + 1)) |= pAddMask[j];
+                }
             }
         }
     }
-
-    /* 2b) Existing denied entries */
-    /* FIXME */
-
-    /* 3a) New allow entries (GRANT_ACCESS, SET_ACCESS) */
-    for (i = 0; i < cCountOfExplicitEntries; i++)
-    {
-        if (pListOfExplicitEntries[i].grfAccessMode == SET_ACCESS ||
-            pListOfExplicitEntries[i].grfAccessMode == GRANT_ACCESS)
-        {
-            /* FIXME: take care of pListOfExplicitEntries[i].grfInheritance */
-            Ret = AccpGetTrusteeSid(&pListOfExplicitEntries[i].Trustee,
-                                    &PolicyHandle,
-                                    &pSid1,
-                                    &needToClean);
-            if (Ret != ERROR_SUCCESS)
-                goto Cleanup;
-
-            ObjectsPresent = AccpGetTrusteeObjects(&pListOfExplicitEntries[i].Trustee,
-                                                   &ObjectTypeGuid,
-                                                   &InheritedObjectTypeGuid);
-
-            if (ObjectsPresent == 0)
-            {
-                /* FIXME: Call AddAccessAllowedAceEx instead! */
-                bRet = AddAccessAllowedAce(pNew, ACL_REVISION, pListOfExplicitEntries[i].grfAccessPermissions, pSid1);
-            }
-            else
-            {
-                /* FIXME: Call AddAccessAllowedObjectAce */
-                DPRINT1("Object ACEs not yet supported!\n");
-                SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-                bRet = FALSE;
-            }
-
-            if (needToClean) LocalFree((HLOCAL)pSid1);
-            if (!bRet)
-            {
-                Ret = GetLastError();
-                goto Cleanup;
-            }
-        }
-    }
-
-    /* 3b) Existing allow entries */
-    /* FIXME */
 
     *NewAcl = pNew;
 
 Cleanup:
-    if (pKeepAce && pKeepAce != KeepAceBuf)
-        LocalFree((HLOCAL)pKeepAce);
+    if (pSids && pAllocated)
+    {
+        for (i = 0; i < cCountOfExplicitEntries; i++)
+        {
+            if (pAllocated[i] && pSids[i])
+                LocalFree((HLOCAL)pSids[i]);
+        }
+    }
+    if (pSids) LocalFree((HLOCAL)pSids);
+    if (pAllocated) LocalFree((HLOCAL)pAllocated);
+    if (pMasks) LocalFree((HLOCAL)pMasks);
+    if (pKeepAce) LocalFree((HLOCAL)pKeepAce);
+    if (pAddMask) LocalFree((HLOCAL)pAddMask);
+    if (pMerged) LocalFree((HLOCAL)pMerged);
 
     if (pNew && Ret != ERROR_SUCCESS)
         LocalFree((HLOCAL)pNew);
