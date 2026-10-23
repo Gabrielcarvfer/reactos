@@ -41,6 +41,15 @@ HAL_AMLI_BAD_IO_ADDRESS_LIST HalAMLIBadIOAddressList[] =
 
 /* FUNCTIONS ******************************************************************/
 
+/* The address that AML code wrote to the configuration mechanism #1 port */
+static ULONG HalpAmliPciConfigAddress;
+
+/*
+ * AML code (through the ACPI driver) may not touch ports 0xCF8-0xCFF itself:
+ * emulate configuration mechanism #1 with the HAL's PCI access functions.
+ * An access outside these ports is not ours: STATUS_UNSUCCESSFUL, as on
+ * Windows (kmtest HalSystemInfo).
+ */
 NTSTATUS
 NTAPI
 HaliHandlePCIConfigSpaceAccess(_In_ BOOLEAN IsRead,
@@ -48,9 +57,51 @@ HaliHandlePCIConfigSpaceAccess(_In_ BOOLEAN IsRead,
                                _In_ ULONG Length,
                                _Inout_ PULONG Buffer)
 {
-    DPRINT1("HaliHandlePCIConfigSpaceAccess: IsRead %X, Port 0x%X, Length %u, Buffer %p\n", IsRead, Port, Length, Buffer);
-    //ASSERT(FALSE);
-    return STATUS_NOT_IMPLEMENTED;
+    PCI_SLOT_NUMBER Slot;
+    ULONG Address, BusNumber, Offset;
+
+    if ((Port < 0xCF8) || (Port > 0xCFF) || (Length == 0) || (Length > 4) ||
+        (Port + Length > 0xD00))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    /* The address register */
+    if (Port < 0xCFC)
+    {
+        if ((Port != 0xCF8) || (Length != 4))
+            return STATUS_UNSUCCESSFUL;
+        if (IsRead)
+            *Buffer = HalpAmliPciConfigAddress;
+        else
+            HalpAmliPciConfigAddress = *Buffer;
+        return STATUS_SUCCESS;
+    }
+
+    /* The data register: read/write the selected configuration space */
+    Address = HalpAmliPciConfigAddress;
+    if (!(Address & 0x80000000))
+    {
+        if (IsRead) *Buffer = MAXULONG;
+        return STATUS_SUCCESS;
+    }
+    BusNumber = (Address >> 16) & 0xFF;
+    Slot.u.AsULONG = 0;
+    Slot.u.bits.DeviceNumber = (Address >> 11) & 0x1F;
+    Slot.u.bits.FunctionNumber = (Address >> 8) & 0x7;
+    Offset = (Address & 0xFC) + (Port - 0xCFC);
+    if (IsRead)
+    {
+        *Buffer = 0;
+        HalGetBusDataByOffset(PCIConfiguration, BusNumber, Slot.u.AsULONG,
+                              Buffer, Offset, Length);
+    }
+    else
+    {
+        HalSetBusDataByOffset(PCIConfiguration, BusNumber, Slot.u.AsULONG,
+                              Buffer, Offset, Length);
+    }
+    return STATUS_SUCCESS;
 }
 
 static
