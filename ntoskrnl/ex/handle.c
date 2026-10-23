@@ -989,9 +989,14 @@ ExRemoveHandleTable(IN PHANDLE_TABLE HandleTable)
     KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&HandleTableListLock);
 
-    /* Remove the table and reset the list */
-    RemoveEntryList(&HandleTable->HandleTableList);
-    InitializeListHead(&HandleTable->HandleTableList);
+    /* Remove the table and reset the list. It may be out already: tables
+     * that hold no object handles (CID, atoms) leave it when created, and
+     * removing an entry that is linked to itself fails the list checks */
+    if (!IsListEmpty(&HandleTable->HandleTableList))
+    {
+        RemoveEntryList(&HandleTable->HandleTableList);
+        InitializeListHead(&HandleTable->HandleTableList);
+    }
 
     /* Release the lock */
     ExReleasePushLockExclusive(&HandleTableListLock);
