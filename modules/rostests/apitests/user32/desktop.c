@@ -453,6 +453,61 @@ static void Test_CreateCloseMany(void)
     ok(Created == 60, "Created %lu desktops\n", Created);
 }
 
+/* A process started on a desktop of its own keeps the last reference to it
+ * when its creator closes its handle: the desktop is then deleted when the
+ * process ends, by its last thread, after that thread's USER cleanup (no
+ * THREADINFO any more). That used to assert in win32k (UserRefObjectCo) and
+ * then crash. */
+static void do_LastThread_child(void)
+{
+    HWND hwnd;
+
+    hwnd = CreateWindowExW(0, L"BUTTON", L"LastThread", WS_POPUP, 0, 0, 10, 10, NULL, NULL, NULL, NULL);
+    ok(hwnd != NULL, "CreateWindowExW failed with %lu\n", GetLastError());
+    /* (exit without destroying the window) */
+}
+
+static void Test_LastThreadDeletesDesktop(char *argv0)
+{
+    STARTUPINFOA startup;
+    PROCESS_INFORMATION pi;
+    char path[MAX_PATH + 32], desk[64];
+    WCHAR Name[64];
+    HDESK hdesk;
+    DWORD ExitCode;
+    int i;
+
+    for (i = 0; i < 10; i++)
+    {
+        wsprintfW(Name, L"LastThreadTest%d", i);
+        hdesk = CreateDesktopW(Name, NULL, NULL, 0, DESKTOP_ALL_ACCESS, NULL);
+        ok(hdesk != NULL, "%d: CreateDesktopW failed with %lu\n", i, GetLastError());
+        if (!hdesk)
+            break;
+
+        sprintf(desk, "WinSta0\\LastThreadTest%d", i);
+        memset(&startup, 0, sizeof(startup));
+        startup.cb = sizeof(startup);
+        startup.lpDesktop = desk;
+        sprintf(path, "%s desktop lastthread", argv0);
+        if (!CreateProcessA(NULL, path, NULL, NULL, FALSE, 0, NULL, NULL, &startup, &pi))
+        {
+            ok(FALSE, "%d: CreateProcessA failed with %lu\n", i, GetLastError());
+            CloseDesktop(hdesk);
+            break;
+        }
+
+        /* (the child holds the last reference from now on) */
+        ok(CloseDesktop(hdesk), "%d: CloseDesktop failed with %lu\n", i, GetLastError());
+        ok(WaitForSingleObject(pi.hProcess, 30000) == WAIT_OBJECT_0, "%d: the child did not end\n", i);
+        ExitCode = 0xdeadbeef;
+        GetExitCodeProcess(pi.hProcess, &ExitCode);
+        ok(ExitCode == 0, "%d: the child ended with 0x%lx\n", i, ExitCode);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
+
 START_TEST(desktop)
 {
     char **test_argv;
@@ -465,6 +520,11 @@ START_TEST(desktop)
     if (argc >= 3)
     {
         unsigned int arg;
+        if (!strcmp(test_argv[2], "lastthread"))
+        {
+            do_LastThread_child();
+            return;
+        }
         /* Child process. */
         sscanf (test_argv[2], "%d", (unsigned int *) &arg);
         do_InitialDesktop_child( arg );
@@ -475,4 +535,5 @@ START_TEST(desktop)
     Test_OpenInputDesktop();
     Test_References();
     Test_CreateCloseMany();
+    Test_LastThreadDeletesDesktop(test_argv[0]);
 }

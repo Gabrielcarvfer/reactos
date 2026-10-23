@@ -193,6 +193,23 @@ IntDesktopObjectDelete(
     /* (lets another thread than the desktop thread destroy its windows) */
     pdesk->dwDTFlags |= DF_DESTROYED;
 
+    /* The last reference often goes away on a thread that has no THREADINFO
+     * (any more): the last thread of a process, after its own Win32 thread
+     * cleanup, dropping the process' startup desktop or closing its handles,
+     * or a system worker thread. Destroying a window needs one (co-references,
+     * callbacks, the owner check), and the desktop thread may not run window
+     * callbacks either. Then leave the two windows and the heap they live in
+     * alone, as before 954df3454a2: a leak instead of a crash at shutdown. */
+    if (PsGetCurrentThreadWin32Thread() == NULL &&
+        (pdesk->spwndMessage || (pdesk->pDeskInfo && pdesk->pDeskInfo->spwnd)))
+    {
+        RemoveEntryList(&pdesk->ListEntry);
+        if (!Entered)
+            UserLeave();
+        ObDereferenceObject(pdesk->rpwinstaParent);
+        return STATUS_SUCCESS;
+    }
+
     /* The desktop and message windows were made with IntCreateWindow, which
      * returns them with a reference of their own: give it back too, or
      * they (and the heap they are in) are never freed. The message window
