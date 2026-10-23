@@ -260,6 +260,15 @@ KiIdleSchedule(
     IN PKPRCB Prcb
 );
 
+#ifdef CONFIG_SMP
+ULONG
+FASTCALL
+KiFindLowerPriorityProcessor(
+    _In_ PKTHREAD Thread,
+    _In_ ULONG Exclude
+);
+#endif
+
 VOID
 FASTCALL
 KiProcessDeferredReadyList(

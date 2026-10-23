@@ -31,13 +31,131 @@ KAFFINITY KiIdleSMTSummary;
 
 /* FUNCTIONS *****************************************************************/
 
+#ifdef CONFIG_SMP
+/*
+ * Takes a ready thread that may run on Prcb's processor off another
+ * processor's ready lists: the highest priority one, from the first processor
+ * that has one. Both PRCB locks must be held. The thread lock is only tried
+ * (the usual order is thread lock, then PRCB lock): a thread whose lock is
+ * busy is having its priority or affinity changed, and is left alone.
+ */
+static
+PKTHREAD
+KiStealReadyThread(
+    _In_ PKPRCB Prcb,
+    _In_ PKPRCB Remote)
+{
+    ULONG Summary = Remote->ReadySummary;
+    ULONG Priority;
+    PLIST_ENTRY ListHead, ListEntry;
+    PKTHREAD Thread;
+
+    while (Summary)
+    {
+        BitScanReverse(&Priority, Summary);
+        Summary &= ~PRIORITY_MASK(Priority);
+
+        ListHead = &Remote->DispatcherReadyListHead[Priority];
+        for (ListEntry = ListHead->Flink; ListEntry != ListHead; ListEntry = ListEntry->Flink)
+        {
+            Thread = CONTAINING_RECORD(ListEntry, KTHREAD, WaitListEntry);
+            ASSERT(Thread->State == Ready);
+            ASSERT(Thread->NextProcessor == Remote->Number);
+
+            if (!(Thread->Affinity & Prcb->SetMember))
+                continue;
+
+            /* Try the thread lock */
+            if (InterlockedExchange((PLONG)&Thread->ThreadLock, 1) != 0)
+                continue;
+
+            /* Take it off the remote ready list */
+            if (RemoveEntryList(&Thread->WaitListEntry))
+            {
+                Remote->ReadySummary ^= PRIORITY_MASK(Priority);
+            }
+
+            /* It runs next on this processor */
+            Thread->NextProcessor = Prcb->Number;
+            Thread->State = Standby;
+            KiReleaseThreadLock(Thread);
+            return Thread;
+        }
+    }
+
+    return NULL;
+}
+#endif
+
+/*
+ * Called by an idle processor before it halts: if other processors have
+ * threads waiting on their ready lists that may run here, take one of them
+ * as this processor's next thread (instead of halting while they wait). A
+ * thread is queued on one processor's lists when it gets ready; without this
+ * it stays there even when another processor becomes idle.
+ * Returns the thread now in Prcb->NextThread, or NULL.
+ */
 PKTHREAD
 FASTCALL
 KiIdleSchedule(IN PKPRCB Prcb)
 {
-    /* FIXME: TODO */
-    ASSERTMSG("SMP: Not yet implemented\n", FALSE);
+#ifdef CONFIG_SMP
+    ULONG Index, Number;
+    PKPRCB Remote, First, Second;
+    PKTHREAD Thread = NULL;
+
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+
+    for (Index = 1; Index < (ULONG)KeNumberProcessors; Index++)
+    {
+        /* Start with the next processor, so that idle processors spread */
+        Number = (Prcb->Number + Index) % KeNumberProcessors;
+        Remote = KiProcessorBlock[Number];
+
+        /* (unlocked peek: most of the time there is nothing to take) */
+        if (!Remote || !Remote->ReadySummary)
+            continue;
+
+        /* Lock both PRCBs, the lower processor number first */
+        if (Prcb->Number < Remote->Number)
+        {
+            First = Prcb;
+            Second = Remote;
+        }
+        else
+        {
+            First = Remote;
+            Second = Prcb;
+        }
+        KiAcquirePrcbLock(First);
+        KiAcquirePrcbLock(Second);
+
+        /* Someone may have given us a thread meanwhile */
+        if (Prcb->NextThread)
+        {
+            KiReleasePrcbLock(Second);
+            KiReleasePrcbLock(First);
+            return Prcb->NextThread;
+        }
+
+        Thread = KiStealReadyThread(Prcb, Remote);
+        if (Thread)
+        {
+            Prcb->NextThread = Thread;
+            InterlockedAndSetMember(&KiIdleSummary, ~Prcb->SetMember);
+        }
+
+        KiReleasePrcbLock(Second);
+        KiReleasePrcbLock(First);
+        if (Thread)
+            break;
+    }
+
+    return Thread;
+#else
+    UNREFERENCED_PARAMETER(Prcb);
     return NULL;
+#endif
 }
 
 VOID
@@ -115,6 +233,54 @@ KiFindIdealProcessor(
     return Processor;
 }
 
+/*
+ * Looks for a processor in Thread's affinity, other than Exclude, that is
+ * idle or runs (or is about to run) a thread of a lower priority than
+ * Thread's. Returns the one with the lowest priority (the ideal processor
+ * on a tie), or MAXULONG if there is none. The reads are not locked: this is
+ * a hint, KiDeferredReadyThread checks again under the PRCB lock. (A thread
+ * stays referenced while it is a processor's current or next thread.)
+ */
+ULONG
+FASTCALL
+KiFindLowerPriorityProcessor(
+    _In_ PKTHREAD Thread,
+    _In_ ULONG Exclude)
+{
+    KAFFINITY Set = Thread->Affinity & KeActiveProcessors;
+    KPRIORITY Lowest = Thread->Priority, Priority;
+    ULONG Processor, Best = MAXULONG;
+    PKPRCB Prcb;
+    PKTHREAD Other;
+
+    while (Set)
+    {
+        BitScanForwardAffinity(&Processor, Set);
+        Set &= ~AFFINITY_MASK(Processor);
+        if (Processor == Exclude)
+            continue;
+
+        Prcb = KiProcessorBlock[Processor];
+        if (!Prcb)
+            continue;
+        Other = *(PKTHREAD volatile *)&Prcb->NextThread;
+        if (!Other)
+            Other = *(PKTHREAD volatile *)&Prcb->CurrentThread;
+        if (!Other)
+            continue;
+        Priority = (Other == Prcb->IdleThread) ? -1 : *(volatile SCHAR *)&Other->Priority;
+
+        if ((Priority < Lowest) ||
+            ((Priority == Lowest) && (Best != MAXULONG) && (Processor == Thread->IdealProcessor)))
+        {
+            Lowest = Priority;
+            Best = Processor;
+        }
+    }
+
+    return Best;
+}
+
 static
 ULONG
 KiSelectNextProcessor(
@@ -131,6 +297,14 @@ KiSelectNextProcessor(
     if (IdleSet != 0)
     {
         PreferredSet = IdleSet;
+    }
+    else
+    {
+        /* Otherwise one that runs a thread of a lower priority (e.g. the
+           zero page thread), so that this one preempts it */
+        Processor = KiFindLowerPriorityProcessor(Thread, MAXULONG);
+        if (Processor != MAXULONG)
+            return Processor;
     }
 
     /* Check if we can use the ideal processor */

@@ -1365,9 +1365,12 @@ KxQueueReadyThread(IN PKTHREAD Thread,
     ASSERT(Thread->State == Running);
     ASSERT(Thread->NextProcessor == Prcb->Number);
 
-    /* Check if this thread is allowed to run in this CPU */
+    /* Check if this thread is allowed to run in this CPU, and that no other
+       processor it may run on is idle or runs a thread of a lower priority:
+       the thread should run there now instead of waiting on our ready list */
 #ifdef CONFIG_SMP
-    if ((Thread->Affinity) & (Prcb->SetMember))
+    if (((Thread->Affinity) & (Prcb->SetMember)) &&
+        (KiFindLowerPriorityProcessor(Thread, Prcb->Number) == MAXULONG))
 #else
     if (TRUE)
 #endif
@@ -1403,13 +1406,21 @@ KxQueueReadyThread(IN PKTHREAD Thread,
     }
     else
     {
-        /* Otherwise, prepare this thread to be deferred */
+        /*
+         * Otherwise it goes to another processor. It is still being switched
+         * out here (SwapBusy): put it on this processor's deferred ready list,
+         * which is processed after the switch (the DPC interrupt below).
+         * Readying it at once could make it another processor's next thread
+         * while that processor's old thread becomes ours: both processors
+         * would wait for each other's SwapBusy forever.
+         */
         Thread->State = DeferredReady;
         Thread->DeferredProcessor = Prcb->Number;
+        PushEntryList(&Prcb->DeferredReadyListHead, &Thread->SwapListEntry);
 
-        /* Release the lock and defer scheduling */
+        /* Release the lock, and process the list after the switch */
         KiReleasePrcbLock(Prcb);
-        KiDeferredReadyThread(Thread);
+        HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
     }
 }
 

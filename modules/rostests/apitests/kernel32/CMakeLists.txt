@@ -35,6 +35,7 @@ list(APPEND SOURCE
     GetModuleFileName.c
     GetVolumeInformation.c
     HeapCreateExecute.c
+    IdleCpuPull.c
     InheritHandleList.c
     InitOnce.c
     interlck.c

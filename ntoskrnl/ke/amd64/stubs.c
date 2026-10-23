@@ -175,6 +175,23 @@ KiIdleLoop(VOID)
         }
         else
         {
+#ifdef CONFIG_SMP
+            /* Before halting, look for threads waiting on other processors'
+               ready lists that could run here */
+            _enable();
+            if (KiIdleSchedule(Prcb))
+                continue;
+            _disable();
+
+            /* Something may have come in while interrupts were on */
+            if ((Prcb->NextThread) ||
+                (Prcb->DpcData[0].DpcQueueDepth) ||
+                (Prcb->TimerRequest) ||
+                (Prcb->DeferredReadyListHead.Next))
+            {
+                continue;
+            }
+#endif
             /* Continue staying idle. Note the HAL returns with interrupts on */
             Prcb->PowerState.IdleFunction(&Prcb->PowerState);
         }
