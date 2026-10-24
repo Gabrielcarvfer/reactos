@@ -594,6 +594,39 @@ SHCreateItemInKnownFolder(
 }
 
 /***********************************************************************
+ *   SHGetKnownFolderItem [SHELL32.@]
+ *
+ * The shell item of a known folder (Windows 7). Open-Shell's start menu
+ * (inside explorer.exe) uses it; the stub left the item NULL and explorer
+ * crashed.
+ */
+EXTERN_C HRESULT WINAPI
+SHGetKnownFolderItem(
+    _In_ REFKNOWNFOLDERID rfid,
+    _In_ DWORD flags,
+    _In_opt_ HANDLE hToken,
+    _In_ REFIID riid,
+    _Out_ void **ppv)
+{
+    PIDLIST_ABSOLUTE pidl = NULL;
+    HRESULT hr;
+
+    TRACE("(%s,%lx,%p,%s,%p)\n", debugstr_guid(&rfid), flags, hToken, debugstr_guid(&riid), ppv);
+
+    if (!ppv)
+        return E_INVALIDARG;
+    *ppv = NULL;
+
+    hr = SHGetKnownFolderIDList(rfid, flags, hToken, &pidl);
+    if (FAILED(hr))
+        return hr;
+
+    hr = SHCreateItemFromIDList(pidl, riid, ppv);
+    ILFree(pidl);
+    return hr;
+}
+
+/***********************************************************************
  *   SHGetItemFromObject [SHELL32.@]
  */
 EXTERN_C HRESULT WINAPI

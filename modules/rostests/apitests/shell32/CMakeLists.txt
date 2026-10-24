@@ -40,6 +40,7 @@ list(APPEND SOURCE
     SHCreateFileExtractIconW.cpp
     SHEvaluateSystemCommandTemplate.cpp
     SHGetComputerDisplayNameW.cpp
+    SHGetKnownFolderItem.cpp
     SHGetStockIconInfo.cpp
     SHGetUnreadMailCountW.cpp
     SHIsBadInterfacePtr.cpp

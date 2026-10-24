@@ -57,6 +57,7 @@ extern void func_SHGetAttributesFromDataObject(void);
 extern void func_SHGetComputerDisplayNameW(void);
 extern void func_SHGetFileInfo(void);
 extern void func_SHGetNewLinkInfo(void);
+extern void func_SHGetKnownFolderItem(void);
 extern void func_SHGetStockIconInfo(void);
 extern void func_SHGetUnreadMailCountW(void);
 extern void func_SHGetUserDisplayName(void);
@@ -126,6 +127,7 @@ const struct test winetest_testlist[] =
     { "SHGetComputerDisplayNameW", func_SHGetComputerDisplayNameW },
     { "SHGetFileInfo", func_SHGetFileInfo },
     { "SHGetNewLinkInfo", func_SHGetNewLinkInfo },
+    { "SHGetKnownFolderItem", func_SHGetKnownFolderItem },
     { "SHGetStockIconInfo", func_SHGetStockIconInfo },
     { "SHGetUnreadMailCountW", func_SHGetUnreadMailCountW },
     { "SHGetUserDisplayName", func_SHGetUserDisplayName },
