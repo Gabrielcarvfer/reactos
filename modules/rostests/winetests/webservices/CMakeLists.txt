@@ -1,5 +1,5 @@
 
-add_definitions(-D__WINESRC__ -DWINETEST_USE_DBGSTR_LONGLONG)
+add_definitions(-DUSE_WINE_TODOS -D__WINESRC__ -DWINETEST_USE_DBGSTR_LONGLONG)
 list(APPEND SOURCE
     channel.c
     msg.c
