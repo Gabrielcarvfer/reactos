@@ -10,7 +10,6 @@ extern void func_eventlog_supp(void);
 extern void func_FileSecurity(void);
 extern void func_Hash(void);
 extern void func_HKEY_CLASSES_ROOT(void);
-extern void func_InitiateShutdown(void);
 extern void func_IsTextUnicode(void);
 extern void func_LockServiceDatabase(void);
 extern void func_QueryServiceConfig2(void);
@@ -27,6 +26,7 @@ extern void func_RegWow64Views(void);
 extern void func_RestrictedToken(void);
 extern void func_RtlEncryptMemory(void);
 extern void func_SaferIdentifyLevel(void);
+extern void func_SddlAliases(void);
 extern void func_SetEntriesInAcl(void);
 extern void func_ServiceArgs(void);
 extern void func_ServiceEnv(void);
@@ -43,7 +43,6 @@ const struct test winetest_testlist[] =
     { "FileSecurity", func_FileSecurity },
     { "Hash", func_Hash },
     { "HKEY_CLASSES_ROOT", func_HKEY_CLASSES_ROOT },
-    { "InitiateShutdown", func_InitiateShutdown },
     { "IsTextUnicode" , func_IsTextUnicode },
     { "LockServiceDatabase" , func_LockServiceDatabase },
     { "QueryServiceConfig2", func_QueryServiceConfig2 },
@@ -60,6 +59,7 @@ const struct test winetest_testlist[] =
     { "RestrictedToken", func_RestrictedToken },
     { "RtlEncryptMemory", func_RtlEncryptMemory },
     { "SaferIdentifyLevel", func_SaferIdentifyLevel },
+    { "SddlAliases", func_SddlAliases },
     { "SetEntriesInAcl", func_SetEntriesInAcl },
     { "ServiceArgs", func_ServiceArgs },
     { "ServiceEnv", func_ServiceEnv },

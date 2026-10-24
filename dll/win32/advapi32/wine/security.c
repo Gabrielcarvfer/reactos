@@ -4026,11 +4026,11 @@ static DWORD ComputeStringSidSize(LPCWSTR StringSid)
         unsigned int i;
 
         for (i = 0; i < sizeof(WellKnownSids)/sizeof(WellKnownSids[0]); i++)
-            if (!strncmpW(WellKnownSids[i].wstr, StringSid, 2))
+            if (!_wcsnicmp(WellKnownSids[i].wstr, StringSid, 2))
                 return GetSidLengthRequired(WellKnownSids[i].Sid.SubAuthorityCount);
 
         for (i = 0; i < sizeof(WellKnownRids)/sizeof(WellKnownRids[0]); i++)
-            if (!strncmpW(WellKnownRids[i].wstr, StringSid, 2))
+            if (!_wcsnicmp(WellKnownRids[i].wstr, StringSid, 2))
             {
                 MAX_SID local;
                 ADVAPI_GetComputerSid(&local);
@@ -4136,7 +4136,7 @@ static BOOL ParseStringSidToSid(LPCWSTR StringSid, PSID pSid, LPDWORD cBytes)
         pisid->Revision = SDDL_REVISION;
 
         for (i = 0; i < sizeof(WellKnownSids)/sizeof(WellKnownSids[0]); i++)
-            if (!strncmpW(WellKnownSids[i].wstr, StringSid, 2))
+            if (!_wcsnicmp(WellKnownSids[i].wstr, StringSid, 2))
             {
                 DWORD j;
                 pisid->SubAuthorityCount = WellKnownSids[i].Sid.SubAuthorityCount;
@@ -4147,7 +4147,7 @@ static BOOL ParseStringSidToSid(LPCWSTR StringSid, PSID pSid, LPDWORD cBytes)
             }
 
         for (i = 0; i < sizeof(WellKnownRids)/sizeof(WellKnownRids[0]); i++)
-            if (!strncmpW(WellKnownRids[i].wstr, StringSid, 2))
+            if (!_wcsnicmp(WellKnownRids[i].wstr, StringSid, 2))
             {
                 ADVAPI_GetComputerSid(pisid);
                 pisid->SubAuthority[pisid->SubAuthorityCount] = WellKnownRids[i].Rid;

@@ -8,7 +8,6 @@ list(APPEND SOURCE
     FileSecurity.c
     Hash.c
     HKEY_CLASSES_ROOT.c
-    InitiateShutdown.c
     IsTextUnicode.c
     LockServiceDatabase.c
     QueryServiceConfig2.c
@@ -25,6 +24,7 @@ list(APPEND SOURCE
     RestrictedToken.c
     RtlEncryptMemory.c
     SaferIdentifyLevel.c
+    SddlAliases.c
     SetEntriesInAcl.c
     ServiceArgs.c
     ServiceEnv.c
