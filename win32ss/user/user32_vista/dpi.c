@@ -428,3 +428,49 @@ LogicalToPhysicalPoint(
     return TRUE;
 }
 
+/*
+ * @implemented (no virtualized coordinates: nothing to convert)
+ */
+BOOL
+WINAPI
+PhysicalToLogicalPoint(
+    _In_ HWND hwnd,
+    _Inout_ POINT *point)
+{
+    return TRUE;
+}
+
+/*
+ * @implemented (no per-monitor scaling: nothing to convert)
+ */
+BOOL
+WINAPI
+LogicalToPhysicalPointForPerMonitorDPI(
+    _In_opt_ HWND hwnd,
+    _Inout_ POINT *point)
+{
+    return TRUE;
+}
+
+/*
+ * @implemented (no per-monitor scaling: nothing to convert)
+ */
+BOOL
+WINAPI
+PhysicalToLogicalPointForPerMonitorDPI(
+    _In_opt_ HWND hwnd,
+    _Inout_ POINT *point)
+{
+    return TRUE;
+}
+
+/*
+ * @implemented (physical and logical coordinates are the same)
+ */
+HWND
+WINAPI
+WindowFromPhysicalPoint(
+    _In_ POINT Point)
+{
+    return WindowFromPoint(Point);
+}

@@ -533,7 +533,7 @@
 @ stdcall LockWindowUpdate(long) NtUserLockWindowUpdate
 @ stdcall LockWorkStation() NtUserLockWorkStation
 @ stdcall -version=0x600+ LogicalToPhysicalPoint(long ptr)
-@ stdcall -stub -version=0x602+ LogicalToPhysicalPointForPerMonitorDPI(long ptr)
+@ stdcall -version=0x602+ LogicalToPhysicalPointForPerMonitorDPI(long ptr)
 @ stdcall LookupIconIdFromDirectory(ptr long)
 @ stdcall LookupIconIdFromDirectoryEx(ptr long long long long)
 @ stdcall MBToWCSEx(long str long wstr long long)
@@ -584,6 +584,8 @@
 @ stdcall PaintMenuBar(long long long long long long) NtUserPaintMenuBar
 @ stdcall PeekMessageA(ptr long long long long)
 @ stdcall PeekMessageW(ptr long long long long)
+@ stdcall -version=0x600+ PhysicalToLogicalPoint(long ptr)
+@ stdcall -version=0x603+ PhysicalToLogicalPointForPerMonitorDPI(long ptr)
 @ stdcall PostMessageA(long long long long)
 @ stdcall PostMessageW(long long long long)
 @ stdcall PostQuitMessage(long)
@@ -619,6 +621,7 @@
 @ stdcall RegisterLogonProcess(long long)
 @ stdcall RegisterMessagePumpHook(ptr)
 @ stdcall -version=0x602+ RegisterPointerDeviceNotifications(long long)
+@ stdcall -version=0x602+ RegisterPointerInputTarget(long long)
 @ stdcall -version=0x600+ RegisterPowerSettingNotification(long ptr long)
 @ stdcall -import RegisterRawInputDevices(ptr long long) NtUserRegisterRawInputDevices
 @ stdcall RegisterServicesProcess(long)
@@ -797,6 +800,7 @@
 @ stdcall UnregisterDeviceNotification(long)
 @ stdcall UnregisterHotKey(long long) NtUserUnregisterHotKey
 @ stdcall UnregisterMessagePumpHook()
+@ stdcall -version=0x602+ UnregisterPointerInputTarget(long long)
 @ stdcall -version=0x601+ UnregisterTouchWindow(ptr)
 @ stdcall -version=0x600+ UnregisterPowerSettingNotification(ptr)
 @ stdcall -version=0x602+ UnregisterSuspendResumeNotification(ptr)
@@ -830,6 +834,7 @@
 @ stdcall WinHelpA(long str long long)
 @ stdcall WinHelpW(long wstr long long)
 @ stdcall WindowFromDC(long)
+@ stdcall -version=0x600+ WindowFromPhysicalPoint(double)
 @ stdcall WindowFromPoint(double)
 @ stdcall keybd_event(long long long long)
 @ stdcall mouse_event(long long long long long)

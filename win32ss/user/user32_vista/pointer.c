@@ -179,3 +179,39 @@ InjectSyntheticPointerInput(
 {
     return NoSuchPointer();
 }
+
+/*
+ * @implemented
+ * Redirecting all the pointer input of a type to a window needs UIAccess,
+ * which no ReactOS process has: fail like Windows does without it.
+ */
+BOOL
+WINAPI
+RegisterPointerInputTarget(
+    _In_ HWND hwnd,
+    _In_ DWORD pointerType)
+{
+    if (!IsWindow(hwnd))
+    {
+        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+        return FALSE;
+    }
+    SetLastError(ERROR_ACCESS_DENIED);
+    return FALSE;
+}
+
+/* @implemented (see RegisterPointerInputTarget) */
+BOOL
+WINAPI
+UnregisterPointerInputTarget(
+    _In_ HWND hwnd,
+    _In_ DWORD pointerType)
+{
+    if (!IsWindow(hwnd))
+    {
+        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+        return FALSE;
+    }
+    SetLastError(ERROR_ACCESS_DENIED);
+    return FALSE;
+}
