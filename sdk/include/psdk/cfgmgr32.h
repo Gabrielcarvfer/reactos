@@ -2355,6 +2355,15 @@ CM_Is_Dock_Station_Present_Ex(
   _Out_ PBOOL pbPresent,
   _In_opt_ HMACHINE hMachine);
 
+#if (WINVER >= _WIN32_WINNT_WIN8)
+CMAPI
+DWORD
+WINAPI
+CM_MapCrToWin32Err(
+  _In_ CONFIGRET CmReturnCode,
+  _In_ DWORD DefaultErr);
+#endif
+
 CMAPI
 CONFIGRET
 WINAPI

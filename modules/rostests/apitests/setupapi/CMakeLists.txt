@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    CM_MapCrToWin32Err.c
     devclass.c
     DevQuery.c
     PciIrqShare.c
