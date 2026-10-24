@@ -565,8 +565,97 @@ cleanup:
 }
 
 
+/* The levels of Vista and later, on a service every Windows has
+ * (levels 3 to 5 return a structure of a single DWORD) */
+static void Test_QueryServiceConfig2W_Levels(void)
+{
+    static const struct { DWORD Level; DWORD MinSize; } Levels[] =
+    {
+        { SERVICE_CONFIG_DELAYED_AUTO_START_INFO, sizeof(DWORD) },
+        { SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, sizeof(DWORD) },
+        { SERVICE_CONFIG_SERVICE_SID_INFO, sizeof(DWORD) },
+        { SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO, sizeof(SERVICE_REQUIRED_PRIVILEGES_INFOW) },
+        { SERVICE_CONFIG_PRESHUTDOWN_INFO, sizeof(SERVICE_PRESHUTDOWN_INFO) },
+        { SERVICE_CONFIG_TRIGGER_INFO, sizeof(SERVICE_TRIGGER_INFO) },
+    };
+    SC_HANDLE hScm, hService;
+    BYTE Buffer[1024];
+    DWORD Needed, i;
+    BOOL Ret;
+
+    hScm = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    ok(hScm != NULL, "OpenSCManagerW failed: %lu\n", GetLastError());
+    if (!hScm)
+        return;
+    hService = OpenServiceW(hScm, L"EventLog", SERVICE_QUERY_CONFIG);
+    ok(hService != NULL, "OpenServiceW failed: %lu\n", GetLastError());
+    if (!hService)
+    {
+        CloseServiceHandle(hScm);
+        return;
+    }
+
+    for (i = 0; i < _countof(Levels); i++)
+    {
+        /* Without a buffer: the size */
+        Needed = 0xdeadbeef;
+        SetLastError(0xdeadbeef);
+        Ret = QueryServiceConfig2W(hService, Levels[i].Level, NULL, 0, &Needed);
+        ok(!Ret, "Level %lu: QueryServiceConfig2W succeeded\n", Levels[i].Level);
+        ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "Level %lu: error %lu\n", Levels[i].Level, GetLastError());
+        ok(Needed >= Levels[i].MinSize && Needed <= sizeof(Buffer), "Level %lu: needed %lu\n", Levels[i].Level, Needed);
+        if (Needed > sizeof(Buffer))
+            continue;
+
+        memset(Buffer, 0xcc, sizeof(Buffer));
+        SetLastError(0xdeadbeef);
+        Ret = QueryServiceConfig2W(hService, Levels[i].Level, Buffer, Needed, &Needed);
+        ok(Ret, "Level %lu: QueryServiceConfig2W failed: %lu\n", Levels[i].Level, GetLastError());
+        if (!Ret)
+            continue;
+
+        switch (Levels[i].Level)
+        {
+            case SERVICE_CONFIG_DELAYED_AUTO_START_INFO:
+                ok(*(LPDWORD)Buffer == FALSE, "Delayed auto start\n");
+                break;
+            case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
+                ok(*(LPDWORD)Buffer <= TRUE, "Bad flag\n");
+                break;
+            case SERVICE_CONFIG_SERVICE_SID_INFO:
+                ok(*(LPDWORD)Buffer <= SERVICE_SID_TYPE_RESTRICTED, "Bad SID type\n");
+                break;
+            case SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO:
+            {
+                LPWSTR p = ((LPSERVICE_REQUIRED_PRIVILEGES_INFOW)Buffer)->pmszRequiredPrivileges;
+                ok(p == NULL || ((PBYTE)p >= Buffer && (PBYTE)p < Buffer + Needed), "Bad privileges pointer %p\n", p);
+                break;
+            }
+            case SERVICE_CONFIG_PRESHUTDOWN_INFO:
+                ok(((LPSERVICE_PRESHUTDOWN_INFO)Buffer)->dwPreshutdownTimeout != 0xcccccccc, "Timeout not set\n");
+                break;
+            case SERVICE_CONFIG_TRIGGER_INFO:
+            {
+                PSERVICE_TRIGGER_INFO Info = (PSERVICE_TRIGGER_INFO)Buffer;
+                ok(Info->cTriggers == 0 || Info->pTriggers != NULL, "Bad triggers\n");
+                ok(Info->pReserved == NULL, "pReserved %p\n", Info->pReserved);
+                break;
+            }
+        }
+    }
+
+    /* Beyond the known levels */
+    SetLastError(0xdeadbeef);
+    Ret = QueryServiceConfig2W(hService, 0x1000, Buffer, sizeof(Buffer), &Needed);
+    ok(!Ret && GetLastError() == ERROR_INVALID_LEVEL, "Level 0x1000: %d, error %lu\n", Ret, GetLastError());
+
+    CloseServiceHandle(hService);
+    CloseServiceHandle(hScm);
+}
+
 START_TEST(QueryServiceConfig2)
 {
+    Test_QueryServiceConfig2W_Levels();
     Test_QueryServiceConfig2W();
     Test_QueryServiceConfig2A();
 }

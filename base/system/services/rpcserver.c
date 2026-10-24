@@ -5433,6 +5433,26 @@ done:
 }
 
 
+/* The registry values of the configuration levels that hold one DWORD */
+static
+LPCWSTR
+ScmGetConfig2ValueName(
+    DWORD dwInfoLevel)
+{
+    switch (dwInfoLevel)
+    {
+        case SERVICE_CONFIG_DELAYED_AUTO_START_INFO:
+            return L"DelayedAutostart";
+        case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
+            return L"FailureActionsOnNonCrashFailures";
+        case SERVICE_CONFIG_SERVICE_SID_INFO:
+            return L"ServiceSidType";
+        default:
+            return L"PreshutdownTimeout";
+    }
+}
+
+
 /* Function 37 */
 DWORD
 WINAPI
@@ -5453,7 +5473,7 @@ RChangeServiceConfig2W(
         return ERROR_SHUTDOWN_IN_PROGRESS;
 
     if ((Info.dwInfoLevel < SERVICE_CONFIG_DESCRIPTION) ||
-        (Info.dwInfoLevel > SERVICE_CONFIG_FAILURE_ACTIONS))
+        (Info.dwInfoLevel > SERVICE_CONFIG_PRESHUTDOWN_INFO))
     {
         return ERROR_INVALID_LEVEL;
     }
@@ -5550,6 +5570,61 @@ RChangeServiceConfig2W(
     {
         dwError = ScmSetFailureActions(hServiceKey,
                                        (LPSERVICE_FAILURE_ACTIONSW)Info.psfa);
+    }
+    else if (Info.dwInfoLevel == SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO)
+    {
+        if (Info.psrp == NULL)
+        {
+            dwError = ERROR_INVALID_PARAMETER;
+        }
+        else if (Info.psrp->cbRequiredPrivileges == 0 || Info.psrp->pRequiredPrivileges == NULL)
+        {
+            dwError = RegDeleteValueW(hServiceKey, L"RequiredPrivileges");
+            if (dwError == ERROR_FILE_NOT_FOUND)
+                dwError = ERROR_SUCCESS;
+        }
+        else
+        {
+            dwError = RegSetValueExW(hServiceKey,
+                                     L"RequiredPrivileges",
+                                     0,
+                                     REG_MULTI_SZ,
+                                     Info.psrp->pRequiredPrivileges,
+                                     Info.psrp->cbRequiredPrivileges);
+        }
+    }
+    else if (Info.dwInfoLevel != SERVICE_CONFIG_DESCRIPTION)
+    {
+        /* Structures of a single DWORD, kept in a registry value */
+        DWORD dwValue;
+
+        if (Info.psda == NULL)
+        {
+            dwError = ERROR_INVALID_PARAMETER;
+            goto done;
+        }
+        dwValue = *(LPDWORD)Info.psda;
+
+        if (Info.dwInfoLevel == SERVICE_CONFIG_DELAYED_AUTO_START_INFO ||
+            Info.dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG)
+        {
+            dwValue = (dwValue != FALSE);
+        }
+        else if (Info.dwInfoLevel == SERVICE_CONFIG_SERVICE_SID_INFO &&
+                 dwValue != SERVICE_SID_TYPE_NONE &&
+                 dwValue != SERVICE_SID_TYPE_UNRESTRICTED &&
+                 dwValue != SERVICE_SID_TYPE_RESTRICTED)
+        {
+            dwError = ERROR_INVALID_PARAMETER;
+            goto done;
+        }
+
+        dwError = RegSetValueExW(hServiceKey,
+                                 ScmGetConfig2ValueName(Info.dwInfoLevel),
+                                 0,
+                                 REG_DWORD,
+                                 (LPBYTE)&dwValue,
+                                 sizeof(dwValue));
     }
 
 done:
@@ -5834,14 +5909,15 @@ RQueryServiceConfig2W(
 
     DPRINT("RQueryServiceConfig2W() called\n");
 
-    if (!lpBuffer)
+    /* (No buffer, to get the size: the RPC stub gives NULL for 0 bytes) */
+    if (!lpBuffer && cbBufSize != 0)
         return ERROR_INVALID_ADDRESS;
 
     if (ScmShutdown)
         return ERROR_SHUTDOWN_IN_PROGRESS;
 
     if ((dwInfoLevel < SERVICE_CONFIG_DESCRIPTION) ||
-        (dwInfoLevel > SERVICE_CONFIG_FAILURE_ACTIONS))
+        (dwInfoLevel > SERVICE_CONFIG_TRIGGER_INFO))
     {
         return ERROR_INVALID_LEVEL;
     }
@@ -5876,7 +5952,87 @@ RQueryServiceConfig2W(
     if (dwError != ERROR_SUCCESS)
         goto done;
 
-    if (dwInfoLevel == SERVICE_CONFIG_DESCRIPTION)
+    if (dwInfoLevel == SERVICE_CONFIG_DELAYED_AUTO_START_INFO ||
+        dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG ||
+        dwInfoLevel == SERVICE_CONFIG_SERVICE_SID_INFO ||
+        dwInfoLevel == SERVICE_CONFIG_PRESHUTDOWN_INFO)
+    {
+        /* Structures of a single DWORD, from a registry value */
+        DWORD dwValue = 0, dwSize = sizeof(dwValue);
+
+        *pcbBytesNeeded = sizeof(DWORD);
+        if (cbBufSize < sizeof(DWORD))
+        {
+            dwError = ERROR_INSUFFICIENT_BUFFER;
+            goto done;
+        }
+
+        if (dwInfoLevel == SERVICE_CONFIG_PRESHUTDOWN_INFO)
+            dwValue = 180000; /* The default pre-shutdown timeout, 3 minutes */
+
+        if (RegQueryValueExW(hServiceKey,
+                             ScmGetConfig2ValueName(dwInfoLevel),
+                             NULL,
+                             &dwType,
+                             (LPBYTE)&dwValue,
+                             &dwSize) == ERROR_SUCCESS && dwType != REG_DWORD)
+        {
+            dwValue = 0;
+        }
+        *(LPDWORD)lpBuffer = dwValue;
+        dwError = ERROR_SUCCESS;
+    }
+    else if (dwInfoLevel == SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO)
+    {
+        LPSERVICE_REQUIRED_PRIVILEGES_INFOW lpPrivileges = (LPSERVICE_REQUIRED_PRIVILEGES_INFOW)lpBuffer;
+        DWORD dwSize = 0;
+
+        /* The privileges (a multi-string) follow the structure */
+        dwError = RegQueryValueExW(hServiceKey,
+                                   L"RequiredPrivileges",
+                                   NULL,
+                                   &dwType,
+                                   NULL,
+                                   &dwSize);
+        if (dwError != ERROR_SUCCESS || dwType != REG_MULTI_SZ)
+            dwSize = 0;
+
+        *pcbBytesNeeded = sizeof(SERVICE_REQUIRED_PRIVILEGES_INFOW) + dwSize + 2 * sizeof(WCHAR);
+        if (cbBufSize < *pcbBytesNeeded)
+        {
+            dwError = ERROR_INSUFFICIENT_BUFFER;
+            goto done;
+        }
+
+        ZeroMemory(lpPrivileges + 1, dwSize + 2 * sizeof(WCHAR));
+        if (dwSize != 0)
+        {
+            RegQueryValueExW(hServiceKey,
+                             L"RequiredPrivileges",
+                             NULL,
+                             NULL,
+                             (LPBYTE)(lpPrivileges + 1),
+                             &dwSize);
+        }
+
+        /* An offset, converted by the caller */
+        lpPrivileges->pmszRequiredPrivileges = (LPWSTR)(ULONG_PTR)sizeof(SERVICE_REQUIRED_PRIVILEGES_INFOW);
+        dwError = ERROR_SUCCESS;
+    }
+    else if (dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+    {
+        /* ReactOS has no service start triggers */
+        *pcbBytesNeeded = sizeof(SERVICE_TRIGGER_INFO);
+        if (cbBufSize < sizeof(SERVICE_TRIGGER_INFO))
+        {
+            dwError = ERROR_INSUFFICIENT_BUFFER;
+            goto done;
+        }
+
+        ZeroMemory(lpBuffer, sizeof(SERVICE_TRIGGER_INFO));
+        dwError = ERROR_SUCCESS;
+    }
+    else if (dwInfoLevel == SERVICE_CONFIG_DESCRIPTION)
     {
         LPSERVICE_DESCRIPTIONW lpServiceDescription = (LPSERVICE_DESCRIPTIONW)lpBuffer;
         LPWSTR lpStr;

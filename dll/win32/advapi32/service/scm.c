@@ -307,6 +307,7 @@ ChangeServiceConfig2W(SC_HANDLE hService,
                       LPVOID lpInfo)
 {
     SC_RPC_CONFIG_INFOW Info;
+    SERVICE_RPC_REQUIRED_PRIVILEGES_INFO RequiredPrivileges;
     DWORD dwError;
 
     TRACE("ChangeServiceConfig2W(%p %lu %p)\n",
@@ -325,6 +326,35 @@ ChangeServiceConfig2W(SC_HANDLE hService,
         case SERVICE_CONFIG_FAILURE_ACTIONS:
             Info.psfa = lpInfo;
             break;
+
+        case SERVICE_CONFIG_DELAYED_AUTO_START_INFO:
+        case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
+        case SERVICE_CONFIG_SERVICE_SID_INFO:
+        case SERVICE_CONFIG_PRESHUTDOWN_INFO:
+            /* (Each one a single DWORD) */
+            Info.psda = lpInfo;
+            break;
+
+        case SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO:
+        {
+            LPCWSTR pszPrivileges = ((LPSERVICE_REQUIRED_PRIVILEGES_INFOW)lpInfo)->pmszRequiredPrivileges;
+            LPCWSTR p = pszPrivileges;
+
+            /* The multi-string travels as bytes */
+            if (p != NULL)
+            {
+                while (*p)
+                    p += wcslen(p) + 1;
+                RequiredPrivileges.cbRequiredPrivileges = (DWORD)((p + 1 - pszPrivileges) * sizeof(WCHAR));
+            }
+            else
+            {
+                RequiredPrivileges.cbRequiredPrivileges = 0;
+            }
+            RequiredPrivileges.pRequiredPrivileges = (PBYTE)pszPrivileges;
+            Info.psrp = &RequiredPrivileges;
+            break;
+        }
 
         default:
             WARN("Unknown info level 0x%lx\n", dwInfoLevel);
@@ -2537,6 +2567,7 @@ QueryServiceConfig2W(SC_HANDLE hService,
 {
     SERVICE_DESCRIPTIONW ServiceDescription;
     SERVICE_FAILURE_ACTIONSW ServiceFailureActions;
+    BYTE Dummy;
     LPBYTE lpTempBuffer;
     BOOL bUseTempBuffer = FALSE;
     DWORD dwBufferSize;
@@ -2565,6 +2596,20 @@ QueryServiceConfig2W(SC_HANDLE hService,
                 lpTempBuffer = (LPBYTE)&ServiceFailureActions;
                 dwBufferSize = sizeof(SERVICE_FAILURE_ACTIONSW);
                 bUseTempBuffer = TRUE;
+            }
+            break;
+
+        case SERVICE_CONFIG_DELAYED_AUTO_START_INFO:
+        case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
+        case SERVICE_CONFIG_SERVICE_SID_INFO:
+        case SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO:
+        case SERVICE_CONFIG_PRESHUTDOWN_INFO:
+        case SERVICE_CONFIG_TRIGGER_INFO:
+            /* The service manager says how much is needed */
+            if (lpBuffer == NULL)
+            {
+                lpTempBuffer = &Dummy;
+                dwBufferSize = 0;
             }
             break;
 
@@ -2630,6 +2675,16 @@ QueryServiceConfig2W(SC_HANDLE hService,
                 if (lpPtr->lpsaActions != NULL)
                     lpPtr->lpsaActions =
                         (LPSC_ACTION)((ULONG_PTR)lpPtr + (ULONG_PTR)lpPtr->lpsaActions);
+            }
+            break;
+
+        case SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO:
+            {
+                LPSERVICE_REQUIRED_PRIVILEGES_INFOW lpPtr = (LPSERVICE_REQUIRED_PRIVILEGES_INFOW)lpTempBuffer;
+
+                if (lpPtr->pmszRequiredPrivileges != NULL)
+                    lpPtr->pmszRequiredPrivileges =
+                        (LPWSTR)((ULONG_PTR)lpPtr + (ULONG_PTR)lpPtr->pmszRequiredPrivileges);
             }
             break;
     }
