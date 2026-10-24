@@ -10,6 +10,7 @@
 @ stdcall RNIGetCompatibleVersion()
 @ stdcall RunHTMLApplication(long long str long)
 @ stdcall ShowHTMLDialog(ptr ptr ptr wstr ptr)
+@ stdcall ShowHTMLDialogEx(ptr ptr long ptr wstr ptr)
 @ stub ShowModalDialog
 @ stub ShowModelessHTMLDialog
 

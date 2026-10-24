@@ -374,6 +374,18 @@ HRESULT WINAPI ShowHTMLDialog(HWND hwndParent, IMoniker *pMk, VARIANT *pvarArgIn
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+/***********************************************************************
+ *          ShowHTMLDialogEx (MSHTML.@)
+ */
+HRESULT WINAPI ShowHTMLDialogEx(HWND hwndParent, IMoniker *pMk, DWORD dwDialogFlags,
+        VARIANT *pvarArgIn, WCHAR *pchOptions, VARIANT *pvarArgOut)
+{
+    TRACE("(%p %p %#lx %p %s %p)\n", hwndParent, pMk, dwDialogFlags, pvarArgIn, debugstr_w(pchOptions), pvarArgOut);
+    return ShowHTMLDialog(hwndParent, pMk, pvarArgIn, pchOptions, pvarArgOut);
+}
+#endif
+
 /***********************************************************************
  *          PrintHTML (MSHTML.@)
  */
