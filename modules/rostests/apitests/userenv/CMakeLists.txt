@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     GetProfileDirs.c
     LoadUserProfile.c
+    profapi.c
     testlist.c)
 
 add_executable(userenv_apitest ${SOURCE})
