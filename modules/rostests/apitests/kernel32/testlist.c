@@ -9,6 +9,7 @@ extern void func_CacheReclaim(void);
 extern void func_ConsoleCP(void);
 extern void func_ConsoleCtrlEvent(void);
 extern void func_ConsoleVT(void);
+extern void func_ConsoleWindows(void);
 extern void func_CreateEventEx(void);
 extern void func_CreateProcess(void);
 extern void func_CurrentPackage(void);
@@ -100,6 +101,7 @@ const struct test winetest_testlist[] =
     { "ConsoleCP",                   func_ConsoleCP },
     { "ConsoleCtrlEvent",            func_ConsoleCtrlEvent },
     { "ConsoleVT",                   func_ConsoleVT },
+    { "ConsoleWindows",              func_ConsoleWindows },
     { "CreateEventEx",               func_CreateEventEx },
     { "CreateProcess",               func_CreateProcess },
     { "CurrentPackage",              func_CurrentPackage },

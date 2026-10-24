@@ -9,6 +9,7 @@ list(APPEND SOURCE
     ConsoleCP.c
     ConsoleCtrlEvent.c
     ConsoleVT.c
+    ConsoleWindows.c
     CreateEventEx.c
     CreateProcess.c
     CurrentPackage.c

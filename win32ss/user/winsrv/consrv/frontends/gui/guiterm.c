@@ -44,6 +44,35 @@ typedef struct _GUI_INIT_INFO
 
 static BOOL ConsInitialized = FALSE;
 
+/*
+ * Serializes the choice of a desktop's console input thread with that
+ * thread's exit: a new console must not post its PM_CREATE_CONSOLE to an
+ * input thread that is quitting (its last window was just destroyed), as
+ * the message is then lost and the console creation waits forever.
+ */
+static RTL_CRITICAL_SECTION GuiInputThreadLock;
+static RTL_RUN_ONCE GuiInputThreadLockOnce = RTL_RUN_ONCE_INIT;
+
+static ULONG NTAPI
+GuiInitInputThreadLock(PRTL_RUN_ONCE RunOnce, PVOID Parameter, PVOID *Context)
+{
+    RtlInitializeCriticalSection(&GuiInputThreadLock);
+    return TRUE;
+}
+
+static VOID
+GuiLockInputThreads(VOID)
+{
+    RtlRunOnceExecuteOnce(&GuiInputThreadLockOnce, GuiInitInputThreadLock, NULL, NULL);
+    RtlEnterCriticalSection(&GuiInputThreadLock);
+}
+
+static VOID
+GuiUnlockInputThreads(VOID)
+{
+    RtlLeaveCriticalSection(&GuiInputThreadLock);
+}
+
 extern HICON   ghDefaultIcon;
 extern HICON   ghDefaultIconSm;
 extern HCURSOR ghDefaultCursor;
@@ -110,6 +139,7 @@ GuiConsoleInputThread(PVOID Param)
     DESKTOP_CONSOLE_THREAD DesktopConsoleThreadInfo;
     ULONG_PTR InputThreadId = HandleToUlong(NtCurrentTeb()->ClientId.UniqueThread);
     HANDLE hThread = NULL;
+    BOOLEAN Unregistered = FALSE;
 
     LONG WindowCount = 0;
     MSG msg;
@@ -223,16 +253,26 @@ GuiConsoleInputThread(PVOID Param)
                 // LeaveFullScreen(GuiData);
 
                 /*
-                 * Window creation is done using a PostMessage(), so it's possible
-                 * that the window that we want to destroy doesn't exist yet.
-                 * So first empty the message queue.
+                 * First dispatch the messages still queued for the window.
+                 * Only those: the other consoles' PM_CREATE_CONSOLE and
+                 * PM_DESTROY_CONSOLE thread messages may be queued too, and
+                 * dispatching drops them (no window), so their consoles would
+                 * wait forever for their window. (The window itself exists:
+                 * its PM_CREATE_CONSOLE was posted, and handled, first.)
                  */
-                while (PeekMessageW(&TempMsg, NULL, 0, 0, PM_REMOVE))
+                while (GuiData->hWindow &&
+                       PeekMessageW(&TempMsg, GuiData->hWindow, 0, 0, PM_REMOVE))
                 {
                     DispatchMessageW(&TempMsg);
                 }
 
-                if (GuiData->hWindow == NULL) continue;
+                if (GuiData->hWindow == NULL)
+                {
+                    /* Its window was never created: the deinitialization
+                       still waits for this */
+                    NtSetEvent(GuiData->hGuiTermEvent, NULL);
+                    continue;
+                }
 
                 DestroyWindow(GuiData->hWindow);
 
@@ -240,6 +280,22 @@ GuiConsoleInputThread(PVOID Param)
 
                 if (_InterlockedDecrement(&WindowCount) == 0)
                 {
+                    /* Quit, unless a new console was given to this thread
+                       meanwhile: once it is no longer this desktop's input
+                       thread, no console can pick it any more */
+                    GuiLockInputThreads();
+                    if (PeekMessageW(&TempMsg, NULL, PM_CREATE_CONSOLE, PM_CREATE_CONSOLE, PM_NOREMOVE))
+                    {
+                        GuiUnlockInputThreads();
+                        continue;
+                    }
+                    DesktopConsoleThreadInfo.ThreadId = 0;
+                    NtUserConsoleControl(ConsoleCtrlDesktopConsoleThread,
+                                         &DesktopConsoleThreadInfo,
+                                         sizeof(DesktopConsoleThreadInfo));
+                    Unregistered = TRUE;
+                    GuiUnlockInputThreads();
+
                     DPRINT("CONSRV: Going to quit the Input Thread 0x%p\n", InputThreadId);
                     goto Quit;
                 }
@@ -257,10 +313,15 @@ Quit:
 
     /* Remove this console input thread from this desktop */
     // DesktopConsoleThreadInfo.DesktopHandle;
-    DesktopConsoleThreadInfo.ThreadId = 0;
-    NtUserConsoleControl(ConsoleCtrlDesktopConsoleThread,
-                         &DesktopConsoleThreadInfo,
-                         sizeof(DesktopConsoleThreadInfo));
+    if (!Unregistered)
+    {
+        GuiLockInputThreads();
+        DesktopConsoleThreadInfo.ThreadId = 0;
+        NtUserConsoleControl(ConsoleCtrlDesktopConsoleThread,
+                             &DesktopConsoleThreadInfo,
+                             sizeof(DesktopConsoleThreadInfo));
+        GuiUnlockInputThreads();
+    }
 
     /* Close the duplicated desktop handle */
     CloseDesktop(DesktopConsoleThreadInfo.DesktopHandle); // NtUserCloseDesktop
@@ -279,6 +340,93 @@ Quit:
     return 0;
 }
 
+/*
+ * Returns the console input thread of a desktop, starting it if the desktop
+ * has none. Called with the input thread lock held, so that the thread
+ * doesn't quit before the caller has posted its message to it.
+ */
+static NTSTATUS
+GuiGetInputThread(IN HDESK hDesk,
+                  OUT PULONG_PTR InputThreadId)
+{
+    NTSTATUS Status;
+    DESKTOP_CONSOLE_THREAD DesktopConsoleThreadInfo;
+    GUI_INIT_INFO ThreadInitInfo;
+    HANDLE hInputThread = NULL;
+    CLIENT_ID ClientId;
+
+    /* The current console input thread of this desktop, if any */
+    DesktopConsoleThreadInfo.DesktopHandle = hDesk;
+    DesktopConsoleThreadInfo.ThreadId = (ULONG_PTR)INVALID_HANDLE_VALUE; // Special value to say we just want to retrieve the thread ID.
+    NtUserConsoleControl(ConsoleCtrlDesktopConsoleThread,
+                         &DesktopConsoleThreadInfo,
+                         sizeof(DesktopConsoleThreadInfo));
+    DPRINT("NtUserConsoleControl returned ThreadId = 0x%p\n", DesktopConsoleThreadInfo.ThreadId);
+    if (DesktopConsoleThreadInfo.ThreadId != 0)
+    {
+        *InputThreadId = DesktopConsoleThreadInfo.ThreadId;
+        return STATUS_SUCCESS;
+    }
+
+    /* None: start one. It holds its own copy of the desktop handle. */
+    RtlZeroMemory(&ThreadInitInfo, sizeof(ThreadInitInfo));
+    Status = NtCreateEvent(&ThreadInitInfo.GuiThreadStartupEvent, EVENT_ALL_ACCESS,
+                           NULL, SynchronizationEvent, FALSE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = NtDuplicateObject(NtCurrentProcess(),
+                               hDesk,
+                               NtCurrentProcess(),
+                               (PHANDLE)&ThreadInitInfo.Desktop,
+                               0, 0, DUPLICATE_SAME_ACCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        NtClose(ThreadInitInfo.GuiThreadStartupEvent);
+        return Status;
+    }
+
+    Status = RtlCreateUserThread(NtCurrentProcess(),
+                                 NULL,
+                                 TRUE, // Start the thread in suspended state
+                                 0,
+                                 0,
+                                 0,
+                                 (PVOID)GuiConsoleInputThread,
+                                 (PVOID)&ThreadInitInfo,
+                                 &hInputThread,
+                                 &ClientId);
+    if (NT_SUCCESS(Status))
+    {
+        /* Add it as a static server thread and resume it */
+        CsrAddStaticServerThread(hInputThread, &ClientId, 0);
+        Status = NtResumeThread(hInputThread, NULL);
+    }
+    DPRINT("Thread creation hInputThread = 0x%p, InputThreadId = 0x%p, Status = 0x%08lx\n",
+           hInputThread, ClientId.UniqueThread, Status);
+
+    if (!NT_SUCCESS(Status) || hInputThread == NULL)
+    {
+        /* Close the thread's handle */
+        if (hInputThread) NtClose(hInputThread);
+
+        /* We need to close here the duplicated desktop handle */
+        CloseDesktop(ThreadInitInfo.Desktop); // NtUserCloseDesktop
+
+        NtClose(ThreadInitInfo.GuiThreadStartupEvent);
+        return NT_SUCCESS(Status) ? STATUS_UNSUCCESSFUL : Status;
+    }
+
+    /* No need to close hInputThread, this is done by CSR automatically */
+
+    /* Wait for the thread to finish its initialization (it reads ThreadInitInfo) */
+    NtWaitForSingleObject(ThreadInitInfo.GuiThreadStartupEvent, FALSE, NULL);
+    NtClose(ThreadInitInfo.GuiThreadStartupEvent);
+
+    *InputThreadId = (ULONG_PTR)ClientId.UniqueThread;
+    return STATUS_SUCCESS;
+}
+
 // FIXME: Maybe return a NTSTATUS
 static BOOL
 GuiInit(IN PCONSOLE_INIT_INFO ConsoleInitInfo,
@@ -287,13 +435,10 @@ GuiInit(IN PCONSOLE_INIT_INFO ConsoleInitInfo,
 {
     BOOL Success = TRUE;
     UNICODE_STRING DesktopPath;
-    DESKTOP_CONSOLE_THREAD DesktopConsoleThreadInfo;
     HWINSTA hWinSta;
     HDESK hDesk;
 
     NTSTATUS Status;
-    HANDLE hInputThread;
-    CLIENT_ID ClientId;
 
     /* Perform one-time initialization */
     if (!ConsInitialized)
@@ -339,117 +484,22 @@ GuiInit(IN PCONSOLE_INIT_INFO ConsoleInitInfo,
     if (hDesk == NULL) return FALSE;
 
     /*
-     * We need to see whether we need to create a
-     * new console input thread for this desktop.
-     */
-    DesktopConsoleThreadInfo.DesktopHandle = hDesk;
-    DesktopConsoleThreadInfo.ThreadId = (ULONG_PTR)INVALID_HANDLE_VALUE; // Special value to say we just want to retrieve the thread ID.
-    NtUserConsoleControl(ConsoleCtrlDesktopConsoleThread,
-                         &DesktopConsoleThreadInfo,
-                         sizeof(DesktopConsoleThreadInfo));
-    DPRINT("NtUserConsoleControl returned ThreadId = 0x%p\n", DesktopConsoleThreadInfo.ThreadId);
-
-    /*
      * Save the opened window station and desktop handles in the initialization
      * structure. They will be used later on, and released, by the GUI frontend.
      */
     GuiInitInfo->WinSta  = hWinSta;
     GuiInitInfo->Desktop = hDesk;
 
-    /* Here GuiInitInfo contains original handles */
-
-    /* If we already have a console input thread on this desktop... */
-    if (DesktopConsoleThreadInfo.ThreadId != 0)
-    {
-        /* ... just use it... */
-        DPRINT("Using input thread InputThreadId = 0x%p\n", DesktopConsoleThreadInfo.ThreadId);
-        GuiInitInfo->InputThreadId = DesktopConsoleThreadInfo.ThreadId;
-        goto Quit;
-    }
-
-    /* ... otherwise create a new one. */
-
-    /* Initialize a startup event for the thread to signal it */
-    Status = NtCreateEvent(&GuiInitInfo->GuiThreadStartupEvent, EVENT_ALL_ACCESS,
-                           NULL, SynchronizationEvent, FALSE);
+    /* Use the console input thread of this desktop, or start one */
+    GuiLockInputThreads();
+    Status = GuiGetInputThread(hDesk, &GuiInitInfo->InputThreadId);
+    GuiUnlockInputThreads();
     if (!NT_SUCCESS(Status))
     {
-        Success = FALSE;
-        goto Quit;
-    }
-
-    /*
-     * Duplicate the desktop handle for the console input thread internal needs.
-     * If it happens to need also a window station handle in the future, then
-     * it is there that you also need to duplicate the window station handle!
-     *
-     * Note also that we are going to temporarily overwrite the stored handles
-     * in GuiInitInfo because it happens that we use also this structure to give
-     * the duplicated handles to the input thread that is going to initialize.
-     * After the input thread finishes its initialization, we restore the handles
-     * in GuiInitInfo to their old values.
-     */
-    Status = NtDuplicateObject(NtCurrentProcess(),
-                               hDesk,
-                               NtCurrentProcess(),
-                               (PHANDLE)&GuiInitInfo->Desktop,
-                               0, 0, DUPLICATE_SAME_ACCESS);
-    if (!NT_SUCCESS(Status))
-    {
-        Success = FALSE;
-        goto Quit;
-    }
-
-    /* Here GuiInitInfo contains duplicated handles */
-
-    Status = RtlCreateUserThread(NtCurrentProcess(),
-                                 NULL,
-                                 TRUE, // Start the thread in suspended state
-                                 0,
-                                 0,
-                                 0,
-                                 (PVOID)GuiConsoleInputThread,
-                                 (PVOID)GuiInitInfo,
-                                 &hInputThread,
-                                 &ClientId);
-    if (NT_SUCCESS(Status))
-    {
-        /* Add it as a static server thread and resume it */
-        CsrAddStaticServerThread(hInputThread, &ClientId, 0);
-        Status = NtResumeThread(hInputThread, NULL);
-    }
-    DPRINT("Thread creation hInputThread = 0x%p, InputThreadId = 0x%p, Status = 0x%08lx\n",
-           hInputThread, ClientId.UniqueThread, Status);
-
-    if (!NT_SUCCESS(Status) || hInputThread == NULL)
-    {
-        /* Close the thread's handle */
-        if (hInputThread) NtClose(hInputThread);
-
-        /* We need to close here the duplicated desktop handle */
-        CloseDesktop(GuiInitInfo->Desktop); // NtUserCloseDesktop
-
-        /* Close the startup event and bail out */
-        NtClose(GuiInitInfo->GuiThreadStartupEvent);
-
         DPRINT1("CONSRV: Failed to create graphics console thread.\n");
         Success = FALSE;
         goto Quit;
     }
-
-    /* No need to close hInputThread, this is done by CSR automatically */
-
-    /* Wait for the thread to finish its initialization, and close the startup event */
-    NtWaitForSingleObject(GuiInitInfo->GuiThreadStartupEvent, FALSE, NULL);
-    NtClose(GuiInitInfo->GuiThreadStartupEvent);
-
-    /*
-     * Save the input thread ID for later use, and restore the original handles.
-     * The copies are held by the console input thread.
-     */
-    GuiInitInfo->InputThreadId = (ULONG_PTR)ClientId.UniqueThread;
-    GuiInitInfo->WinSta  = hWinSta;
-    GuiInitInfo->Desktop = hDesk;
 
     /* Here GuiInitInfo contains again original handles */
 
@@ -570,8 +620,16 @@ GuiInitFrontEnd(IN OUT PFRONTEND This,
 
     DPRINT("GUI - Checkpoint\n");
 
-    /* Create the terminal window */
-    PostThreadMessageW(GuiData->InputThreadId, PM_CREATE_CONSOLE, 0, (LPARAM)GuiData);
+    /*
+     * Create the terminal window. The input thread chosen in GuiInit may have
+     * quit since (its last console was closed): take the desktop's current one.
+     */
+    GuiLockInputThreads();
+    if (NT_SUCCESS(GuiGetInputThread(GuiData->Desktop, &GuiData->InputThreadId)))
+        PostThreadMessageW(GuiData->InputThreadId, PM_CREATE_CONSOLE, 0, (LPARAM)GuiData);
+    else
+        NtSetEvent(GuiData->hGuiInitEvent, NULL); // No window: fail below
+    GuiUnlockInputThreads();
 
     /* Wait until initialization has finished */
     NtWaitForSingleObject(GuiData->hGuiInitEvent, FALSE, NULL);
