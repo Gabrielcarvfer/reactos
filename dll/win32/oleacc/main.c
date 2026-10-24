@@ -106,6 +106,50 @@ HRESULT WINAPI CreateStdAccessibleObject( HWND hwnd, LONG idObject,
     }
 }
 
+#ifdef __REACTOS__
+/* The standard objects don't depend on the window class (yet) */
+HRESULT WINAPI CreateStdAccessibleProxyW( HWND hwnd, LPCWSTR class_name, LONG idObject,
+        REFIID riidInterface, void** ppvObject )
+{
+    TRACE("%p %s %ld %s %p\n", hwnd, debugstr_w(class_name), idObject,
+          debugstr_guid( riidInterface ), ppvObject );
+
+    return CreateStdAccessibleObject( hwnd, idObject, riidInterface, ppvObject );
+}
+
+HRESULT WINAPI CreateStdAccessibleProxyA( HWND hwnd, LPCSTR class_name, LONG idObject,
+        REFIID riidInterface, void** ppvObject )
+{
+    TRACE("%p %s %ld %s %p\n", hwnd, debugstr_a(class_name), idObject,
+          debugstr_guid( riidInterface ), ppvObject );
+
+    return CreateStdAccessibleObject( hwnd, idObject, riidInterface, ppvObject );
+}
+
+/* Windows 8: assistive tools tell the system which of their features run
+ * (magnifier, screen reader...). Only a process with UIAccess may, and no
+ * ReactOS process has it: E_ACCESSDENIED, like Windows without UIAccess */
+HRESULT WINAPI AccSetRunningUtilityState( HWND hwndApp, DWORD dwUtilityStateMask, DWORD dwUtilityState )
+{
+    TRACE("%p %#lx %#lx\n", hwndApp, dwUtilityStateMask, dwUtilityState );
+
+    if (!IsWindow( hwndApp ))
+        return E_INVALIDARG;
+    return E_ACCESSDENIED;
+}
+
+/* Windows 8: a screen reader's touch interaction with a window (UIAccess
+ * only too, see AccSetRunningUtilityState) */
+HRESULT WINAPI AccNotifyTouchInteraction( HWND hwndApp, HWND hwndTarget, POINT ptTarget )
+{
+    TRACE("%p %p (%ld,%ld)\n", hwndApp, hwndTarget, ptTarget.x, ptTarget.y );
+
+    if (!IsWindow( hwndApp ))
+        return E_INVALIDARG;
+    return E_ACCESSDENIED;
+}
+#endif
+
 HRESULT WINAPI ObjectFromLresult( LRESULT result, REFIID riid, WPARAM wParam, void **ppObject )
 {
     WCHAR atom_str[ARRAY_SIZE(lresult_atom_prefix)+3*8+3];
