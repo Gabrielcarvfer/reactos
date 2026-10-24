@@ -6,6 +6,7 @@ include_directories($<TARGET_FILE_DIR:msi_ca_dll>)
 
 list(APPEND SOURCE
     CustomAction.c
+    UILevel.c
     testdata.rc
     testlist.c)
 

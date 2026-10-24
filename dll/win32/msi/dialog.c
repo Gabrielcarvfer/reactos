@@ -4462,6 +4462,24 @@ INT ACTION_ShowDialog( MSIPACKAGE *package, const WCHAR *dialog )
 
     if (!TABLE_Exists(package->db, L"Dialog")) return 0;
 
+    /* The reduced UI has no wizard (modal) dialogs: the action isn't done */
+    if ((package->ui_level & INSTALLUILEVEL_MASK) == INSTALLUILEVEL_REDUCED)
+    {
+        MSIRECORD *rec = MSI_QueryGetRecord( package->db, L"SELECT * FROM `Dialog` WHERE `Dialog` = '%s'", dialog );
+        BOOL modal = FALSE;
+
+        if (rec)
+        {
+            modal = (MSI_RecordGetInteger( rec, 6 ) & msidbDialogAttributesModal) != 0;
+            msiobj_release( &rec->hdr );
+        }
+        if (modal)
+        {
+            TRACE("not showing the modal dialog %s with the reduced UI\n", debugstr_w(dialog));
+            return 0;
+        }
+    }
+
     row = MSI_CreateRecord(0);
     if (!row) return -1;
     MSI_RecordSetStringW(row, 0, dialog);
