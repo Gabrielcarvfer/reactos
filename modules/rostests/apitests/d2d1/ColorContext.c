@@ -97,6 +97,47 @@ START_TEST(ColorContext)
         ColorContext = NULL;
     }
 
+    /* The standard color spaces come with an ICC profile (Paint.NET compares them) */
+    hr = ID2D1DeviceContext_CreateColorContext(DeviceContext, D2D1_COLOR_SPACE_SRGB, NULL, 0, &ColorContext);
+    if (ColorContext)
+    {
+        UINT32 Size = ID2D1ColorContext_GetProfileSize(ColorContext);
+        BYTE *Bytes = HeapAlloc(GetProcessHeap(), 0, Size + 1);
+
+        ok(Size > 128, "sRGB profile size %u\n", Size);
+        if (Bytes && Size > 128)
+        {
+            ok(ID2D1ColorContext_GetProfile(ColorContext, Bytes, Size) == S_OK, "GetProfile failed\n");
+            ok(!memcmp(Bytes + 36, "acsp", 4), "not an ICC profile\n");
+            ok(!memcmp(Bytes + 16, "RGB ", 4), "not an RGB profile\n");
+            ok(ID2D1ColorContext_GetProfile(ColorContext, Bytes, Size - 1) == HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER),
+               "a short buffer was accepted\n");
+        }
+        HeapFree(GetProcessHeap(), 0, Bytes);
+        ID2D1ColorContext_Release(ColorContext);
+        ColorContext = NULL;
+    }
+
+    /* From a WIC color context with the EXIF color space Adobe RGB */
+    {
+        IWICColorContext *WicContext = NULL;
+        hr = IWICImagingFactory_CreateColorContext(WicFactory, &WicContext);
+        if (SUCCEEDED(hr))
+        {
+            IWICColorContext_InitializeFromExifColorSpace(WicContext, 2);
+            hr = ID2D1DeviceContext_CreateColorContextFromWicColorContext(DeviceContext, WicContext, &ColorContext);
+            ok(hr == S_OK, "CreateColorContextFromWicColorContext: hr %#lx\n", hr);
+            if (ColorContext)
+            {
+                ok(ID2D1ColorContext_GetColorSpace(ColorContext) == D2D1_COLOR_SPACE_CUSTOM, "wrong color space\n");
+                ok(ID2D1ColorContext_GetProfileSize(ColorContext) > 128, "no profile\n");
+                ID2D1ColorContext_Release(ColorContext);
+                ColorContext = NULL;
+            }
+            IWICColorContext_Release(WicContext);
+        }
+    }
+
     hr = ID2D1DeviceContext_CreateColorContext(DeviceContext, D2D1_COLOR_SPACE_CUSTOM, NULL, 0, &ColorContext);
     ok(hr == E_INVALIDARG, "custom without a profile: hr %#lx\n", hr);
 

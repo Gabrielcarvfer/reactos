@@ -18,6 +18,7 @@
 
 #include "d2d1_private.h"
 #include <d3dcompiler.h>
+#include "wincodec.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(d2d);
 
@@ -2362,6 +2363,178 @@ static const ID2D1ColorContext1Vtbl d2d_color_context_vtbl =
     d2d_color_context_GetSimpleColorProfile,
 };
 
+/* ICC profiles for the standard color spaces (sRGB, scRGB = linear sRGB,
+ * Adobe RGB 1998): RGB display profiles, version 2, with the primaries
+ * adapted to D50 and a tone curve. Windows gives the profile bytes of
+ * these color contexts too; programs (Paint.NET) compare them. */
+enum d2d_icc_space
+{
+    D2D_ICC_SRGB,
+    D2D_ICC_SCRGB,
+    D2D_ICC_ADOBE_RGB,
+};
+
+static BYTE *d2d_icc_put32(BYTE *p, UINT32 v)
+{
+    p[0] = v >> 24; p[1] = v >> 16; p[2] = v >> 8; p[3] = v;
+    return p + 4;
+}
+
+static BYTE *d2d_icc_put16(BYTE *p, UINT16 v)
+{
+    p[0] = v >> 8; p[1] = v;
+    return p + 2;
+}
+
+static BYTE *d2d_icc_put_s15f16(BYTE *p, double v)
+{
+    return d2d_icc_put32(p, (UINT32)(INT32)floor(v * 65536.0 + 0.5));
+}
+
+#define D2D_ICC_TAG(a, b, c, d) (((UINT32)(a) << 24) | ((UINT32)(b) << 16) | ((UINT32)(c) << 8) | (UINT32)(d))
+
+static HRESULT d2d_icc_build_profile(enum d2d_icc_space space, BYTE **out, UINT32 *out_size)
+{
+    static const double primaries[3][3][3] =
+    {
+        /* D50-adapted XYZ of the red, green and blue primaries */
+        {{0.4360747, 0.2225045, 0.0139322}, {0.3850649, 0.7168786, 0.0971045}, {0.1430804, 0.0606169, 0.7141733}},
+        {{0.4360747, 0.2225045, 0.0139322}, {0.3850649, 0.7168786, 0.0971045}, {0.1430804, 0.0606169, 0.7141733}},
+        {{0.6097559, 0.3111242, 0.0194811}, {0.2052401, 0.6256560, 0.0608902}, {0.1492240, 0.0632197, 0.7448387}},
+    };
+    static const char *names[] = {"sRGB", "scRGB (linear)", "Adobe RGB (1998)"};
+    const char *name = names[space];
+    UINT32 curve_entries = space == D2D_ICC_SRGB ? 1024 : (space == D2D_ICC_SCRGB ? 0 : 1);
+    UINT32 desc_size = 12 + (UINT32)strlen(name) + 1 + 4 + 4 + 2 + 1 + 67;
+    UINT32 curve_size = 12 + 2 * curve_entries;
+    UINT32 tag_count = 9, offset, size, i;
+    UINT32 tags[9], tag_offsets[9], tag_sizes[9];
+    BYTE *data, *p;
+
+    desc_size = (desc_size + 3) & ~3;
+    curve_size = (curve_size + 3) & ~3;
+    size = 128 + 4 + 12 * tag_count;
+    offset = size;
+
+    /* desc, wtpt, cprt-less: rXYZ gXYZ bXYZ rTRC gTRC bTRC (the three curves share one copy) */
+    tags[0] = D2D_ICC_TAG('d','e','s','c'); tag_offsets[0] = offset; tag_sizes[0] = desc_size; offset += desc_size;
+    tags[1] = D2D_ICC_TAG('w','t','p','t'); tag_offsets[1] = offset; tag_sizes[1] = 20; offset += 20;
+    tags[2] = D2D_ICC_TAG('r','X','Y','Z'); tag_offsets[2] = offset; tag_sizes[2] = 20; offset += 20;
+    tags[3] = D2D_ICC_TAG('g','X','Y','Z'); tag_offsets[3] = offset; tag_sizes[3] = 20; offset += 20;
+    tags[4] = D2D_ICC_TAG('b','X','Y','Z'); tag_offsets[4] = offset; tag_sizes[4] = 20; offset += 20;
+    tags[5] = D2D_ICC_TAG('r','T','R','C'); tag_offsets[5] = offset; tag_sizes[5] = curve_size;
+    tags[6] = D2D_ICC_TAG('g','T','R','C'); tag_offsets[6] = offset; tag_sizes[6] = curve_size;
+    tags[7] = D2D_ICC_TAG('b','T','R','C'); tag_offsets[7] = offset; tag_sizes[7] = curve_size; offset += curve_size;
+    tags[8] = D2D_ICC_TAG('c','p','r','t'); tag_offsets[8] = offset; tag_sizes[8] = 20; offset += 20;
+    size = offset;
+
+    if (!(data = calloc(1, size)))
+        return E_OUTOFMEMORY;
+
+    /* Header */
+    p = data;
+    p = d2d_icc_put32(p, size);
+    p = d2d_icc_put32(p, 0);                                /* preferred CMM */
+    p = d2d_icc_put32(p, 0x02100000);                       /* version 2.1 */
+    p = d2d_icc_put32(p, D2D_ICC_TAG('m','n','t','r'));
+    p = d2d_icc_put32(p, D2D_ICC_TAG('R','G','B',' '));
+    p = d2d_icc_put32(p, D2D_ICC_TAG('X','Y','Z',' '));
+    p = d2d_icc_put16(p, 1998); p = d2d_icc_put16(p, 2); p = d2d_icc_put16(p, 9);  /* date */
+    p = d2d_icc_put16(p, 6); p = d2d_icc_put16(p, 49); p = d2d_icc_put16(p, 0);
+    p = d2d_icc_put32(p, D2D_ICC_TAG('a','c','s','p'));
+    p = d2d_icc_put32(p, D2D_ICC_TAG('M','S','F','T'));
+    p = data + 64;
+    p = d2d_icc_put32(p, 0);                                /* perceptual */
+    p = d2d_icc_put_s15f16(p, 0.9642);                      /* D50 illuminant */
+    p = d2d_icc_put_s15f16(p, 1.0);
+    p = d2d_icc_put_s15f16(p, 0.8249);
+
+    /* Tag table */
+    p = data + 128;
+    p = d2d_icc_put32(p, tag_count);
+    for (i = 0; i < tag_count; ++i)
+    {
+        p = d2d_icc_put32(p, tags[i]);
+        p = d2d_icc_put32(p, tag_offsets[i]);
+        p = d2d_icc_put32(p, tag_sizes[i]);
+    }
+
+    /* desc: textDescriptionType */
+    p = data + tag_offsets[0];
+    p = d2d_icc_put32(p, D2D_ICC_TAG('d','e','s','c'));
+    p = d2d_icc_put32(p, 0);
+    p = d2d_icc_put32(p, (UINT32)strlen(name) + 1);
+    memcpy(p, name, strlen(name));
+
+    /* wtpt and the primaries: XYZType */
+    for (i = 1; i <= 4; ++i)
+    {
+        p = data + tag_offsets[i];
+        p = d2d_icc_put32(p, D2D_ICC_TAG('X','Y','Z',' '));
+        p = d2d_icc_put32(p, 0);
+        if (i == 1)
+        {
+            p = d2d_icc_put_s15f16(p, 0.9642);
+            p = d2d_icc_put_s15f16(p, 1.0);
+            p = d2d_icc_put_s15f16(p, 0.8249);
+        }
+        else
+        {
+            p = d2d_icc_put_s15f16(p, primaries[space][i - 2][0]);
+            p = d2d_icc_put_s15f16(p, primaries[space][i - 2][1]);
+            p = d2d_icc_put_s15f16(p, primaries[space][i - 2][2]);
+        }
+    }
+
+    /* The tone curve: curveType */
+    p = data + tag_offsets[5];
+    p = d2d_icc_put32(p, D2D_ICC_TAG('c','u','r','v'));
+    p = d2d_icc_put32(p, 0);
+    p = d2d_icc_put32(p, curve_entries);
+    if (space == D2D_ICC_ADOBE_RGB)
+    {
+        d2d_icc_put16(p, 0x0233);                           /* gamma 2.19921875, u8Fixed8 */
+    }
+    else if (space == D2D_ICC_SRGB)
+    {
+        for (i = 0; i < curve_entries; ++i)
+        {
+            double x = (double)i / (curve_entries - 1), y;
+            y = x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4);
+            p = d2d_icc_put16(p, (UINT16)floor(y * 65535.0 + 0.5));
+        }
+    }
+
+    /* cprt: textType */
+    p = data + tag_offsets[8];
+    p = d2d_icc_put32(p, D2D_ICC_TAG('t','e','x','t'));
+    p = d2d_icc_put32(p, 0);
+    memcpy(p, "No copyright", 12);
+
+    *out = data;
+    *out_size = size;
+    return S_OK;
+}
+
+static HRESULT d2d_color_context_create(struct d2d_device_context *context, D2D1_COLOR_CONTEXT_TYPE type,
+        DXGI_COLOR_SPACE_TYPE dxgi_space, D2D1_COLOR_SPACE space, const BYTE *profile, UINT32 profile_size,
+        ID2D1ColorContext1 **color_context);
+
+static HRESULT d2d_color_context_create_standard(struct d2d_device_context *context, D2D1_COLOR_CONTEXT_TYPE type,
+        DXGI_COLOR_SPACE_TYPE dxgi_space, D2D1_COLOR_SPACE space, enum d2d_icc_space icc_space,
+        ID2D1ColorContext1 **color_context)
+{
+    UINT32 profile_size;
+    BYTE *profile;
+    HRESULT hr;
+
+    if (FAILED(hr = d2d_icc_build_profile(icc_space, &profile, &profile_size)))
+        return hr;
+    hr = d2d_color_context_create(context, type, dxgi_space, space, profile, profile_size, color_context);
+    free(profile);
+    return hr;
+}
+
 static HRESULT d2d_color_context_create(struct d2d_device_context *context, D2D1_COLOR_CONTEXT_TYPE type,
         DXGI_COLOR_SPACE_TYPE dxgi_space, D2D1_COLOR_SPACE space, const BYTE *profile, UINT32 profile_size,
         ID2D1ColorContext1 **color_context)
@@ -2409,13 +2582,13 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateColorContext(ID2D1Devi
         case D2D1_COLOR_SPACE_SRGB:
             if (profile || profile_size)
                 return E_INVALIDARG;
-            return d2d_color_context_create(context, D2D1_COLOR_CONTEXT_TYPE_ICC, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
-                    space, NULL, 0, (ID2D1ColorContext1 **)color_context);
+            return d2d_color_context_create_standard(context, D2D1_COLOR_CONTEXT_TYPE_ICC,
+                    DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709, space, D2D_ICC_SRGB, (ID2D1ColorContext1 **)color_context);
         case D2D1_COLOR_SPACE_SCRGB:
             if (profile || profile_size)
                 return E_INVALIDARG;
-            return d2d_color_context_create(context, D2D1_COLOR_CONTEXT_TYPE_ICC, DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709,
-                    space, NULL, 0, (ID2D1ColorContext1 **)color_context);
+            return d2d_color_context_create_standard(context, D2D1_COLOR_CONTEXT_TYPE_ICC,
+                    DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, space, D2D_ICC_SCRGB, (ID2D1ColorContext1 **)color_context);
         case D2D1_COLOR_SPACE_CUSTOM:
             if (!profile || !profile_size)
                 return E_INVALIDARG;
@@ -2437,9 +2610,46 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateColorContextFromFilena
 static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateColorContextFromWicColorContext(ID2D1DeviceContext6 *iface,
         IWICColorContext *wic_color_context, ID2D1ColorContext **color_context)
 {
-    FIXME("iface %p, wic_color_context %p, color_context %p stub!\n", iface, wic_color_context, color_context);
+    struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
+    WICColorContextType type;
+    UINT exif_space, size;
+    BYTE *profile;
+    HRESULT hr;
 
-    return E_NOTIMPL;
+    TRACE("iface %p, wic_color_context %p, color_context %p.\n", iface, wic_color_context, color_context);
+
+    if (!color_context)
+        return E_POINTER;
+    *color_context = NULL;
+    if (!wic_color_context)
+        return E_INVALIDARG;
+
+    if (FAILED(hr = IWICColorContext_GetType(wic_color_context, &type)))
+        return hr;
+
+    if (type == WICColorContextExifColorSpace)
+    {
+        if (FAILED(hr = IWICColorContext_GetExifColorSpace(wic_color_context, &exif_space)))
+            return hr;
+        /* 1: sRGB, 2: Adobe RGB */
+        if (exif_space == 1)
+            return d2d_color_context_create_standard(context, D2D1_COLOR_CONTEXT_TYPE_ICC, DXGI_COLOR_SPACE_CUSTOM,
+                    D2D1_COLOR_SPACE_CUSTOM, D2D_ICC_SRGB, (ID2D1ColorContext1 **)color_context);
+        if (exif_space == 2)
+            return d2d_color_context_create_standard(context, D2D1_COLOR_CONTEXT_TYPE_ICC, DXGI_COLOR_SPACE_CUSTOM,
+                    D2D1_COLOR_SPACE_CUSTOM, D2D_ICC_ADOBE_RGB, (ID2D1ColorContext1 **)color_context);
+        return E_INVALIDARG;
+    }
+
+    if (FAILED(hr = IWICColorContext_GetProfileBytes(wic_color_context, 0, NULL, &size)))
+        return hr;
+    if (!size || !(profile = malloc(size)))
+        return size ? E_OUTOFMEMORY : E_INVALIDARG;
+    if (SUCCEEDED(hr = IWICColorContext_GetProfileBytes(wic_color_context, size, profile, &size)))
+        hr = d2d_color_context_create(context, D2D1_COLOR_CONTEXT_TYPE_ICC, DXGI_COLOR_SPACE_CUSTOM,
+                D2D1_COLOR_SPACE_CUSTOM, profile, size, (ID2D1ColorContext1 **)color_context);
+    free(profile);
+    return hr;
 }
 
 static BOOL d2d_bitmap_check_options_with_surface(unsigned int options, unsigned int surface_options)
