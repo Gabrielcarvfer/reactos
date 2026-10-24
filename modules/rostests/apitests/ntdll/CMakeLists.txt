@@ -113,6 +113,7 @@ list(APPEND SOURCE
     RtlComputePrivatizedDllName_U.c
     RtlCopyMappedMemory.c
     RtlCriticalSection.c
+    RtlCriticalSectionStress.c
     RtlDebugInformation.c
     RtlDeleteAce.c
     RtlDetermineDosPathNameType.c

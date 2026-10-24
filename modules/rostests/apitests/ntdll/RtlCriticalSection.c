@@ -380,6 +380,67 @@ Test_Acquire(void)
     WaitForSingleObject(hThread2, INFINITE);
 }
 
+static
+DWORD
+WINAPI
+ThreadProcWaiter(
+    _In_ LPVOID lpParameter)
+{
+    RtlEnterCriticalSection(&CritSect);
+    RtlLeaveCriticalSection(&CritSect);
+    return 0;
+}
+
+/*
+ * A release wakes a waiter but does not hand the section over to it: until the
+ * waiter runs, anyone can take the section. (Handing it over made every
+ * acquisition under contention wait for a context switch, a lock convoy.)
+ * The waiter runs on the same processor as this thread, at a lower priority,
+ * so it can't take the section between the release and the TryEnter.
+ */
+static
+void
+Test_NoHandOff(void)
+{
+    HANDLE hThread;
+    DWORD_PTR OldAffinity;
+    BOOLEAN Result;
+    ULONG i;
+
+    RtlInitializeCriticalSection(&CritSect);
+    OldAffinity = SetThreadAffinityMask(GetCurrentThread(), 1);
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+
+    RtlEnterCriticalSection(&CritSect);
+    hThread = CreateThread(NULL, 0, ThreadProcWaiter, NULL, CREATE_SUSPENDED, NULL);
+    SetThreadAffinityMask(hThread, 1);
+    SetThreadPriority(hThread, THREAD_PRIORITY_LOWEST);
+    ResumeThread(hThread);
+
+    /* Wait (up to 10 s) for it to wait for the section */
+    for (i = 0; (CritSect.LockCount == -2) && (i < 1000); i++)
+    {
+        Sleep(10);
+    }
+    ok_long(CritSect.LockCount, -6);
+
+    RtlLeaveCriticalSection(&CritSect);
+    Result = RtlTryEnterCriticalSection(&CritSect);
+    ok(Result, "The section was handed over to the waiter\n");
+    if (Result)
+    {
+        ok_ptr(CritSect.OwningThread, UlongToHandle(GetCurrentThreadId()));
+        RtlLeaveCriticalSection(&CritSect);
+    }
+
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+    ok(WaitForSingleObject(hThread, 10000) == WAIT_OBJECT_0, "The waiter did not finish\n");
+    ok_long(CritSect.LockCount, -1);
+    CloseHandle(hThread);
+    SetThreadAffinityMask(GetCurrentThread(), OldAffinity);
+    RtlDeleteCriticalSection(&CritSect);
+}
+
 START_TEST(RtlCriticalSection)
 {
     HMODULE hmodNtDll = GetModuleHandleA("ntdll.dll");
@@ -408,4 +469,5 @@ START_TEST(RtlCriticalSection)
 
     Test_Init();
     Test_Acquire();
+    Test_NoHandOff();
 }

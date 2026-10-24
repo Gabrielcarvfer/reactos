@@ -138,7 +138,8 @@ NTSTATUS
 NTAPI
 RtlInitializeHeapLock(IN OUT PHEAP_LOCK *Lock)
 {
-    return RtlInitializeCriticalSection(&(*Lock)->CriticalSection);
+    /* Heap operations are short: spin before sleeping, like Windows does */
+    return RtlInitializeCriticalSectionAndSpinCount(&(*Lock)->CriticalSection, 4000);
 }
 
 NTSTATUS

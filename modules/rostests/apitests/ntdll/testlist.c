@@ -97,6 +97,7 @@ extern void func_RtlCaptureContext(void);
 extern void func_RtlComputePrivatizedDllName_U(void);
 extern void func_RtlCopyMappedMemory(void);
 extern void func_RtlCriticalSection(void);
+extern void func_RtlCriticalSectionStress(void);
 extern void func_RtlDebugInformation(void);
 extern void func_RtlDeleteAce(void);
 extern void func_RtlDetermineDosPathNameType(void);
@@ -254,6 +255,7 @@ const struct test winetest_testlist[] =
     { "RtlComputePrivatizedDllName_U",  func_RtlComputePrivatizedDllName_U },
     { "RtlCopyMappedMemory",            func_RtlCopyMappedMemory },
     { "RtlCriticalSection",             func_RtlCriticalSection },
+    { "RtlCriticalSectionStress",       func_RtlCriticalSectionStress },
     { "RtlDebugInformation",            func_RtlDebugInformation },
     { "RtlDeleteAce",                   func_RtlDeleteAce },
     { "RtlDetermineDosPathNameType",    func_RtlDetermineDosPathNameType },
