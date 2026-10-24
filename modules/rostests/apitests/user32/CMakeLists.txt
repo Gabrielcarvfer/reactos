@@ -46,6 +46,7 @@ list(APPEND SOURCE
     NcPaintRgn.c
     NextDlgItem.c
     NotepadWindow.c
+    PhysicalCursorPos.c
     PrivateExtractIcons.c
     RealGetWindowClass.c
     RedrawWindow.c

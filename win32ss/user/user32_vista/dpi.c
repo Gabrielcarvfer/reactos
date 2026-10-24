@@ -295,6 +295,19 @@ GetPhysicalCursorPos(
  */
 BOOL
 WINAPI
+SetPhysicalCursorPos(
+    _In_ int X,
+    _In_ int Y)
+{
+    /* Logical and physical coordinates are the same */
+    return SetCursorPos(X, Y);
+}
+
+/*
+ * @implemented
+ */
+BOOL
+WINAPI
 IsValidDpiAwarenessContext(
     _In_ DPI_AWARENESS_CONTEXT context)
 {

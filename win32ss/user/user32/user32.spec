@@ -701,6 +701,7 @@
 @ stdcall SetMessageExtraInfo(long)
 @ stdcall SetMessageQueue(long)
 @ stdcall SetParent(long long) NtUserSetParent
+@ stdcall -version=0x600+ SetPhysicalCursorPos(long long)
 @ stdcall -version=0x600+ SetProcessDPIAware()
 @ stdcall SetProcessDefaultLayout(long)
 @ stdcall -version=0xA00+ SetProcessDpiAwarenessContext(long)

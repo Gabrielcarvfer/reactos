@@ -46,6 +46,7 @@ extern void func_MessageStateAnalyzer(void);
 extern void func_NcPaintRgn(void);
 extern void func_NextDlgItem(void);
 extern void func_NotepadWindow(void);
+extern void func_PhysicalCursorPos(void);
 extern void func_PrivateExtractIcons(void);
 extern void func_RealGetWindowClass(void);
 extern void func_RedrawWindow(void);
@@ -124,6 +125,7 @@ const struct test winetest_testlist[] =
     { "NcPaintRgn", func_NcPaintRgn },
     { "NextDlgItem", func_NextDlgItem },
     { "NotepadWindow", func_NotepadWindow },
+    { "PhysicalCursorPos", func_PhysicalCursorPos },
     { "PrivateExtractIcons", func_PrivateExtractIcons },
     { "RealGetWindowClass", func_RealGetWindowClass },
     { "RedrawWindow", func_RedrawWindow },
