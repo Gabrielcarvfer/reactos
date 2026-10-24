@@ -305,4 +305,5 @@
     SVC_(UnmapViewOfSectionEx, 3)
     SVC_(GetNextProcess, 5)
     SVC_(GetNextThread, 6)
+    SVC_(CreateLowBoxToken, 9)
 #endif

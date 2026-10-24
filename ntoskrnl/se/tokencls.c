@@ -1212,6 +1212,10 @@ NtQueryInformationToken(
                     Value = (Token->RestrictedSidCount != 0);
                 else if (TokenInformationClass == TokenMandatoryPolicy)
                     Value = TOKEN_MANDATORY_POLICY_NO_WRITE_UP;
+                else if (TokenInformationClass == TokenIsAppContainer)
+                    Value = (Token->PackageSid != NULL);
+                else if (TokenInformationClass == TokenAppContainerNumber)
+                    Value = Token->PackageSid ? (ULONG)Token->TokenId.LowPart | 1 : 0;
 
                 _SEH2_TRY
                 {
@@ -1369,8 +1373,36 @@ NtQueryInformationToken(
                 break;
             }
 
-            case TokenCapabilities:
             case TokenAppContainerSid:
+                if (Token->PackageSid)
+                {
+                    /* A TOKEN_APPCONTAINER_INFORMATION, the SID after it */
+                    ULONG SidLength = RtlLengthSid(Token->PackageSid);
+                    RequiredLength = sizeof(PSID) + SidLength;
+                    _SEH2_TRY
+                    {
+                        if (TokenInformationLength >= RequiredLength)
+                        {
+                            PSID Copy = (PUCHAR)TokenInformation + sizeof(PSID);
+                            RtlCopyMemory(Copy, Token->PackageSid, SidLength);
+                            *(PSID *)TokenInformation = Copy;
+                        }
+                        else
+                        {
+                            Status = STATUS_BUFFER_TOO_SMALL;
+                        }
+                        *ReturnLength = RequiredLength;
+                    }
+                    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                    {
+                        Status = _SEH2_GetExceptionCode();
+                    }
+                    _SEH2_END;
+                    break;
+                }
+                /* Not an AppContainer token: no SID */
+                /* Fall through */
+            case TokenCapabilities:
             {
                 /* No capabilities (an empty TOKEN_GROUPS), no app container SID */
                 RequiredLength = (TokenInformationClass == TokenCapabilities) ?

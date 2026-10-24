@@ -1634,6 +1634,28 @@ SepDeleteToken(
     /* Delete the dynamic information area */
     if (AccessToken->DynamicPart)
         ExFreePoolWithTag(AccessToken->DynamicPart, TAG_TOKEN_DYNAMIC);
+
+    /* And the AppContainer package SID */
+    if (AccessToken->PackageSid)
+        ExFreePoolWithTag(AccessToken->PackageSid, TAG_TOKEN_PACKAGE);
+}
+
+/* A pool copy of an AppContainer package SID (NULL for NULL or no memory) */
+PSID
+NTAPI
+SepCopyPackageSid(
+    _In_opt_ PSID Sid)
+{
+    PSID Copy;
+    ULONG Length;
+
+    if (!Sid)
+        return NULL;
+    Length = RtlLengthSid(Sid);
+    Copy = ExAllocatePoolWithTag(PagedPool, Length, TAG_TOKEN_PACKAGE);
+    if (Copy)
+        RtlCopyMemory(Copy, Sid, Length);
+    return Copy;
 }
 
 /**

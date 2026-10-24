@@ -7,6 +7,7 @@
  */
 
 #include <advapi32.h>
+#include <procthreadattr.h>
 WINE_DEFAULT_DEBUG_CHANNEL(advapi);
 
 /* GLOBALS *****************************************************************/
@@ -963,6 +964,33 @@ UseInteractiveDesktopForToken(
     return RtlEqualLuid(&Statistics.AuthenticationId, &SystemLuid);
 }
 
+/* STARTUPINFOEX with an AppContainer (SECURITY_CAPABILITIES): the process
+   gets a lowbox token made from the user's token, as on Windows */
+static
+HANDLE
+LowBoxTokenForStartupInfo(
+    _In_opt_ HANDLE hToken,
+    _In_ DWORD dwCreationFlags,
+    _In_ LPSTARTUPINFOW StartupInfo,
+    _Out_ PNTSTATUS Status)
+{
+    PBASE_SECURITY_CAPABILITIES Capabilities;
+    HANDLE LowBox = NULL;
+
+    *Status = STATUS_SUCCESS;
+    /* (STARTUPINFOEXA and STARTUPINFOEXW have the same layout) */
+    if (!hToken || !(dwCreationFlags & EXTENDED_STARTUPINFO_PRESENT) || StartupInfo->cb < sizeof(STARTUPINFOEXW))
+        return NULL;
+    Capabilities = BaseGetProcThreadAttribute(((LPSTARTUPINFOEXW)StartupInfo)->lpAttributeList,
+                                              PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+                                              sizeof(*Capabilities));
+    if (!Capabilities || !Capabilities->AppContainerSid)
+        return NULL;
+    *Status = NtCreateLowBoxToken(&LowBox, hToken, TOKEN_ALL_ACCESS, NULL, Capabilities->AppContainerSid,
+                                  Capabilities->CapabilityCount, Capabilities->Capabilities, 0, NULL);
+    return NT_SUCCESS(*Status) ? LowBox : NULL;
+}
+
 BOOL
 WINAPI
 DECLSPEC_HOTPATCH
@@ -979,17 +1007,34 @@ CreateProcessAsUserA(
     _In_ LPSTARTUPINFOA lpStartupInfo,
     _Out_ LPPROCESS_INFORMATION lpProcessInformation)
 {
-    STARTUPINFOA StartupInfoA;
+    STARTUPINFOEXA StartupInfoA;
 
     TRACE("%p %s %s %p %p %d 0x%08x %p %s %p %p\n", hToken, debugstr_a(lpApplicationName),
         debugstr_a(lpCommandLine), lpProcessAttributes, lpThreadAttributes, bInheritHandles,
         dwCreationFlags, lpEnvironment, debugstr_a(lpCurrentDirectory), lpStartupInfo, lpProcessInformation);
 
+    BOOL Result;
+    HANDLE LowBox;
+    NTSTATUS Status;
+
+    /* An AppContainer process gets a lowbox token made from hToken */
+    LowBox = LowBoxTokenForStartupInfo(hToken, dwCreationFlags, (LPSTARTUPINFOW)lpStartupInfo, &Status);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("NtCreateLowBoxToken failed, Status 0x%08lx\n", Status);
+        SetLastError(RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+
     if (UseInteractiveDesktopForToken(hToken, lpStartupInfo->lpDesktop != NULL))
     {
-        StartupInfoA = *lpStartupInfo;
-        StartupInfoA.lpDesktop = (LPSTR)"WinSta0\\Default";
-        lpStartupInfo = &StartupInfoA;
+        /* (A STARTUPINFOEX keeps its attribute list) */
+        StartupInfoA.StartupInfo = *lpStartupInfo;
+        StartupInfoA.lpAttributeList = (dwCreationFlags & EXTENDED_STARTUPINFO_PRESENT) &&
+                                       lpStartupInfo->cb >= sizeof(StartupInfoA) ?
+                                       ((LPSTARTUPINFOEXA)lpStartupInfo)->lpAttributeList : NULL;
+        StartupInfoA.StartupInfo.lpDesktop = (LPSTR)"WinSta0\\Default";
+        lpStartupInfo = &StartupInfoA.StartupInfo;
     }
 
     /* Create the process with a suspended main thread */
@@ -1005,15 +1050,18 @@ CreateProcessAsUserA(
                         lpProcessInformation))
     {
         ERR("CreateProcessA failed, last error: %d\n", GetLastError());
+        if (LowBox) NtClose(LowBox);
         return FALSE;
     }
 
     /* Call the helper function */
-    return CreateProcessAsUserCommon(hToken,
-                                     dwCreationFlags,
-                                     lpProcessAttributes,
-                                     lpThreadAttributes,
-                                     lpProcessInformation);
+    Result = CreateProcessAsUserCommon(LowBox ? LowBox : hToken,
+                                       dwCreationFlags,
+                                       lpProcessAttributes,
+                                       lpThreadAttributes,
+                                       lpProcessInformation);
+    if (LowBox) NtClose(LowBox);
+    return Result;
 }
 
 
@@ -1036,17 +1084,34 @@ CreateProcessAsUserW(
     _In_ LPSTARTUPINFOW lpStartupInfo,
     _Out_ LPPROCESS_INFORMATION lpProcessInformation)
 {
-    STARTUPINFOW StartupInfoW;
+    STARTUPINFOEXW StartupInfoW;
 
     TRACE("%p %s %s %p %p %d 0x%08x %p %s %p %p\n", hToken, debugstr_w(lpApplicationName),
         debugstr_w(lpCommandLine), lpProcessAttributes, lpThreadAttributes, bInheritHandles,
         dwCreationFlags, lpEnvironment, debugstr_w(lpCurrentDirectory), lpStartupInfo, lpProcessInformation);
 
+    BOOL Result;
+    HANDLE LowBox;
+    NTSTATUS Status;
+
+    /* An AppContainer process gets a lowbox token made from hToken */
+    LowBox = LowBoxTokenForStartupInfo(hToken, dwCreationFlags, (LPSTARTUPINFOW)lpStartupInfo, &Status);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("NtCreateLowBoxToken failed, Status 0x%08lx\n", Status);
+        SetLastError(RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+
     if (UseInteractiveDesktopForToken(hToken, lpStartupInfo->lpDesktop != NULL))
     {
-        StartupInfoW = *lpStartupInfo;
-        StartupInfoW.lpDesktop = (LPWSTR)L"WinSta0\\Default";
-        lpStartupInfo = &StartupInfoW;
+        /* (A STARTUPINFOEX keeps its attribute list) */
+        StartupInfoW.StartupInfo = *lpStartupInfo;
+        StartupInfoW.lpAttributeList = (dwCreationFlags & EXTENDED_STARTUPINFO_PRESENT) &&
+                                       lpStartupInfo->cb >= sizeof(StartupInfoW) ?
+                                       ((LPSTARTUPINFOEXW)lpStartupInfo)->lpAttributeList : NULL;
+        StartupInfoW.StartupInfo.lpDesktop = (LPWSTR)L"WinSta0\\Default";
+        lpStartupInfo = &StartupInfoW.StartupInfo;
     }
 
     /* Create the process with a suspended main thread */
@@ -1062,15 +1127,18 @@ CreateProcessAsUserW(
                         lpProcessInformation))
     {
         ERR("CreateProcessW failed, last error: %d\n", GetLastError());
+        if (LowBox) NtClose(LowBox);
         return FALSE;
     }
 
     /* Call the helper function */
-    return CreateProcessAsUserCommon(hToken,
-                                     dwCreationFlags,
-                                     lpProcessAttributes,
-                                     lpThreadAttributes,
-                                     lpProcessInformation);
+    Result = CreateProcessAsUserCommon(LowBox ? LowBox : hToken,
+                                       dwCreationFlags,
+                                       lpProcessAttributes,
+                                       lpThreadAttributes,
+                                       lpProcessInformation);
+    if (LowBox) NtClose(LowBox);
+    return Result;
 }
 
 

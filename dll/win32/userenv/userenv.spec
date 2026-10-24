@@ -124,3 +124,4 @@
 @ stdcall -version=0x602+ CreateAppContainerProfile(wstr wstr wstr ptr long ptr)
 @ stdcall -version=0x602+ DeleteAppContainerProfile(wstr)
 @ stdcall -version=0x602+ DeriveAppContainerSidFromAppContainerName(wstr ptr)
+@ stdcall -version=0xA00+ DeriveRestrictedAppContainerSidFromAppContainerSidAndRestrictedName(ptr wstr ptr)

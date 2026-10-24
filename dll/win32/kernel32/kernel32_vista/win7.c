@@ -472,24 +472,11 @@ ResolveLocaleName(
 /*
  * Process/thread attribute lists (STARTUPINFOEX.lpAttributeList, Vista+).
  * The list is opaque to callers: it just records the attributes. CreateProcess
- * does not act on them yet (see CreateProcessInternalW): a handle list would
- * restrict inheritance to these handles, ReactOS inherits all inheritable ones.
+ * acts on PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES (an AppContainer) only:
+ * a handle list would restrict inheritance to these handles, ReactOS inherits
+ * all inheritable ones.
  */
-typedef struct _PROC_THREAD_ATTRIBUTE_ENTRY
-{
-    DWORD_PTR Attribute;
-    SIZE_T Size;
-    PVOID Value;
-} PROC_THREAD_ATTRIBUTE_ENTRY;
-
-typedef struct _PROC_THREAD_ATTRIBUTE_LIST_INTERNAL
-{
-    DWORD Flags;    /* attributes present, one bit per attribute number */
-    ULONG Size;     /* number of entries allocated */
-    ULONG Count;    /* number of entries used */
-    ULONG Reserved;
-    PROC_THREAD_ATTRIBUTE_ENTRY Entries[ANYSIZE_ARRAY];
-} PROC_THREAD_ATTRIBUTE_LIST_INTERNAL, *PPROC_THREAD_ATTRIBUTE_LIST_INTERNAL;
+#include <procthreadattr.h>
 
 BOOL
 WINAPI

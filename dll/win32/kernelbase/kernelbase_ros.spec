@@ -175,7 +175,7 @@
 #@ stdcall CopySid(long ptr ptr)
 # #@ stub CouldMultiUserAppsBehaviorBePossibleForPackage
 #@ stdcall CreateActCtxW(ptr)
-# #@ stub CreateAppContainerToken
+@ stdcall CreateAppContainerToken(ptr ptr ptr)
 #@ stdcall CreateBoundaryDescriptorW(wstr long)
 #@ stdcall CreateConsoleScreenBuffer(long long ptr long ptr)
 #@ stdcall CreateDirectoryA(str ptr)
@@ -264,6 +264,7 @@
 #@ stdcall DeleteTimerQueueEx(long long)
 #@ stdcall DeleteTimerQueueTimer(long long long)
 #@ stdcall DeleteVolumeMountPointW(wstr)
+@ stdcall DeriveCapabilitySidsFromName(wstr ptr ptr ptr ptr)
 #@ stdcall DestroyPrivateObjectSecurity(ptr)
 #@ stdcall DeviceIoControl(long long ptr long ptr long ptr ptr)
 #@ stdcall DisablePredefinedHandleTableInternal(long)

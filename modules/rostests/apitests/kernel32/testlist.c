@@ -2,6 +2,8 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_AppContainerProcess(void);
+extern void func_AppContainerSids(void);
 extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_CacheReclaim(void);
 extern void func_ConsoleCP(void);
@@ -91,6 +93,8 @@ extern void func_WriteProcessMemoryCow(void);
 
 const struct test winetest_testlist[] =
 {
+    { "AppContainerProcess", func_AppContainerProcess },
+    { "AppContainerSids", func_AppContainerSids },
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "CacheReclaim", func_CacheReclaim },
     { "ConsoleCP",                   func_ConsoleCP },

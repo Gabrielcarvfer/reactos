@@ -11,6 +11,8 @@
 /* INCLUDES ****************************************************************/
 
 #include <k32.h>
+#include <ndk/sefuncs.h>
+#include <procthreadattr.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -2158,6 +2160,8 @@ CreateProcessInternalW(IN HANDLE hUserToken,
     //
     SECURITY_ATTRIBUTES LocalThreadAttributes, LocalProcessAttributes;
     OBJECT_ATTRIBUTES LocalObjectAttributes;
+    PBASE_SECURITY_CAPABILITIES SecurityCapabilities = NULL;
+    HANDLE LowBoxToken = NULL;
     POBJECT_ATTRIBUTES ObjectAttributes;
     SECTION_IMAGE_INFORMATION ImageInformation;
     IO_STATUS_BLOCK IoStatusBlock;
@@ -2324,12 +2328,20 @@ CreateProcessInternalW(IN HANDLE hUserToken,
     NoWindow = dwCreationFlags & CREATE_NO_WINDOW;
     dwCreationFlags &= ~CREATE_NO_WINDOW;
 
-    /* STARTUPINFOEX: the attribute list is not supported yet. Its common use,
-     * a list of handles to inherit, is a subset of what we do anyway: inherit
-     * every inheritable handle when bInheritHandles is TRUE. */
+    /* STARTUPINFOEX: of the attributes, only an AppContainer (SECURITY_CAPABILITIES)
+     * is acted on. The common other one, a list of handles to inherit, is a
+     * subset of what we do anyway: inherit every inheritable handle when
+     * bInheritHandles is TRUE. */
 #ifndef EXTENDED_STARTUPINFO_PRESENT
 #define EXTENDED_STARTUPINFO_PRESENT 0x00080000
 #endif
+    if ((dwCreationFlags & EXTENDED_STARTUPINFO_PRESENT) &&
+        lpStartupInfo->cb >= sizeof(STARTUPINFOEXW))
+    {
+        SecurityCapabilities = BaseGetProcThreadAttribute(((LPSTARTUPINFOEXW)lpStartupInfo)->lpAttributeList,
+                                                          PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+                                                          sizeof(*SecurityCapabilities));
+    }
     dwCreationFlags &= ~EXTENDED_STARTUPINFO_PRESENT;
 
 #if _SXS_SUPPORT_ENABLED_
@@ -4284,6 +4296,41 @@ StartScan:
         }
     }
 
+    /* An AppContainer: the process gets a lowbox token made from its token
+       (CreateProcessAsUser makes one from the user's token in advapi32) */
+    if (SecurityCapabilities && SecurityCapabilities->AppContainerSid && !hUserToken)
+    {
+        HANDLE OwnToken;
+
+        Status = NtOpenProcessToken(NtCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY, &OwnToken);
+        if (NT_SUCCESS(Status))
+        {
+            Status = NtCreateLowBoxToken(&LowBoxToken, OwnToken, TOKEN_ALL_ACCESS, NULL,
+                                         SecurityCapabilities->AppContainerSid,
+                                         SecurityCapabilities->CapabilityCount,
+                                         SecurityCapabilities->Capabilities, 0, NULL);
+            NtClose(OwnToken);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            /* (Made from our own token: no privilege needed to assign it) */
+            PROCESS_ACCESS_TOKEN AccessToken;
+
+            AccessToken.Token = LowBoxToken;
+            AccessToken.Thread = ThreadHandle;
+            Status = NtSetInformationProcess(ProcessHandle, ProcessAccessToken,
+                                             &AccessToken, sizeof(AccessToken));
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Failed to give the process its AppContainer token: %lx\n", Status);
+            NtTerminateProcess(ProcessHandle, Status);
+            BaseSetLastNTError(Status);
+            Result = FALSE;
+            goto Quickie;
+        }
+    }
+
     /* Check if a job was associated with this process */
     if (JobHandle)
     {
@@ -4455,6 +4502,7 @@ Quickie:
 
     /* Thread/process handles, if any, are now processed. Now close this one. */
     if (JobHandle) NtClose(JobHandle);
+    if (LowBoxToken) NtClose(LowBoxToken);
 
     /* Check if we had created a token */
     if (TokenHandle)

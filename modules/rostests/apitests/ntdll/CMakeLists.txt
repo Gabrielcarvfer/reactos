@@ -61,6 +61,7 @@ list(APPEND SOURCE
     NtContinue.c
     NtCreateFile.c
     NtCreateKey.c
+    NtCreateLowBoxToken.c
     NtCreateProfile.c
     NtCreateThread.c
     NtDeleteKey.c

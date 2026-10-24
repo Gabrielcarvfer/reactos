@@ -345,6 +345,11 @@ CODE_SEG("INIT")
 PTOKEN
 SepCreateSystemAnonymousLogonTokenNoEveryone(VOID);
 
+PSID
+NTAPI
+SepCopyPackageSid(
+    _In_opt_ PSID Sid);
+
 NTSTATUS
 NTAPI
 SepDuplicateToken(

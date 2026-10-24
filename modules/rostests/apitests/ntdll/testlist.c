@@ -47,6 +47,7 @@ extern void func_NtCompareTokens(void);
 extern void func_NtContinue(void);
 extern void func_NtCreateFile(void);
 extern void func_NtCreateKey(void);
+extern void func_NtCreateLowBoxToken(void);
 extern void func_NtCreateProfile(void);
 extern void func_NtCreateThread(void);
 extern void func_NtDeleteKey(void);
@@ -205,6 +206,7 @@ const struct test winetest_testlist[] =
     { "NtCompareTokens",                func_NtCompareTokens },
     { "NtContinue",                     func_NtContinue },
     { "NtCreateFile",                   func_NtCreateFile },
+    { "NtCreateLowBoxToken", func_NtCreateLowBoxToken },
     { "NtCreateKey",                    func_NtCreateKey },
     { "NtCreateProfile",                func_NtCreateProfile },
     { "NtCreateThread",                 func_NtCreateThread },

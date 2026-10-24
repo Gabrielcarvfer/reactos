@@ -549,6 +549,7 @@ SepDuplicateToken(
 
     AccessToken->SessionId = Token->SessionId;
     AccessToken->IntegrityLevelRid = Token->IntegrityLevelRid;
+    AccessToken->PackageSid = SepCopyPackageSid(Token->PackageSid);
     AccessToken->ModifiedId = Token->ModifiedId;
 
     AccessToken->TokenFlags = Token->TokenFlags & ~TOKEN_SESSION_NOT_REFERENCED;
@@ -993,6 +994,7 @@ SepPerformTokenFiltering(
     /* Copy the mutable fields */
     AccessToken->SessionId = Token->SessionId;
     AccessToken->IntegrityLevelRid = Token->IntegrityLevelRid;
+    AccessToken->PackageSid = SepCopyPackageSid(Token->PackageSid);
     AccessToken->TokenFlags = Token->TokenFlags & ~TOKEN_SESSION_NOT_REFERENCED;
 
     /* Reference the logon session */
@@ -1841,6 +1843,119 @@ Cleanup:
     SepReleaseSid(CapturedPrimaryGroupSid, PreviousMode, FALSE);
     SepReleaseAcl(CapturedDefaultDacl, PreviousMode, FALSE);
 
+    return Status;
+}
+
+/**
+ * @brief
+ * Creates an AppContainer ("lowbox") token from an existing token
+ * (Windows 8). Chromium-based browsers start their renderers and GPU
+ * processes in AppContainers with it; without it Edge 155 and WebView2
+ * hosts (TeamViewer) never connected to any of their child processes.
+ *
+ * @remarks
+ * The token keeps its package SID (TokenIsAppContainer, TokenAppContainerSid)
+ * and gets low integrity, the level of an AppContainer. Capabilities and
+ * handles are not kept: ReactOS does no AppContainer access checks yet.
+ */
+NTSTATUS
+NTAPI
+NtCreateLowBoxToken(
+    _Out_ PHANDLE TokenHandle,
+    _In_ HANDLE ExistingTokenHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ PSID PackageSid,
+    _In_ ULONG CapabilityCount,
+    _In_reads_opt_(CapabilityCount) PSID_AND_ATTRIBUTES Capabilities,
+    _In_ ULONG HandleCount,
+    _In_reads_opt_(HandleCount) HANDLE *Handles)
+{
+    static SID_IDENTIFIER_AUTHORITY AppPackageAuthority = {SECURITY_APP_PACKAGE_AUTHORITY};
+    KPROCESSOR_MODE PreviousMode = KeGetPreviousMode();
+    OBJECT_HANDLE_INFORMATION HandleInformation;
+    PSID CapturedSid = NULL;
+    PTOKEN Token, NewToken;
+    HANDLE hToken;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (!PackageSid || (CapabilityCount && !Capabilities) || (HandleCount && !Handles))
+        return STATUS_INVALID_PARAMETER;
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWriteHandle(TokenHandle);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    /* The package SID must be S-1-15-2-... */
+    Status = SepCaptureSid(PackageSid, PreviousMode, PagedPool, FALSE, &CapturedSid);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (RtlLengthSid(CapturedSid) < RtlLengthRequiredSid(2) ||
+        !RtlEqualMemory(RtlIdentifierAuthoritySid(CapturedSid), &AppPackageAuthority, sizeof(AppPackageAuthority)) ||
+        *RtlSubAuthoritySid(CapturedSid, 0) != SECURITY_APP_PACKAGE_BASE_RID)
+    {
+        SepReleaseSid(CapturedSid, PreviousMode, FALSE);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = ObReferenceObjectByHandle(ExistingTokenHandle, TOKEN_DUPLICATE, SeTokenObjectType,
+                                       PreviousMode, (PVOID*)&Token, &HandleInformation);
+    if (!NT_SUCCESS(Status))
+    {
+        SepReleaseSid(CapturedSid, PreviousMode, FALSE);
+        return Status;
+    }
+
+    Status = SepDuplicateToken(Token, ObjectAttributes, FALSE, Token->TokenType,
+                               Token->ImpersonationLevel, PreviousMode, &NewToken);
+    ObDereferenceObject(Token);
+    if (!NT_SUCCESS(Status))
+    {
+        SepReleaseSid(CapturedSid, PreviousMode, FALSE);
+        return Status;
+    }
+
+    /* An AppContainer token: its package SID */
+    if (NewToken->PackageSid)
+        ExFreePoolWithTag(NewToken->PackageSid, TAG_TOKEN_PACKAGE);
+    NewToken->PackageSid = SepCopyPackageSid(CapturedSid);
+    SepReleaseSid(CapturedSid, PreviousMode, FALSE);
+    if (!NewToken->PackageSid)
+    {
+        ObDereferenceObject(NewToken);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    /* Low integrity (stored plus one), unless it is lower already */
+    if (!NewToken->IntegrityLevelRid || NewToken->IntegrityLevelRid > SECURITY_MANDATORY_LOW_RID + 1)
+        NewToken->IntegrityLevelRid = SECURITY_MANDATORY_LOW_RID + 1;
+
+    Status = ObInsertObject(NewToken, NULL,
+                            DesiredAccess ? DesiredAccess : HandleInformation.GrantedAccess,
+                            0, NULL, &hToken);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    _SEH2_TRY
+    {
+        *TokenHandle = hToken;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
     return Status;
 }
 

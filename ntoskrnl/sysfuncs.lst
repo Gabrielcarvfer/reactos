@@ -301,3 +301,4 @@ NtMapViewOfSectionEx 9
 NtUnmapViewOfSectionEx 3
 NtGetNextProcess 5
 NtGetNextThread 6
+NtCreateLowBoxToken 9

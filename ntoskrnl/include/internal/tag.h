@@ -159,6 +159,7 @@
 #define TAG_SEPA                'aPeS'
 #define TAG_PRIVILEGE_SET       'rPeS'
 #define TAG_TOKEN_DYNAMIC       'dTeS'
+#define TAG_TOKEN_PACKAGE       'pTeS'
 #define TAG_SE_HANDLES_TAB      'aHeS'
 #define TAG_SE_DIR_BUFFER       'bDeS'
 #define TAG_SE_PROXY_DATA       'dPoT'
