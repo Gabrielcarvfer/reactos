@@ -1893,6 +1893,10 @@ KdpQueryPerformanceCounter(IN PKTRAP_FRAME TrapFrame)
     return KeQueryPerformanceCounter(NULL);
 }
 
+/* The processor in the debugger, and its debug events taken in there */
+static PKPRCB KdpEnteredPrcb;
+ULONG KdpNestedEnterCount;
+
 BOOLEAN
 NTAPI
 KdEnterDebugger(IN PKTRAP_FRAME TrapFrame,
@@ -1914,6 +1918,19 @@ KdEnterDebugger(IN PKTRAP_FRAME TrapFrame,
         KdTimerStop.QuadPart = 0;
     }
 
+    /* A debug event inside the debugger on this processor (e.g. the debug
+       print of a page fault while it reads memory): the outer entry has
+       already frozen the others and holds the port. Freezing again would
+       overwrite the IRQL to restore, and taking the port lock again
+       bugchecked (SPIN_LOCK_ALREADY_OWNED, whose own debug print came back
+       here until the stack overflowed) or, in a release build, failed and
+       left the lock held for good. */
+    if (KdEnteredDebugger && (KdpEnteredPrcb == KeGetCurrentPrcb()))
+    {
+        KdpNestedEnterCount++;
+        return KeDisableInterrupts();
+    }
+
     /* Save the current IRQL */
     KeGetCurrentPrcb()->DebuggerSavedIRQL = KeGetCurrentIrql();
 
@@ -1923,6 +1940,7 @@ KdEnterDebugger(IN PKTRAP_FRAME TrapFrame,
     /* Lock the port, save its state and set the debugger entered flag */
     KdpPortLocked = KeTryToAcquireSpinLockAtDpcLevel(&KdpDebuggerLock);
     KdSave(FALSE);
+    KdpEnteredPrcb = KeGetCurrentPrcb();
     KdEnteredDebugger = TRUE;
 
     /* Check freeze flag */
@@ -1952,8 +1970,17 @@ KdExitDebugger(IN BOOLEAN Enable)
 {
     ULONG TimeSlip;
 
+    /* The exit of a nested entry: the outer one goes on in the debugger */
+    if (KdpNestedEnterCount > 0)
+    {
+        KdpNestedEnterCount--;
+        KeRestoreInterrupts(Enable);
+        return;
+    }
+
     /* Reset the debugger entered flag, restore the port state and unlock it */
     KdEnteredDebugger = FALSE;
+    KdpEnteredPrcb = NULL;
     KdRestore(FALSE);
     if (KdpPortLocked) KdpPortUnlock();
 

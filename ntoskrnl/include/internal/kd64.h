@@ -535,6 +535,7 @@ extern LONG KdpTimeSlipPending;
 extern PKEVENT KdpTimeSlipEvent;
 extern KSPIN_LOCK KdpTimeSlipEventLock;
 extern BOOLEAN KdpPortLocked;
+extern ULONG KdpNestedEnterCount;
 extern BOOLEAN KdpControlCPressed;
 extern BOOLEAN KdpContextSent;
 extern KSPIN_LOCK KdpDebuggerLock;

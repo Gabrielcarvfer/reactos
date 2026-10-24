@@ -362,14 +362,30 @@ KdpPrompt(
     /* Enter the debugger */
     Enable = KdEnterDebugger(TrapFrame, ExceptionFrame);
 
-    /* Enter prompt loop */
-    do
+    if (KdpNestedEnterCount > 0)
     {
-        /* Send the prompt and receive the response */
-        Resend = KdpPromptString(&PromptBuffer, &ResponseBuffer);
+        /* A prompt from inside the debugger, a failed assertion in code it
+           called (e.g. PAGED_CODE at its high IRQL): its user sits at the
+           debugger's own prompt and would answer the question by accident
+           with the next command (its first letter: "p" terminated the
+           process). Ignore the assertion, as a release build does. */
+        if (ResponseBuffer.MaximumLength > 0)
+        {
+            ResponseBuffer.Buffer[0] = 'i';
+            ResponseBuffer.Length = 1;
+        }
+    }
+    else
+    {
+        /* Enter prompt loop */
+        do
+        {
+            /* Send the prompt and receive the response */
+            Resend = KdpPromptString(&PromptBuffer, &ResponseBuffer);
 
-    /* Loop while we need to resend */
-    } while (Resend);
+        /* Loop while we need to resend */
+        } while (Resend);
+    }
 
     /* Exit the debugger */
     KdExitDebugger(Enable);

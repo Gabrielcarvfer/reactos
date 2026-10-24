@@ -1231,6 +1231,15 @@ GetNextFrame(
     ULONG64 ImageBase, EstablisherFrame;
     PVOID HandlerData;
 
+    /* Past the start of the stack the frames are garbage: don't read memory
+       that isn't there (at HIGH_LEVEL that page fault is fatal, SEH or not) */
+    if (!MmIsAddressValid((PVOID)Context->Rip) ||
+        !MmIsAddressValid((PVOID)Context->Rsp) ||
+        !MmIsAddressValid((PVOID)(Context->Rsp + sizeof(DWORD64) - 1)))
+    {
+        return FALSE;
+    }
+
     _SEH2_TRY
     {
         /* Lookup the FunctionEntry for the current RIP */
