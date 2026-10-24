@@ -12,6 +12,9 @@
 #define NDEBUG
 #include <debug.h>
 
+/* The x86 architecture flag (winnt.h defines it for x86 only) */
+#define CONTEXT_I386_FLAG 0x00010000
+
 /* FUNCTIONS *****************************************************************/
 
 /*
@@ -84,9 +87,9 @@ KeContextToTrapFrame(IN PCONTEXT Context,
 {
     KIRQL OldIrql;
 
-    /* Make sure we have an amd64 context, then remove the flag */
-    ASSERT(ContextFlags & CONTEXT_AMD64);
-    ContextFlags &= ~CONTEXT_AMD64;
+    /* Remove the architecture flag. Like Windows, take the flags without it
+       too: Delphi programs (TeraCopy) pass CONTEXT_i386 | CONTEXT_DEBUG_REGISTERS */
+    ContextFlags &= ~(CONTEXT_AMD64 | CONTEXT_I386_FLAG);
 
     /* Do this at APC_LEVEL */
     OldIrql = KeGetCurrentIrql();
@@ -240,10 +243,11 @@ KeTrapFrameToContext(IN PKTRAP_FRAME TrapFrame,
     OldIrql = KeGetCurrentIrql();
     if (OldIrql < APC_LEVEL) KeRaiseIrql(APC_LEVEL, &OldIrql);
 
-    /* Make sure we have an amd64 context, then remove the flag */
-    ContextFlags = Context->ContextFlags;
-    ASSERT(ContextFlags & CONTEXT_AMD64);
-    ContextFlags &= ~CONTEXT_AMD64;
+    /* Remove the architecture flag. Like Windows, take the flags without it
+       (or with CONTEXT_i386, as Delphi programs pass them) and return them
+       as an amd64 context */
+    ContextFlags = Context->ContextFlags & ~(CONTEXT_AMD64 | CONTEXT_I386_FLAG);
+    Context->ContextFlags = ContextFlags | CONTEXT_AMD64;
 
     /* Handle integer registers */
     if (ContextFlags & CONTEXT_INTEGER)
@@ -344,13 +348,26 @@ KeTrapFrameToContext(IN PKTRAP_FRAME TrapFrame,
     /* Handle debug registers */
     if (ContextFlags & CONTEXT_DEBUG_REGISTERS)
     {
-        /* Copy the debug registers */
-        Context->Dr0 = TrapFrame->Dr0;
-        Context->Dr1 = TrapFrame->Dr1;
-        Context->Dr2 = TrapFrame->Dr2;
-        Context->Dr3 = TrapFrame->Dr3;
-        Context->Dr6 = TrapFrame->Dr6;
-        Context->Dr7 = TrapFrame->Dr7;
+        /* The trap frame holds the debug registers only for a thread with
+           hardware breakpoints (DebugActive); the trap entry code doesn't save
+           them otherwise, and the fields hold stack garbage. Windows returns
+           zeroes then: anti-debugging checks (TeraCopy) took the garbage for
+           a debugger's breakpoints */
+        if (KeGetCurrentThread()->Header.DebugActive)
+        {
+            /* Copy the debug registers */
+            Context->Dr0 = TrapFrame->Dr0;
+            Context->Dr1 = TrapFrame->Dr1;
+            Context->Dr2 = TrapFrame->Dr2;
+            Context->Dr3 = TrapFrame->Dr3;
+            Context->Dr6 = TrapFrame->Dr6;
+            Context->Dr7 = TrapFrame->Dr7;
+        }
+        else
+        {
+            Context->Dr0 = Context->Dr1 = Context->Dr2 = Context->Dr3 = 0;
+            Context->Dr6 = Context->Dr7 = 0;
+        }
     }
 
     /* Restore IRQL */

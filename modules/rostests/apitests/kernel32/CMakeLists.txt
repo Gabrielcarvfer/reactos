@@ -36,6 +36,7 @@ list(APPEND SOURCE
     GetFinalPathNameByHandle.c
     GetLocaleInfo.c
     GetModuleFileName.c
+    GetThreadContext.c
     GetVolumeInformation.c
     HeapCreateExecute.c
     IdleCpuPull.c
