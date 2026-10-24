@@ -147,6 +147,7 @@ extern void func_RtlVirtualUnwind(void);
 extern void func_RtlxUnicodeStringToAnsiSize(void);
 extern void func_RtlxUnicodeStringToOemSize(void);
 extern void func_ProcessHandleTable(void);
+extern void func_ProcessInitMappings(void);
 extern void func_StackOverflow(void);
 extern void func_RtlUnwindEx(void);
 extern void func_SetContextInSyscall(void);
@@ -301,6 +302,7 @@ const struct test winetest_testlist[] =
     { "RtlUpcaseUnicodeStringToCountedOemString", func_RtlUpcaseUnicodeStringToCountedOemString },
     { "RtlValidateUnicodeString",       func_RtlValidateUnicodeString },
     { "ProcessHandleTable",             func_ProcessHandleTable },
+    { "ProcessInitMappings",            func_ProcessInitMappings },
     { "StackOverflow",                  func_StackOverflow },
     { "SetContextInSyscall",            func_SetContextInSyscall },
     { "SyscallRegisters",               func_SyscallRegisters },

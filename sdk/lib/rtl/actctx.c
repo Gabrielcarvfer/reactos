@@ -3150,6 +3150,55 @@ static NTSTATUS search_manifest_in_module( struct actctx_loader* acl, struct ass
 }
 #endif // __REACTOS__
 
+#ifdef __REACTOS__
+/* Read a whole file into private memory. Windows builds the activation
+   context of a new process outside of it (in CSRSS), so the process maps
+   nothing but images before kernel32.dll is loaded, and programs rely on it:
+   Firefox's NtMapViewOfSection hook takes every view mapped in its browser
+   process before kernel32.dll for an image and reads its exports. Mapping the
+   manifest files or the PE files of private assemblies as data here crashed
+   it at startup. Reading them leaves no trace in the address space. */
+static NTSTATUS read_file_contents( HANDLE file, void **base, SIZE_T *size )
+{
+    FILE_STANDARD_INFORMATION info;
+    IO_STATUS_BLOCK io;
+    LARGE_INTEGER offset;
+    SIZE_T alloc_size;
+    NTSTATUS status;
+
+    *base = NULL;
+    status = NtQueryInformationFile( file, &io, &info, sizeof(info), FileStandardInformation );
+    if (status != STATUS_SUCCESS) return status;
+    /* (manifests and the PE files that carry them are small) */
+    if (info.EndOfFile.QuadPart <= 0 || info.EndOfFile.QuadPart > 256 * 1024 * 1024)
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    alloc_size = (SIZE_T)info.EndOfFile.QuadPart;
+    status = NtAllocateVirtualMemory( NtCurrentProcess(), base, 0, &alloc_size, MEM_COMMIT, PAGE_READWRITE );
+    if (status != STATUS_SUCCESS) return status;
+
+    offset.QuadPart = 0;
+    status = NtReadFile( file, NULL, NULL, NULL, &io, *base, (ULONG)info.EndOfFile.QuadPart, &offset, NULL );
+    if (status == STATUS_SUCCESS && io.Information != (ULONG_PTR)info.EndOfFile.QuadPart)
+        status = STATUS_END_OF_FILE;
+    if (status != STATUS_SUCCESS)
+    {
+        alloc_size = 0;
+        NtFreeVirtualMemory( NtCurrentProcess(), base, &alloc_size, MEM_RELEASE );
+        *base = NULL;
+        return status;
+    }
+    *size = (SIZE_T)info.EndOfFile.QuadPart;
+    return STATUS_SUCCESS;
+}
+
+static void free_file_contents( void *base )
+{
+    SIZE_T size = 0;
+    NtFreeVirtualMemory( NtCurrentProcess(), &base, &size, MEM_RELEASE );
+}
+#endif // __REACTOS__
+
 static NTSTATUS get_manifest_in_pe_file( struct actctx_loader* acl, struct assembly_identity* ai,
                                          LPCWSTR filename, LPCWSTR directory, BOOL shared,
                                          HANDLE file, LPCWSTR resname, ULONG lang )
@@ -3179,6 +3228,13 @@ static NTSTATUS get_manifest_in_pe_file( struct actctx_loader* acl, struct assem
     attr.SecurityDescriptor       = NULL;
     attr.SecurityQualityOfService = NULL;
 
+#ifdef __REACTOS__
+    UNREFERENCED_PARAMETER(mapping);
+    UNREFERENCED_PARAMETER(size);
+    UNREFERENCED_PARAMETER(offset);
+    status = read_file_contents( file, &base, &count );
+    if (status != STATUS_SUCCESS) return status;
+#else
     size.QuadPart = 0;
     status = NtCreateSection( &mapping, STANDARD_RIGHTS_REQUIRED | SECTION_QUERY | SECTION_MAP_READ,
                               &attr, &size, PAGE_READONLY, SEC_COMMIT, file );
@@ -3191,6 +3247,7 @@ static NTSTATUS get_manifest_in_pe_file( struct actctx_loader* acl, struct assem
                                  &count, ViewShare, 0, PAGE_READONLY );
     NtClose( mapping );
     if (status != STATUS_SUCCESS) return status;
+#endif
 
     if (RtlImageNtHeader(base)) /* we got a PE file */
     {
@@ -3202,7 +3259,11 @@ static NTSTATUS get_manifest_in_pe_file( struct actctx_loader* acl, struct assem
     }
     else status = STATUS_INVALID_IMAGE_FORMAT;
 
+#ifdef __REACTOS__
+    free_file_contents( base );
+#else
     NtUnmapViewOfSection( GetCurrentProcess(), base );
+#endif
     return status;
 }
 
@@ -3228,6 +3289,20 @@ static NTSTATUS get_manifest_in_manifest_file( struct actctx_loader* acl, struct
     attr.SecurityDescriptor       = NULL;
     attr.SecurityQualityOfService = NULL;
 
+#ifdef __REACTOS__
+    /* (see read_file_contents) */
+    UNREFERENCED_PARAMETER(mapping);
+    UNREFERENCED_PARAMETER(size);
+    UNREFERENCED_PARAMETER(offset);
+    UNREFERENCED_PARAMETER(io);
+    UNREFERENCED_PARAMETER(info);
+    status = read_file_contents( file, &base, &count );
+    if (status != STATUS_SUCCESS) return status;
+
+    status = parse_manifest(acl, ai, filename, NULL, directory, shared, base, count);
+
+    free_file_contents( base );
+#else
     size.QuadPart = 0;
     status = NtCreateSection( &mapping, STANDARD_RIGHTS_REQUIRED | SECTION_QUERY | SECTION_MAP_READ,
                               &attr, &size, PAGE_READONLY, SEC_COMMIT, file );
@@ -3246,6 +3321,7 @@ static NTSTATUS get_manifest_in_manifest_file( struct actctx_loader* acl, struct
         status = parse_manifest(acl, ai, filename, NULL, directory, shared, base, info.EndOfFile.QuadPart);
 
     NtUnmapViewOfSection( GetCurrentProcess(), base );
+#endif
     return status;
 }
 
