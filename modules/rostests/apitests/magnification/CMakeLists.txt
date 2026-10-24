@@ -1,0 +1,5 @@
+
+add_executable(magnification_apitest magnification.c testlist.c)
+set_module_type(magnification_apitest win32cui)
+add_importlibs(magnification_apitest magnification user32 msvcrt kernel32)
+add_rostests_file(TARGET magnification_apitest)
