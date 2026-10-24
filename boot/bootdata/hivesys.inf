@@ -2340,6 +2340,39 @@ HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","Start",0x00010001,0x00000002
 HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","Type",0x00010001,0x00000020
 HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\wuauserv.dll"
 
+; IP Helper Service (stub)
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc","DependOnService",0x00010000,"RPCSS","Tcpip"
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc","DisplayName",0x00000000,"IP Helper"
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc","Description",0x00000000,"Provides IPv6 connectivity over IPv4 networks (stub)."
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc","ImagePath",0x00020000,"%SystemRoot%\system32\svchost.exe -k netsvcs"
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc","ObjectName",0x00000000,"LocalSystem"
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc","Type",0x00010001,0x00000020
+HKLM,"SYSTEM\CurrentControlSet\Services\iphlpsvc\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\iphlpsvc.dll"
+
+; Network List Service Service (stub)
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm","DependOnService",0x00010000,"RPCSS"
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm","DisplayName",0x00000000,"Network List Service"
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm","Description",0x00000000,"Identifies the networks to which the computer has connected (stub)."
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm","ImagePath",0x00020000,"%SystemRoot%\system32\svchost.exe -k netsvcs"
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm","ObjectName",0x00000000,"LocalSystem"
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm","Type",0x00010001,0x00000020
+HKLM,"SYSTEM\CurrentControlSet\Services\netprofm\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\netprofmsvc.dll"
+
+; WinHTTP Web Proxy Auto-Discovery Service Service (stub)
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc","DependOnService",0x00010000,"Dhcp"
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc","DisplayName",0x00000000,"WinHTTP Web Proxy Auto-Discovery Service"
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc","Description",0x00000000,"Implements the client HTTP stack and finds proxies (stub)."
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc","ImagePath",0x00020000,"%SystemRoot%\system32\svchost.exe -k netsvcs"
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc","ObjectName",0x00000000,"LocalSystem"
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc","Type",0x00010001,0x00000020
+HKLM,"SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\winhttpsvc.dll"
+
 ; DCOMLAUNCH Service
 HKLM,"SYSTEM\CurrentControlSet\Services\DcomLaunch","DisplayName",0x00000000,%DCOMLAUNCH_SERVICE%
 HKLM,"SYSTEM\CurrentControlSet\Services\DcomLaunch","Description",0x00000000,%DCOMLAUNCH_SERVICE_DESCRIPTION%

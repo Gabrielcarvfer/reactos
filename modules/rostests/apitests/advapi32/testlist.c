@@ -31,6 +31,7 @@ extern void func_SetEntriesInAcl(void);
 extern void func_ServiceArgs(void);
 extern void func_ServiceEnv(void);
 extern void func_ServiceNetwork(void);
+extern void func_WindowsServices(void);
 
 const struct test winetest_testlist[] =
 {
@@ -63,6 +64,7 @@ const struct test winetest_testlist[] =
     { "ServiceArgs", func_ServiceArgs },
     { "ServiceEnv", func_ServiceEnv },
     { "ServiceNetwork", func_ServiceNetwork },
+    { "WindowsServices", func_WindowsServices },
     { 0, 0 }
 };
 

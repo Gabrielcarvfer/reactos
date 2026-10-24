@@ -1,0 +1,5 @@
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION  "WinHTTP Web Proxy Auto-Discovery Service Stub"
+#define REACTOS_STR_INTERNAL_NAME     "winhttpsvc"
+#define REACTOS_STR_ORIGINAL_FILENAME "winhttpsvc.dll"
+#include <reactos/version.rc>
