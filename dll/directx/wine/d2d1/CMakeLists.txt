@@ -19,6 +19,7 @@ list(APPEND SOURCE
 	hwnd_render_target.c
 	layer.c
 	mesh.c
+	sprite_batch.c
 	state_block.c
 	stroke.c
 	wic_render_target.c)
